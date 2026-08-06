@@ -1,0 +1,532 @@
+import React, { useState } from 'react';
+import { X, MapPin, Calendar, Clock, User, CheckCircle2, Car, Shield, ArrowRight } from 'lucide-react';
+
+const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
+  const [step, setStep] = useState(1);
+  const [tripType, setTripType] = useState('oneWay');
+  const [pickup, setPickup] = useState('Indiranagar, Bengaluru');
+  const [drop, setDrop] = useState('Kempegowda Int. Airport (BLR)');
+  const [vehicle, setVehicle] = useState(selectedVehicle || 'Dzire');
+  const [date, setDate] = useState('2026-08-06');
+  const [time, setTime] = useState('10:30 AM');
+  const [passengers, setPassengers] = useState('2');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+
+  if (!isOpen) return null;
+
+  const vehicleOptions = [
+    { id: 'Dzire', name: 'Sedan (Dzire / Etios)', rate: '₹12/km', capacity: '4 Seats', eta: '4 mins' },
+    { id: 'Ertiga', name: 'SUV (Ertiga / Triber)', rate: '₹16/km', capacity: '6 Seats', eta: '6 mins' },
+    { id: 'Innova Crysta', name: 'Premium SUV (Innova Crysta)', rate: '₹20/km', capacity: '6 Seats', eta: '8 mins' },
+    { id: 'Toyota Fortuner', name: 'Luxury (Toyota Fortuner)', rate: '₹30/km', capacity: '7 Seats', eta: '12 mins' },
+  ];
+
+  const handleConfirmBooking = (e) => {
+    e.preventDefault();
+    setStep(3); // Show confirmation screen
+  };
+
+  const handleReset = () => {
+    setStep(1);
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay animate-fade-in">
+      <div className="modal-card">
+        {/* Header */}
+        <div className="modal-header">
+          <div className="modal-title-group">
+            <span className="modal-badge">Zi CAB Dispatch</span>
+            <h3 className="modal-title">
+              {step === 1 && 'Plan Your Ride'}
+              {step === 2 && 'Passenger Details'}
+              {step === 3 && 'Booking Confirmed!'}
+            </h3>
+          </div>
+          <button className="modal-close-btn" onClick={onClose}>
+            <X size={20} color="#94A3B8" />
+          </button>
+        </div>
+
+        {/* Step 1: Ride Configuration */}
+        {step === 1 && (
+          <div className="modal-body">
+            {/* Trip Type Tabs */}
+            <div className="tab-pills">
+              <button 
+                className={`tab-pill ${tripType === 'oneWay' ? 'active' : ''}`}
+                onClick={() => setTripType('oneWay')}
+              >
+                One Way
+              </button>
+              <button 
+                className={`tab-pill ${tripType === 'roundTrip' ? 'active' : ''}`}
+                onClick={() => setTripType('roundTrip')}
+              >
+                Round Trip
+              </button>
+              <button 
+                className={`tab-pill ${tripType === 'airport' ? 'active' : ''}`}
+                onClick={() => setTripType('airport')}
+              >
+                Airport Transfer
+              </button>
+            </div>
+
+            <div className="input-group">
+              <label><MapPin size={16} color="#00BBA9" /> Pickup Location</label>
+              <input 
+                type="text" 
+                value={pickup} 
+                onChange={(e) => setPickup(e.target.value)} 
+                placeholder="Enter pickup address or landmark"
+              />
+            </div>
+
+            <div className="input-group">
+              <label><MapPin size={16} color="#00BBA9" /> Drop Location</label>
+              <input 
+                type="text" 
+                value={drop} 
+                onChange={(e) => setDrop(e.target.value)} 
+                placeholder="Enter drop location"
+              />
+            </div>
+
+            <div className="input-row">
+              <div className="input-group">
+                <label><Calendar size={16} color="#00BBA9" /> Date & Time</label>
+                <input 
+                  type="date" 
+                  value={date} 
+                  onChange={(e) => setDate(e.target.value)} 
+                />
+              </div>
+
+              <div className="input-group">
+                <label><User size={16} color="#00BBA9" /> Passengers</label>
+                <select value={passengers} onChange={(e) => setPassengers(e.target.value)}>
+                  <option value="1">1 Passenger</option>
+                  <option value="2">2 Passengers</option>
+                  <option value="4">4 Passengers</option>
+                  <option value="6">6 Passengers</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="vehicle-selector">
+              <label className="section-sublabel"><Car size={16} color="#00BBA9" /> Select Preferred Vehicle</label>
+              <div className="vehicle-grid">
+                {vehicleOptions.map((v) => (
+                  <div 
+                    key={v.id}
+                    className={`vehicle-card-item ${vehicle === v.id ? 'selected' : ''}`}
+                    onClick={() => setVehicle(v.id)}
+                  >
+                    <div className="v-item-header">
+                      <span className="v-name">{v.name}</span>
+                      <span className="v-rate">{v.rate}</span>
+                    </div>
+                    <div className="v-item-sub">
+                      <span>{v.capacity}</span>
+                      <span>ETA {v.eta}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                className="btn btn-teal w-full"
+                onClick={() => setStep(2)}
+              >
+                Proceed to Passenger Info <ArrowRight size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Passenger Details */}
+        {step === 2 && (
+          <form onSubmit={handleConfirmBooking} className="modal-body">
+            <div className="trip-summary-box">
+              <div className="sum-item">
+                <span className="sum-label">Trip:</span>
+                <span className="sum-val">{pickup} → {drop}</span>
+              </div>
+              <div className="sum-item">
+                <span className="sum-label">Selected Car:</span>
+                <span className="sum-val highlight">{vehicle}</span>
+              </div>
+              <div className="sum-item">
+                <span className="sum-label">Est. Fare:</span>
+                <span className="sum-val fare">₹780 (Fixed rate, no surge)</span>
+              </div>
+            </div>
+
+            <div className="input-group">
+              <label>Full Name</label>
+              <input 
+                type="text" 
+                required 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                placeholder="Enter your name"
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Phone Number (for Driver WhatsApp / SMS)</label>
+              <input 
+                type="tel" 
+                required 
+                value={phone} 
+                onChange={(e) => setPhone(e.target.value)} 
+                placeholder="+91 98765 43210"
+              />
+            </div>
+
+            <div className="security-notice">
+              <Shield size={16} color="#00BBA9" />
+              <span>Zero cancellation fee • Pay directly to driver or via UPI after trip</span>
+            </div>
+
+            <div className="modal-footer row-btns">
+              <button 
+                type="button" 
+                className="btn btn-outline-light"
+                onClick={() => setStep(1)}
+              >
+                Back
+              </button>
+              <button type="submit" className="btn btn-teal flex-1">
+                Confirm Cab Booking
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Step 3: Confirmation */}
+        {step === 3 && (
+          <div className="modal-body text-center py-6">
+            <div className="success-icon-box">
+              <CheckCircle2 size={56} color="#00BBA9" />
+            </div>
+            <h4 className="confirm-title">Cab Booked Successfully!</h4>
+            <p className="confirm-text">
+              Thank you, <strong>{name || 'Rider'}</strong>. Your Zi CAB booking ID is <strong>#ZC-89241</strong>.
+            </p>
+            <div className="driver-assign-card">
+              <p>📍 Driver details will be sent via SMS / WhatsApp 20 minutes before pickup.</p>
+              <p>📞 24x7 Support Helpline: 1800 200 9999</p>
+            </div>
+
+            <button className="btn btn-teal w-full mt-6" onClick={handleReset}>
+              Done & Return to Homepage
+            </button>
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(7, 21, 43, 0.85);
+          backdrop-filter: blur(8px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2000;
+          padding: 20px;
+        }
+
+        .modal-card {
+          background-color: #0C1B30;
+          border: 1px solid rgba(0, 187, 169, 0.3);
+          border-radius: 16px;
+          width: 100%;
+          max-width: 540px;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+          overflow: hidden;
+          color: #FFFFFF;
+        }
+
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          padding: 20px 24px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          background-color: #07152B;
+        }
+
+        .modal-badge {
+          display: inline-block;
+          font-size: 11px;
+          font-weight: 600;
+          color: #00BBA9;
+          background: rgba(0, 187, 169, 0.12);
+          padding: 2px 8px;
+          border-radius: 4px;
+          margin-bottom: 4px;
+          text-transform: uppercase;
+        }
+
+        .modal-title {
+          font-size: 20px;
+          font-weight: 700;
+          color: #FFFFFF;
+          margin: 0;
+        }
+
+        .modal-close-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 6px;
+        }
+        .modal-close-btn:hover {
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-body {
+          padding: 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .tab-pills {
+          display: flex;
+          background: rgba(255, 255, 255, 0.06);
+          border-radius: 8px;
+          padding: 4px;
+          gap: 4px;
+        }
+
+        .tab-pill {
+          flex: 1;
+          background: none;
+          border: none;
+          color: #94A3B8;
+          padding: 8px;
+          font-size: 13px;
+          font-weight: 500;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .tab-pill.active {
+          background-color: #00BBA9;
+          color: #FFFFFF;
+          font-weight: 600;
+        }
+
+        .input-group {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .input-group label {
+          font-size: 13px;
+          color: #CBD5E1;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-weight: 500;
+        }
+
+        .input-group input, .input-group select {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: 8px;
+          padding: 10px 14px;
+          color: #FFFFFF;
+          font-size: 14px;
+          outline: none;
+        }
+
+        .input-group input:focus, .input-group select:focus {
+          border-color: #00BBA9;
+          box-shadow: 0 0 0 2px rgba(0, 187, 169, 0.2);
+        }
+
+        .input-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .section-sublabel {
+          font-size: 13px;
+          color: #CBD5E1;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 8px;
+          font-weight: 500;
+        }
+
+        .vehicle-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+
+        .vehicle-card-item {
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 8px;
+          padding: 10px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .vehicle-card-item:hover {
+          border-color: rgba(0, 187, 169, 0.5);
+        }
+
+        .vehicle-card-item.selected {
+          border-color: #00BBA9;
+          background: rgba(0, 187, 169, 0.12);
+        }
+
+        .v-item-header {
+          display: flex;
+          justify-content: space-between;
+          font-size: 12px;
+          font-weight: 600;
+
+        }
+
+        .v-name {
+          color: #FFFFFF;
+        }
+
+        .v-rate {
+          color: #00BBA9;
+        }
+
+        .v-item-sub {
+          display: flex;
+          justify-content: space-between;
+          font-size: 11px;
+          color: #94A3B8;
+          margin-top: 4px;
+        }
+
+        .trip-summary-box {
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 10px;
+          padding: 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .sum-item {
+          display: flex;
+          justify-content: space-between;
+          font-size: 13px;
+        }
+
+        .sum-label {
+          color: #94A3B8;
+        }
+
+        .sum-val {
+          color: #FFFFFF;
+          font-weight: 500;
+        }
+
+        .sum-val.highlight {
+          color: #00BBA9;
+        }
+
+        .sum-val.fare {
+          color: #00BBA9;
+          font-weight: 700;
+          font-size: 14px;
+        }
+
+        .security-notice {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          color: #94A3B8;
+          background: rgba(0, 187, 169, 0.06);
+          padding: 8px 12px;
+          border-radius: 6px;
+        }
+
+        .row-btns {
+          display: flex;
+          gap: 10px;
+        }
+
+        .flex-1 {
+          flex: 1;
+        }
+
+        .success-icon-box {
+          display: flex;
+          justify-content: center;
+          margin-bottom: 12px;
+        }
+
+        .confirm-title {
+          font-size: 22px;
+          font-weight: 700;
+          color: #FFFFFF;
+          margin-bottom: 6px;
+        }
+
+        .confirm-text {
+          font-size: 14px;
+          color: #CBD5E1;
+        }
+
+        .driver-assign-card {
+          background: rgba(0, 187, 169, 0.08);
+          border: 1px solid rgba(0, 187, 169, 0.2);
+          border-radius: 10px;
+          padding: 14px;
+          margin-top: 14px;
+          text-align: left;
+          font-size: 13px;
+          color: #E2E8F0;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .py-6 {
+          padding-top: 24px;
+          padding-bottom: 24px;
+        }
+
+        .text-center {
+          text-align: center;
+        }
+
+        .mt-6 {
+          margin-top: 24px;
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default BookingModal;

@@ -1,0 +1,191 @@
+/* ZI CAB Custom CSS Design System */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --primary-navy: #0B1F3A;
+  --navy-dark: #07152B;
+  --navy-card: #0C1B30;
+  --primary-teal: #00BBA9;
+  --teal-hover: #00a394;
+  --teal-light: rgba(0, 187, 169, 0.12);
+  --bg-light: #F5F7FA;
+  --bg-white: #FFFFFF;
+  
+  --text-dark: #0F172A;
+  --text-body: #334155;
+  --text-muted: #64748B;
+  --text-light: #94A3B8;
+  --text-white: #FFFFFF;
+  
+  --border-light: #E2E8F0;
+  --border-dark: #1E293B;
+  
+  --font-main: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --shadow-sm: 0 2px 8px rgba(11, 31, 58, 0.06);
+  --shadow-md: 0 8px 24px rgba(11, 31, 58, 0.08);
+  --shadow-lg: 0 16px 32px rgba(11, 31, 58, 0.12);
+  --shadow-teal: 0 8px 20px rgba(0, 187, 169, 0.3);
+  
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+  
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: var(--font-main);
+  background-color: var(--bg-light);
+  color: var(--text-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0B1F3A;
+}
+::-webkit-scrollbar-thumb {
+  background: #00BBA9;
+  border-radius: 4px;
+}
+
+/* Common Layout Containers */
+.container {
+  max-width: 1340px;
+  margin: 0 auto;
+  padding: 0 0px;
+  width: 100%;
+}
+
+.section-padding {
+  padding: 70px 0;
+}
+
+@media (max-width: 768px) {
+  .section-padding {
+    padding: 45px 0;
+  }
+}
+
+/* Headings & Texts */
+.section-title-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 36px;
+}
+
+.section-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.section-title.light {
+  color: var(--text-white);
+}
+
+.section-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  outline: none;
+  cursor: pointer;
+  color: var(--primary-teal);
+  font-weight: 600;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: var(--transition);
+}
+
+.section-link:hover {
+  color: var(--teal-hover);
+  transform: translateX(4px);
+}
+
+/* Base Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 12px 26px;
+  border-radius: var(--radius-sm);
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.btn-teal {
+  background-color: var(--primary-teal);
+  color: var(--text-white);
+  box-shadow: var(--shadow-teal);
+}
+.btn-teal:hover {
+  background-color: var(--teal-hover);
+  transform: translateY(-2px);
+}
+
+.btn-outline-light {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: var(--text-white);
+  backdrop-filter: blur(8px);
+}
+.btn-outline-light:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: var(--primary-teal);
+  color: var(--primary-teal);
+}
+
+.btn-navy {
+  background-color: var(--primary-navy);
+  color: var(--text-white);
+}
+.btn-navy:hover {
+  background-color: var(--navy-dark);
+  transform: translateY(-2px);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
