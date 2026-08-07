@@ -1,19 +1,27 @@
-import React, { useState } from 'react';
-import { 
-  Car, Plane, Compass, Briefcase, Building2, ShoppingBag, 
-  CheckCircle, ArrowRight, ShieldCheck, Clock, Users, Fuel
+import React from 'react';
+import {
+  Car, Plane, Compass, Briefcase, Building2, ShoppingBag,
+  CheckCircle, ArrowRight, Bike
 } from 'lucide-react';
 
 const Services = ({ openBookingModal }) => {
-  const [activeCategory, setActiveCategory] = useState('all');
 
   const allServices = [
+    {
+      id: 'auto',
+      title: 'Auto Ride',
+      tag: 'Short Distance & Metered',
+      icon: Bike,
+      image: '/vehicles/auto.jpg',
+      description: 'The quickest way across town for short hops — metered auto rickshaws with verified drivers and no haggling over fare.',
+      features: ['Lowest fare per km', 'Ideal for 1-5 km trips', 'Beats peak-hour traffic', '3 passenger seating']
+    },
     {
       id: 'city',
       title: 'City Ride (Local Cabs)',
       tag: 'Point-to-Point & Hourly',
       icon: Car,
-      image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=700&q=80',
+      image: '/vehicles/dzire.jpg',
       description: 'Hassle-free daily city travel with instant driver allocation, clean sedans, and transparent fixed fare per km.',
       features: ['Zero surge pricing', '4hr, 8hr, 12hr package rentals', 'Instant driver tracking', 'AC always enabled']
     },
@@ -31,7 +39,7 @@ const Services = ({ openBookingModal }) => {
       title: 'Outstation Travel',
       tag: 'One-Way & Round Trips',
       icon: Compass,
-      image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=700&q=80',
+      image: '/vehicles/ertiga.jpg',
       description: 'Comfortable long-distance travel between cities. Pay only for one-way drop or book a round trip for weekend getaways.',
       features: ['Experienced highway drivers', 'No hidden driver allowance fees', 'Night charge free', 'All India Tourist Permit']
     },
@@ -40,7 +48,7 @@ const Services = ({ openBookingModal }) => {
       title: 'Premium Sedan',
       tag: 'Comfort & Style',
       icon: Car,
-      image: 'https://images.unsplash.com/photo-1550355291-bbee04a92027?auto=format&fit=crop&w=700&q=80',
+      image: '/vehicles/dzire.jpg',
       description: 'Elegant Dzire, Etios, and Honda Amaze sedans featuring spacious legroom and premium upholstery.',
       features: ['4 Passenger seating', '2 Large Suitcase capacity', 'Water bottles & chargers', 'Smooth quiet ride']
     },
@@ -49,7 +57,7 @@ const Services = ({ openBookingModal }) => {
       title: 'SUV & Innova Crysta',
       tag: 'Group & Family Travel',
       icon: Car,
-      image: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=700&q=80',
+      image: '/vehicles/innova-crysta.jpg',
       description: 'Luxury MUVs and SUVs designed for family vacations, wedding delegates, and heavy luggage travel.',
       features: ['6 to 7 Seats capacity', 'Rear AC vents', 'Ample luggage space', 'Reclining leather seats']
     },

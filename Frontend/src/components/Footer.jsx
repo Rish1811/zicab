@@ -79,6 +79,7 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
           <div className="footer-col">
             <h4 className="footer-heading">Cab Services</h4>
             <ul className="footer-links">
+              <li><button onClick={() => handleNavClick('services')}>Auto Ride</button></li>
               <li><button onClick={() => handleNavClick('services')}>City Ride (Local Cabs)</button></li>
               <li><button onClick={() => handleNavClick('services')}>Airport Pickup & Drop</button></li>
               <li><button onClick={() => handleNavClick('services')}>Outstation One-Way & Roundtrip</button></li>
@@ -135,6 +136,10 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
             <a href="#terms">Terms of Service</a>
             <span>•</span>
             <a href="#refund">Refund & Cancellation</a>
+            <span>•</span>
+            {/* Required credit for the Creative Commons vehicle photos.
+                Safe to delete once they are replaced with ZI CAB's own fleet photos. */}
+            <a href="/vehicles/ATTRIBUTION.md" target="_blank" rel="noreferrer">Photo Credits</a>
           </div>
         </div>
       </div>

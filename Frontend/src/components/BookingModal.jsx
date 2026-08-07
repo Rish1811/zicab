@@ -17,6 +17,7 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
   if (!isOpen) return null;
 
   const vehicleOptions = [
+    { id: 'Auto', name: 'Auto Rickshaw', rate: '₹8/km', capacity: '3 Seats', eta: '3 mins' },
     { id: 'Dzire', name: 'Maruti Suzuki Dzire (Sedan)', rate: '₹12/km', capacity: '4 Seats', eta: '4 mins' },
     { id: 'Ertiga', name: 'Maruti Suzuki Ertiga (MUV)', rate: '₹16/km', capacity: '6 Seats', eta: '6 mins' },
     { id: 'Innova Crysta', name: 'Toyota Innova Crysta (Premium SUV)', rate: '₹20/km', capacity: '6 Seats', eta: '8 mins' },
@@ -24,6 +25,7 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
   ];
 
   const tripTypes = [
+    { id: 'auto', label: 'Auto' },
     { id: 'city', label: 'City Ride' },
     { id: 'outstation', label: 'Outstation' },
     { id: 'airport', label: 'Airport Transfer' },

@@ -3,7 +3,7 @@ import {
   MapPin, Users, ArrowRight, ShieldCheck, Navigation,
   Headphones, Wallet, PhoneCall, Car, Plane, Compass,
   Briefcase, Building2, ShoppingBag, Smartphone, QrCode, ChevronRight,
-  Star, BadgeCheck, Megaphone
+  Star, BadgeCheck, Megaphone, Bike
 } from 'lucide-react';
 import { LAUNCH_CITIES, CONTACT } from '../siteConfig';
 
@@ -20,6 +20,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
   };
 
   const services = [
+    { id: 'auto', title: 'Auto Ride', icon: Bike, desc: 'Quick, metered short-distance autos' },
     { id: 'city', title: 'City Ride', icon: Car, desc: 'Local hourly & point-to-point rides' },
     { id: 'airport', title: 'Airport Transfer', icon: Plane, desc: 'On-time pickup & drop guaranteed' },
     { id: 'outstation', title: 'Outstation', icon: Compass, desc: 'Intercity one-way & roundtrips' },
@@ -58,10 +59,18 @@ const Home = ({ openBookingModal, setActiveTab }) => {
     }
   ];
 
-  // Model-specific photos. Drop the real fleet photos into
-  // Frontend/public/vehicles/ using exactly these filenames (16:9, ~800x450).
-  // If a file is missing the card falls back to `fallback` so nothing breaks.
+  // Photos live in Frontend/public/vehicles/ — see that folder's README + ATTRIBUTION
+  // before swapping any of them out.
   const vehicles = [
+    {
+      name: 'Auto Rickshaw',
+      type: 'Auto',
+      seats: '3 Seats',
+      bags: '1 Bag',
+      price: '₹8',
+      unit: '/km',
+      image: '/vehicles/auto.jpg'
+    },
     {
       name: 'Maruti Suzuki Dzire',
       type: 'Sedan',
@@ -69,8 +78,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       bags: '2 Bags',
       price: '₹12',
       unit: '/km',
-      image: '/vehicles/dzire.jpg',
-      fallback: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=600&q=80'
+      image: '/vehicles/dzire.jpg'
     },
     {
       name: 'Maruti Suzuki Ertiga',
@@ -79,8 +87,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       bags: '4 Bags',
       price: '₹16',
       unit: '/km',
-      image: '/vehicles/ertiga.jpg',
-      fallback: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=600&q=80'
+      image: '/vehicles/ertiga.jpg'
     },
     {
       name: 'Toyota Innova Crysta',
@@ -89,8 +96,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       bags: '4 Bags',
       price: '₹20',
       unit: '/km',
-      image: '/vehicles/innova-crysta.jpg',
-      fallback: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=600&q=80'
+      image: '/vehicles/innova-crysta.jpg'
     },
     {
       name: 'Toyota Fortuner',
@@ -99,8 +105,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       bags: '4 Bags',
       price: '₹30',
       unit: '/km',
-      image: '/vehicles/fortuner.jpg',
-      fallback: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=600&q=80'
+      image: '/vehicles/fortuner.jpg'
     }
   ];
 
@@ -359,14 +364,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             {vehicles.map((v, i) => (
               <div key={i} className="vehicle-card">
                 <div className="vehicle-img-container">
-                  <img
-                    src={v.image}
-                    alt={v.name}
-                    className="vehicle-img"
-                    onError={(e) => {
-                      if (e.currentTarget.src !== v.fallback) e.currentTarget.src = v.fallback;
-                    }}
-                  />
+                  <img src={v.image} alt={v.name} className="vehicle-img" loading="lazy" />
                   <span className="vehicle-type-badge">{v.type}</span>
                 </div>
                 <div className="vehicle-card-body">
@@ -736,7 +734,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
         .services-grid {
           display: grid;
-          grid-template-columns: repeat(8, 1fr);
+          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
           gap: 12px;
         }
 
@@ -836,8 +834,8 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
         .vehicles-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 24px;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 20px;
         }
 
         .vehicle-card {
@@ -856,8 +854,8 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .vehicle-img-container {
-          height: 160px;
-          background: #F1F5F9;
+          height: 150px;
+          background: #FFFFFF;
           overflow: hidden;
         }
 
