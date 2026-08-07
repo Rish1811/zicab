@@ -133,6 +133,61 @@ button, input, select, textarea {
   transform: translateX(4px);
 }
 
+/* Shared page-hero + text utilities.
+   These live here (not in a page's <style> block) so every page renders them —
+   a page style block only applies while that page is mounted. */
+.page-hero {
+  background: linear-gradient(135deg, #07152B 0%, #0B1F3A 100%);
+  padding: 60px 0 80px;
+  color: var(--text-white);
+  text-align: center;
+}
+
+.page-tag {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary-teal);
+  background: var(--teal-light);
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.page-title {
+  font-size: 38px;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.page-subtitle {
+  font-size: 16px;
+  color: var(--text-light);
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.body-text {
+  font-size: 15px;
+  color: #475569;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+
+.text-center { text-align: center; }
+.w-full { width: 100%; }
+.mb-6 { margin-bottom: 24px; }
+.mb-12 { margin-bottom: 40px; }
+.mt-6 { margin-top: 24px; }
+.mt-8 { margin-top: 32px; }
+.mt-12 { margin-top: 48px; }
+
+@media (max-width: 640px) {
+  .page-title { font-size: 28px; }
+}
+
 /* Base Buttons */
 .btn {
   display: inline-flex;
@@ -178,6 +233,67 @@ button, input, select, textarea {
 .btn-navy:hover {
   background-color: var(--navy-dark);
   transform: translateY(-2px);
+}
+
+/* Dark-card form fields (booking modal, driver/partner/corporate/advertise forms).
+   Global for the same reason as .page-hero above. */
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-group label {
+  font-size: 13px;
+  color: #CBD5E1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.input-group input,
+.input-group select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: var(--text-white);
+  font-size: 14px;
+  outline: none;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+  border-color: var(--primary-teal);
+  box-shadow: 0 0 0 2px rgba(0, 187, 169, 0.2);
+}
+
+.input-group select option {
+  background: var(--navy-card);
+}
+
+/* Floating WhatsApp support button */
+.wa-float {
+  position: fixed;
+  right: 20px;
+  bottom: 22px;
+  z-index: 900;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #25D366;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 22px rgba(37, 211, 102, 0.45);
+  transition: var(--transition);
+}
+
+.wa-float:hover {
+  transform: scale(1.08);
+  box-shadow: 0 12px 28px rgba(37, 211, 102, 0.55);
 }
 
 /* Animations */

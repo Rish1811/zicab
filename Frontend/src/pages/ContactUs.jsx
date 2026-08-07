@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Phone, Mail, MapPin, MessageSquare, ChevronDown, CheckCircle2, Send, Clock } from 'lucide-react';
+import { Phone, Mail, MapPin, MessageSquare, ChevronDown, CheckCircle2, Send, Navigation } from 'lucide-react';
+import { CONTACT, LAUNCH_CITIES, waLink } from '../siteConfig';
 
 const ContactUs = () => {
   const [submitted, setSubmitted] = useState(false);
@@ -16,8 +17,8 @@ const ContactUs = () => {
 
   const faqs = [
     {
-      q: 'Does Zi CAB charge any surge pricing during peak hours?',
-      a: 'No! Zi CAB follows a strict zero-surge pricing policy. The fare displayed during booking is your final price regardless of weather, traffic, or late night hours.'
+      q: 'Does ZI CAB charge any surge pricing during peak hours?',
+      a: 'No! ZI CAB follows a strict zero-surge pricing policy. The fare displayed during booking is your final price regardless of weather, traffic, or late night hours.'
     },
     {
       q: 'What is the cancellation policy for cab bookings?',
@@ -32,7 +33,7 @@ const ContactUs = () => {
       a: 'We accept Cash to Driver, Google Pay, PhonePe, Paytm, Credit/Debit Cards, and Net Banking.'
     },
     {
-      q: 'How are Zi CAB drivers verified?',
+      q: 'How are ZI CAB drivers verified?',
       a: 'All driver partners undergo strict background checks, commercial license validation, and police character verification before onboarding.'
     }
   ];
@@ -53,40 +54,93 @@ const ContactUs = () => {
         <div className="container">
           {/* Top Contact Info Cards */}
           <div className="contact-cards-grid">
-            <div className="c-info-card">
+            <a className="c-info-card" href={`tel:${CONTACT.tollFree.replace(/\s/g, '')}`}>
               <div className="c-icon-wrap">
                 <Phone size={24} color="#00BBA9" />
               </div>
-              <h3>24x7 Support Toll-Free</h3>
-              <p>1800 200 9999</p>
-              <span>Instant Call Assistance</span>
-            </div>
+              <h3>24x7 Toll-Free Support</h3>
+              <p>{CONTACT.tollFree}</p>
+              <span>{CONTACT.tollFreeLive ? 'Free from any Indian number' : 'Number activation in progress'}</span>
+            </a>
 
-            <div className="c-info-card">
+            <a className="c-info-card" href={waLink('Hi ZI CAB, I need help with a booking.')} target="_blank" rel="noreferrer">
               <div className="c-icon-wrap">
                 <MessageSquare size={24} color="#00BBA9" />
               </div>
               <h3>WhatsApp Support</h3>
-              <p>+91 98765 00000</p>
-              <span>Fast Chat & Live Location</span>
-            </div>
+              <p>{CONTACT.whatsappDisplay}</p>
+              <span>Chat, share live location & get fare</span>
+            </a>
 
-            <div className="c-info-card">
+            <a className="c-info-card" href={`mailto:${CONTACT.email}`}>
               <div className="c-icon-wrap">
                 <Mail size={24} color="#00BBA9" />
               </div>
               <h3>Official Email</h3>
-              <p>support@zicab.in</p>
+              <p>{CONTACT.email}</p>
               <span>Response within 15 mins</span>
-            </div>
+            </a>
 
-            <div className="c-info-card">
+            <a className="c-info-card" href={CONTACT.mapsUrl} target="_blank" rel="noreferrer">
               <div className="c-icon-wrap">
                 <MapPin size={24} color="#00BBA9" />
               </div>
-              <h3>Headquarters</h3>
-              <p>Indiranagar, Bengaluru</p>
-              <span>Karnataka, 560038</span>
+              <h3>Head Office</h3>
+              <p>{CONTACT.addressShort}</p>
+              <span>Open in Google Maps</span>
+            </a>
+          </div>
+
+          {/* TOLL-FREE SUPPORT EXPLAINER */}
+          <div className="tollfree-banner mt-12">
+            <div className="tf-left">
+              <span className="tf-tag">Toll-Free Support</span>
+              <h2 className="tf-number">{CONTACT.tollFree}</h2>
+              <p className="tf-desc">
+                One number for bookings, live ride help, lost items, invoices and complaints —
+                free of charge from any Indian mobile or landline, 24 hours a day.
+              </p>
+              <div className="tf-points">
+                <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> IVR in English, Kannada & Hindi</div>
+                <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> Routed to the nearest city support desk</div>
+                <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> Every call recorded for safety audits</div>
+                <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> Emergency/SOS calls answered on priority</div>
+              </div>
+            </div>
+            <div className="tf-right">
+              <div className="tf-ivr-card">
+                <h4>Call Menu</h4>
+                <ol className="tf-ivr-list">
+                  <li><b>1</b> New booking / fare enquiry</li>
+                  <li><b>2</b> Track or change an ongoing ride</li>
+                  <li><b>3</b> Airport & outstation desk</li>
+                  <li><b>4</b> Corporate & partner accounts</li>
+                  <li><b>5</b> Complaint, refund or lost item</li>
+                  <li><b>9</b> Emergency — connect to a human</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
+          {/* OFFICE LOCATION & LAUNCH CITIES */}
+          <div className="office-grid mt-12">
+            <div className="office-card">
+              <h3 className="office-title"><MapPin size={18} color="#00BBA9" /> Our Office</h3>
+              <p className="office-addr">{CONTACT.address}</p>
+              <a className="btn btn-teal btn-office" href={CONTACT.mapsUrl} target="_blank" rel="noreferrer">
+                <Navigation size={16} /> Get Directions
+              </a>
+            </div>
+            <div className="office-card">
+              <h3 className="office-title"><Navigation size={18} color="#00BBA9" /> Launch Cities</h3>
+              <div className="city-list">
+                {LAUNCH_CITIES.map((c) => (
+                  <div key={c.name} className="city-row">
+                    <span className="city-name">{c.name}</span>
+                    <span className="city-note">{c.note}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -193,6 +247,7 @@ const ContactUs = () => {
         }
 
         .c-info-card {
+          display: block;
           background: #FFFFFF;
           border: 1px solid #E2E8F0;
           border-radius: 14px;
@@ -246,6 +301,160 @@ const ContactUs = () => {
           grid-template-columns: 1fr 1fr;
           gap: 40px;
           align-items: start;
+        }
+
+        /* Toll-free explainer */
+        .tollfree-banner {
+          background: linear-gradient(135deg, #07152B 0%, #0B1F3A 100%);
+          border: 1px solid rgba(0, 187, 169, 0.3);
+          border-radius: 18px;
+          padding: 34px 38px;
+          display: grid;
+          grid-template-columns: 1.2fr 0.8fr;
+          gap: 34px;
+          align-items: center;
+          color: #FFFFFF;
+        }
+
+        .tf-tag {
+          display: inline-block;
+          font-size: 11.5px;
+          font-weight: 700;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          color: #00BBA9;
+          background: rgba(0, 187, 169, 0.12);
+          padding: 4px 12px;
+          border-radius: 20px;
+          margin-bottom: 10px;
+        }
+
+        .tf-number {
+          font-size: 38px;
+          font-weight: 800;
+          letter-spacing: 1px;
+          margin-bottom: 8px;
+        }
+
+        .tf-desc {
+          font-size: 14px;
+          color: #94A3B8;
+          line-height: 1.6;
+          max-width: 520px;
+          margin-bottom: 18px;
+        }
+
+        .tf-points {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .tf-point {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          color: #CBD5E1;
+        }
+
+        .tf-ivr-card {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 14px;
+          padding: 20px 22px;
+        }
+
+        .tf-ivr-card h4 {
+          font-size: 14px;
+          font-weight: 700;
+          color: #00BBA9;
+          margin-bottom: 12px;
+        }
+
+        .tf-ivr-list {
+          list-style: none;
+          display: flex;
+          flex-direction: column;
+          gap: 9px;
+          font-size: 13px;
+          color: #CBD5E1;
+        }
+
+        .tf-ivr-list b {
+          display: inline-block;
+          width: 22px;
+          height: 22px;
+          line-height: 22px;
+          text-align: center;
+          background: rgba(0, 187, 169, 0.15);
+          color: #00BBA9;
+          border-radius: 6px;
+          margin-right: 8px;
+          font-size: 12px;
+        }
+
+        /* Office + cities */
+        .office-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 24px;
+        }
+
+        .office-card {
+          background: #FFFFFF;
+          border: 1px solid #E2E8F0;
+          border-radius: 16px;
+          padding: 26px;
+        }
+
+        .office-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 17px;
+          font-weight: 700;
+          color: #0F172A;
+          margin-bottom: 12px;
+        }
+
+        .office-addr {
+          font-size: 14.5px;
+          color: #475569;
+          line-height: 1.6;
+          margin-bottom: 18px;
+        }
+
+        .btn-office {
+          font-size: 14px;
+          padding: 10px 20px;
+        }
+
+        .city-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .city-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 10px;
+          padding: 11px 14px;
+        }
+
+        .city-name {
+          font-size: 14.5px;
+          font-weight: 700;
+          color: #0F172A;
+        }
+
+        .city-note {
+          font-size: 12px;
+          color: #64748B;
         }
 
         .contact-form-box {
@@ -349,8 +558,13 @@ const ContactUs = () => {
           .contact-cards-grid {
             grid-template-columns: 1fr 1fr;
           }
-          .contact-main-grid {
+          .contact-main-grid,
+          .tollfree-banner,
+          .office-grid {
             grid-template-columns: 1fr;
+          }
+          .tollfree-banner {
+            padding: 26px 22px;
           }
         }
 
@@ -358,8 +572,12 @@ const ContactUs = () => {
           .contact-cards-grid {
             grid-template-columns: 1fr;
           }
-          .form-row {
+          .form-row,
+          .tf-points {
             grid-template-columns: 1fr;
+          }
+          .tf-number {
+            font-size: 30px;
           }
         }
       `}</style>

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { X, MapPin, Calendar, Clock, User, CheckCircle2, Car, Shield, ArrowRight } from 'lucide-react';
+import { X, MapPin, Calendar, User, CheckCircle2, Car, Shield, ArrowRight } from 'lucide-react';
+import { CONTACT } from '../siteConfig';
 
 const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
   const [step, setStep] = useState(1);
-  const [tripType, setTripType] = useState('oneWay');
-  const [pickup, setPickup] = useState('Indiranagar, Bengaluru');
+  const [tripType, setTripType] = useState('city');
+  const [pickup, setPickup] = useState('Gandhinagar, Bengaluru');
   const [drop, setDrop] = useState('Kempegowda Int. Airport (BLR)');
   const [vehicle, setVehicle] = useState(selectedVehicle || 'Dzire');
   const [date, setDate] = useState('2026-08-06');
@@ -16,10 +17,16 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
   if (!isOpen) return null;
 
   const vehicleOptions = [
-    { id: 'Dzire', name: 'Sedan (Dzire / Etios)', rate: '₹12/km', capacity: '4 Seats', eta: '4 mins' },
-    { id: 'Ertiga', name: 'SUV (Ertiga / Triber)', rate: '₹16/km', capacity: '6 Seats', eta: '6 mins' },
-    { id: 'Innova Crysta', name: 'Premium SUV (Innova Crysta)', rate: '₹20/km', capacity: '6 Seats', eta: '8 mins' },
-    { id: 'Toyota Fortuner', name: 'Luxury (Toyota Fortuner)', rate: '₹30/km', capacity: '7 Seats', eta: '12 mins' },
+    { id: 'Dzire', name: 'Maruti Suzuki Dzire (Sedan)', rate: '₹12/km', capacity: '4 Seats', eta: '4 mins' },
+    { id: 'Ertiga', name: 'Maruti Suzuki Ertiga (MUV)', rate: '₹16/km', capacity: '6 Seats', eta: '6 mins' },
+    { id: 'Innova Crysta', name: 'Toyota Innova Crysta (Premium SUV)', rate: '₹20/km', capacity: '6 Seats', eta: '8 mins' },
+    { id: 'Toyota Fortuner', name: 'Toyota Fortuner (Luxury SUV)', rate: '₹30/km', capacity: '7 Seats', eta: '12 mins' },
+  ];
+
+  const tripTypes = [
+    { id: 'city', label: 'City Ride' },
+    { id: 'outstation', label: 'Outstation' },
+    { id: 'airport', label: 'Airport Transfer' },
   ];
 
   const handleConfirmBooking = (e) => {
@@ -38,7 +45,7 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
         {/* Header */}
         <div className="modal-header">
           <div className="modal-title-group">
-            <span className="modal-badge">Zi CAB Dispatch</span>
+            <span className="modal-badge">ZI CAB Dispatch</span>
             <h3 className="modal-title">
               {step === 1 && 'Plan Your Ride'}
               {step === 2 && 'Passenger Details'}
@@ -55,24 +62,15 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
           <div className="modal-body">
             {/* Trip Type Tabs */}
             <div className="tab-pills">
-              <button 
-                className={`tab-pill ${tripType === 'oneWay' ? 'active' : ''}`}
-                onClick={() => setTripType('oneWay')}
-              >
-                One Way
-              </button>
-              <button 
-                className={`tab-pill ${tripType === 'roundTrip' ? 'active' : ''}`}
-                onClick={() => setTripType('roundTrip')}
-              >
-                Round Trip
-              </button>
-              <button 
-                className={`tab-pill ${tripType === 'airport' ? 'active' : ''}`}
-                onClick={() => setTripType('airport')}
-              >
-                Airport Transfer
-              </button>
+              {tripTypes.map((t) => (
+                <button
+                  key={t.id}
+                  className={`tab-pill ${tripType === t.id ? 'active' : ''}`}
+                  onClick={() => setTripType(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
 
             <div className="input-group">
@@ -217,11 +215,11 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
             </div>
             <h4 className="confirm-title">Cab Booked Successfully!</h4>
             <p className="confirm-text">
-              Thank you, <strong>{name || 'Rider'}</strong>. Your Zi CAB booking ID is <strong>#ZC-89241</strong>.
+              Thank you, <strong>{name || 'Rider'}</strong>. Your ZI CAB booking ID is <strong>#ZC-89241</strong>.
             </p>
             <div className="driver-assign-card">
               <p>📍 Driver details will be sent via SMS / WhatsApp 20 minutes before pickup.</p>
-              <p>📞 24x7 Support Helpline: 1800 200 9999</p>
+              <p>📞 24x7 Toll-Free Support: {CONTACT.tollFree}</p>
             </div>
 
             <button className="btn btn-teal w-full mt-6" onClick={handleReset}>
@@ -329,36 +327,6 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
           background-color: #00BBA9;
           color: #FFFFFF;
           font-weight: 600;
-        }
-
-        .input-group {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-
-        .input-group label {
-          font-size: 13px;
-          color: #CBD5E1;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-weight: 500;
-        }
-
-        .input-group input, .input-group select {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 8px;
-          padding: 10px 14px;
-          color: #FFFFFF;
-          font-size: 14px;
-          outline: none;
-        }
-
-        .input-group input:focus, .input-group select:focus {
-          border-color: #00BBA9;
-          box-shadow: 0 0 0 2px rgba(0, 187, 169, 0.2);
         }
 
         .input-row {

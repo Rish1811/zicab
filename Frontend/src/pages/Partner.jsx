@@ -18,7 +18,7 @@ const Partner = () => {
       <div className="page-hero">
         <div className="container">
           <span className="page-tag">Attach Cabs & Earn</span>
-          <h1 className="page-title">Partner With Zi CAB Fleet Network</h1>
+          <h1 className="page-title">Partner With ZI CAB Fleet Network</h1>
           <p className="page-subtitle">
             Attach your commercial vehicle to India's fastest growing premium cab platform and earn up to ₹90,000/month per vehicle.
           </p>
@@ -29,7 +29,7 @@ const Partner = () => {
         <div className="container partner-grid">
           {/* Left Info & Earnings Estimator */}
           <div className="partner-info">
-            <h2 className="section-title">Why Fleet Owners Trust Zi CAB</h2>
+            <h2 className="section-title">Why Fleet Owners Trust ZI CAB</h2>
             
             <div className="partner-perks-grid">
               <div className="perk-card">

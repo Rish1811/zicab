@@ -11,6 +11,7 @@ const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
     { id: 'corporate', label: 'Corporate' },
     { id: 'partner', label: 'Partner' },
     { id: 'driver', label: 'Driver' },
+    { id: 'advertise', label: 'Advertise' },
     { id: 'contact', label: 'Contact Us' },
   ];
 
@@ -29,11 +30,14 @@ const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
           onClick={() => handleNavClick('home')}
           style={{ cursor: 'pointer' }}
         >
-          <div className="logo-text-wrapper">
-            <span className="logo-zi">Zi</span>
-            <span className="logo-cab">CAB</span>
+          <img src="/zicab-logo.jpg" alt="ZI CAB" className="brand-logo-img" />
+          <div className="brand-logo-text">
+            <div className="logo-text-wrapper">
+              <span className="logo-zi">ZI</span>
+              <span className="logo-cab">CAB</span>
+            </div>
+            <span className="logo-tagline">Your Ride. Our Priority.</span>
           </div>
-          <span className="logo-tagline">Your Ride. Our Priority.</span>
         </div>
 
         {/* Desktop Navigation Links */}
@@ -118,6 +122,20 @@ const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
 
         .brand-logo {
           display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .brand-logo-img {
+          width: 46px;
+          height: 46px;
+          border-radius: 11px;
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+
+        .brand-logo-text {
+          display: flex;
           flex-direction: column;
         }
 
@@ -154,7 +172,7 @@ const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
         .desktop-nav {
           display: flex;
           align-items: center;
-          gap: 24px;
+          gap: 20px;
         }
 
         .nav-link-btn {

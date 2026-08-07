@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  MapPin, Calendar, Users, ArrowRight, ShieldCheck, Navigation, 
-  Headphones, Wallet, PhoneCall, Car, Plane, Compass, Award, 
-  Briefcase, Building2, ShoppingBag, CheckCircle, Smartphone, QrCode, ChevronRight
+import {
+  MapPin, Users, ArrowRight, ShieldCheck, Navigation,
+  Headphones, Wallet, PhoneCall, Car, Plane, Compass,
+  Briefcase, Building2, ShoppingBag, Smartphone, QrCode, ChevronRight,
+  Star, BadgeCheck, Megaphone
 } from 'lucide-react';
+import { LAUNCH_CITIES, CONTACT } from '../siteConfig';
 
 const Home = ({ openBookingModal, setActiveTab }) => {
-  const [tab, setTab] = useState('oneWay');
+  const [tab, setTab] = useState('city');
   const [pickup, setPickup] = useState('');
   const [drop, setDrop] = useState('');
   const [dateTime, setDateTime] = useState('');
@@ -56,36 +58,39 @@ const Home = ({ openBookingModal, setActiveTab }) => {
     }
   ];
 
+  // Model-specific photos. Drop the real fleet photos into
+  // Frontend/public/vehicles/ using exactly these filenames (16:9, ~800x450).
+  // If a file is missing the card falls back to `fallback` so nothing breaks.
   const vehicles = [
     {
-      name: 'Dzire',
+      name: 'Maruti Suzuki Dzire',
       type: 'Sedan',
       seats: '4 Seats',
       bags: '2 Bags',
       price: '₹12',
       unit: '/km',
-      image: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=600&q=80',
-      svgType: 'sedan'
+      image: '/vehicles/dzire.jpg',
+      fallback: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=600&q=80'
     },
     {
-      name: 'Ertiga',
+      name: 'Maruti Suzuki Ertiga',
       type: 'MUV',
       seats: '6 Seats',
       bags: '4 Bags',
       price: '₹16',
       unit: '/km',
-      image: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=600&q=80',
-      svgType: 'muv'
+      image: '/vehicles/ertiga.jpg',
+      fallback: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=600&q=80'
     },
     {
-      name: 'Innova Crysta',
+      name: 'Toyota Innova Crysta',
       type: 'Premium SUV',
       seats: '6 Seats',
       bags: '4 Bags',
       price: '₹20',
       unit: '/km',
-      image: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=600&q=80',
-      svgType: 'innova'
+      image: '/vehicles/innova-crysta.jpg',
+      fallback: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=600&q=80'
     },
     {
       name: 'Toyota Fortuner',
@@ -94,8 +99,53 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       bags: '4 Bags',
       price: '₹30',
       unit: '/km',
-      image: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=600&q=80',
-      svgType: 'fortuner'
+      image: '/vehicles/fortuner.jpg',
+      fallback: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=600&q=80'
+    }
+  ];
+
+  // TODO(client): replace with real driver photos + details from the onboarding sheet.
+  // Photos go in Frontend/public/drivers/ (square crop, 400x400 or larger).
+  const drivers = [
+    {
+      name: 'Ramesh Kumar',
+      photo: '/drivers/driver-1.jpg',
+      rating: 4.9,
+      trips: '3,200+ trips',
+      experience: '8 years experience',
+      vehicle: 'Maruti Suzuki Dzire · KA 01 AB 1234',
+      badge: 'Top Driver',
+      city: 'Bengaluru'
+    },
+    {
+      name: 'Suresh Naik',
+      photo: '/drivers/driver-2.jpg',
+      rating: 4.8,
+      trips: '2,100+ trips',
+      experience: '6 years experience',
+      vehicle: 'Toyota Innova Crysta · KA 19 CD 5678',
+      badge: 'Verified',
+      city: 'Mangaluru'
+    },
+    {
+      name: 'Mahesh Patil',
+      photo: '/drivers/driver-3.jpg',
+      rating: 5.0,
+      trips: '1,450+ trips',
+      experience: '5 years experience',
+      vehicle: 'Maruti Suzuki Ertiga · KA 25 EF 9012',
+      badge: 'Top Driver',
+      city: 'Hubballi'
+    },
+    {
+      name: 'Imran Shaikh',
+      photo: '/drivers/driver-4.jpg',
+      rating: 4.9,
+      trips: '2,800+ trips',
+      experience: '10 years experience',
+      vehicle: 'Toyota Fortuner · KA 03 GH 3456',
+      badge: 'Verified',
+      city: 'Bengaluru'
     }
   ];
 
@@ -159,24 +209,19 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             <div className="booking-card">
               {/* Tabs */}
               <div className="booking-tabs">
-                <button 
-                  className={`b-tab ${tab === 'oneWay' ? 'active' : ''}`}
-                  onClick={() => setTab('oneWay')}
-                >
-                  One Way
-                </button>
-                <button 
-                  className={`b-tab ${tab === 'roundTrip' ? 'active' : ''}`}
-                  onClick={() => setTab('roundTrip')}
-                >
-                  Round Trip
-                </button>
-                <button 
-                  className={`b-tab ${tab === 'airport' ? 'active' : ''}`}
-                  onClick={() => setTab('airport')}
-                >
-                  Airport Transfer
-                </button>
+                {[
+                  { id: 'city', label: 'City Ride' },
+                  { id: 'outstation', label: 'Outstation' },
+                  { id: 'airport', label: 'Airport Transfer' },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    className={`b-tab ${tab === t.id ? 'active' : ''}`}
+                    onClick={() => setTab(t.id)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
               </div>
 
               <form onSubmit={handleSearchSubmit} className="booking-form">
@@ -314,7 +359,15 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             {vehicles.map((v, i) => (
               <div key={i} className="vehicle-card">
                 <div className="vehicle-img-container">
-                  <img src={v.image} alt={v.name} className="vehicle-img" />
+                  <img
+                    src={v.image}
+                    alt={v.name}
+                    className="vehicle-img"
+                    onError={(e) => {
+                      if (e.currentTarget.src !== v.fallback) e.currentTarget.src = v.fallback;
+                    }}
+                  />
+                  <span className="vehicle-type-badge">{v.type}</span>
                 </div>
                 <div className="vehicle-card-body">
                   <h3 className="vehicle-name">{v.name}</h3>
@@ -339,6 +392,95 @@ const Home = ({ openBookingModal, setActiveTab }) => {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* MEET OUR DRIVERS SECTION */}
+      <section className="section-padding drivers-section">
+        <div className="container">
+          <div className="section-title-group">
+            <div>
+              <h2 className="section-title light">Meet Our Drivers</h2>
+              <p className="section-sub">Every ZI CAB captain is background-verified, police-checked and rated by real riders.</p>
+            </div>
+            <button className="section-link" onClick={() => setActiveTab('driver')}>
+              Become a Driver <ChevronRight size={16} />
+            </button>
+          </div>
+
+          <div className="drivers-grid">
+            {drivers.map((d, i) => (
+              <div key={i} className="driver-card">
+                <div className="driver-top">
+                  <img
+                    src={d.photo}
+                    alt={d.name}
+                    className="driver-photo"
+                    onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+                  />
+                  <span className={`driver-badge ${d.badge === 'Top Driver' ? 'top' : ''}`}>
+                    <BadgeCheck size={12} /> {d.badge}
+                  </span>
+                </div>
+
+                <h3 className="driver-name">{d.name}</h3>
+
+                <div className="driver-rating">
+                  <Star size={14} color="#FBBF24" fill="#FBBF24" />
+                  <strong>{d.rating}</strong>
+                  <span>· {d.trips}</span>
+                </div>
+
+                <div className="driver-meta">
+                  <div className="dm-row"><ShieldCheck size={14} color="#00BBA9" /> {d.experience}</div>
+                  <div className="dm-row"><Car size={14} color="#00BBA9" /> {d.vehicle}</div>
+                  <div className="dm-row"><MapPin size={14} color="#00BBA9" /> {d.city}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* OFFICE & LAUNCH CITIES */}
+      <section className="section-padding cities-section">
+        <div className="container">
+          <div className="section-title-group">
+            <div>
+              <h2 className="section-title">Where You'll Find Us</h2>
+              <p className="section-sub-dark">{CONTACT.addressShort}</p>
+            </div>
+            <a className="section-link" href={CONTACT.mapsUrl} target="_blank" rel="noreferrer">
+              Get Directions <ChevronRight size={16} />
+            </a>
+          </div>
+
+          <div className="cities-grid">
+            {LAUNCH_CITIES.map((c) => (
+              <div key={c.name} className="city-card">
+                <div className="city-icon"><MapPin size={20} color="#00BBA9" /></div>
+                <h3>{c.name}</h3>
+                <span>{c.note}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ADVERTISE TEASER */}
+      <section className="advertise-teaser">
+        <div className="container advertise-teaser-inner">
+          <div>
+            <span className="at-tag"><Megaphone size={14} /> For Businesses</span>
+            <h2 className="at-title">Advertise with ZI CAB</h2>
+            <p className="at-desc">
+              Put your brand in front of thousands of daily riders — across our mobile app, website,
+              driver app, home banners, booking screens and push notifications.
+            </p>
+          </div>
+          <button className="btn btn-teal at-btn" onClick={() => setActiveTab('advertise')}>
+            Explore Ad Options <ArrowRight size={18} />
+          </button>
         </div>
       </section>
 
@@ -385,7 +527,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
               <div className="mockup-phone">
                 <div className="mockup-screen">
                   <div className="m-header">
-                    <span className="m-logo">Zi CAB</span>
+                    <span className="m-logo">ZI CAB</span>
                   </div>
                   <div className="m-body">
                     <p className="m-tag">Your Ride. Our Priority.</p>
@@ -786,6 +928,230 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           color: #FFFFFF;
         }
 
+        .vehicle-img-container {
+          position: relative;
+        }
+
+        .vehicle-type-badge {
+          position: absolute;
+          top: 12px;
+          left: 12px;
+          background: rgba(7, 21, 43, 0.85);
+          color: #00BBA9;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 4px 10px;
+          border-radius: 20px;
+          border: 1px solid rgba(0, 187, 169, 0.4);
+        }
+
+        /* DRIVER PROFILES */
+        .drivers-section {
+          background: linear-gradient(135deg, #07152B 0%, #0B1F3A 100%);
+        }
+
+        .section-sub {
+          font-size: 14px;
+          color: #94A3B8;
+          margin-top: 6px;
+          max-width: 560px;
+        }
+
+        .section-sub-dark {
+          font-size: 14px;
+          color: #64748B;
+          margin-top: 6px;
+        }
+
+        .drivers-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 22px;
+        }
+
+        .driver-card {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 16px;
+          padding: 22px;
+          color: #FFFFFF;
+          transition: var(--transition);
+        }
+
+        .driver-card:hover {
+          border-color: #00BBA9;
+          transform: translateY(-5px);
+          box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+        }
+
+        .driver-top {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          margin-bottom: 14px;
+        }
+
+        .driver-photo {
+          width: 68px;
+          height: 68px;
+          border-radius: 50%;
+          object-fit: cover;
+          background: rgba(255, 255, 255, 0.12);
+          border: 2px solid #00BBA9;
+        }
+
+        .driver-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 10.5px;
+          font-weight: 700;
+          padding: 4px 9px;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.1);
+          color: #CBD5E1;
+          border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+
+        .driver-badge.top {
+          background: rgba(0, 187, 169, 0.15);
+          color: #00BBA9;
+          border-color: rgba(0, 187, 169, 0.45);
+        }
+
+        .driver-name {
+          font-size: 16.5px;
+          font-weight: 700;
+          margin-bottom: 5px;
+        }
+
+        .driver-rating {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 13px;
+          color: #94A3B8;
+          margin-bottom: 14px;
+        }
+
+        .driver-rating strong {
+          color: #FFFFFF;
+        }
+
+        .driver-meta {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          padding-top: 14px;
+        }
+
+        .dm-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          color: #CBD5E1;
+          line-height: 1.4;
+        }
+
+        /* LAUNCH CITIES */
+        .cities-section {
+          background: #FFFFFF;
+        }
+
+        .cities-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 22px;
+        }
+
+        .city-card {
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 16px;
+          padding: 26px 22px;
+          transition: var(--transition);
+        }
+
+        .city-card:hover {
+          border-color: #00BBA9;
+          transform: translateY(-4px);
+          box-shadow: 0 10px 24px rgba(0, 187, 169, 0.12);
+        }
+
+        .city-icon {
+          width: 44px;
+          height: 44px;
+          background: #E6F8F6;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 14px;
+        }
+
+        .city-card h3 {
+          font-size: 19px;
+          font-weight: 700;
+          color: #0F172A;
+          margin-bottom: 4px;
+        }
+
+        .city-card span {
+          font-size: 13px;
+          color: #64748B;
+        }
+
+        /* ADVERTISE TEASER */
+        .advertise-teaser {
+          background: #0B1F3A;
+          padding: 44px 0;
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .advertise-teaser-inner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 30px;
+          color: #FFFFFF;
+        }
+
+        .at-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11.5px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          color: #00BBA9;
+          background: rgba(0, 187, 169, 0.12);
+          padding: 4px 12px;
+          border-radius: 20px;
+          margin-bottom: 10px;
+        }
+
+        .at-title {
+          font-size: 28px;
+          font-weight: 800;
+          margin-bottom: 6px;
+        }
+
+        .at-desc {
+          font-size: 14.5px;
+          color: #94A3B8;
+          line-height: 1.6;
+          max-width: 640px;
+        }
+
+        .at-btn {
+          flex-shrink: 0;
+          padding: 14px 28px;
+          border-radius: 30px;
+        }
+
         /* TRUSTED & APP SECTION */
         .trusted-app-section {
           padding: 60px 0;
@@ -939,8 +1305,12 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           .services-grid {
             grid-template-columns: repeat(4, 1fr);
           }
-          .vehicles-grid, .why-us-grid {
+          .vehicles-grid, .why-us-grid, .drivers-grid {
             grid-template-columns: repeat(2, 1fr);
+          }
+          .advertise-teaser-inner {
+            flex-direction: column;
+            align-items: flex-start;
           }
           .app-download-banner {
             grid-template-columns: 1fr;
@@ -956,8 +1326,13 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           .services-grid {
             grid-template-columns: repeat(2, 1fr);
           }
-          .vehicles-grid, .why-us-grid {
+          .vehicles-grid, .why-us-grid, .drivers-grid, .cities-grid {
             grid-template-columns: 1fr;
+          }
+          .section-title-group {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
           }
           .partners-flex {
             justify-content: center;

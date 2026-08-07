@@ -1,5 +1,6 @@
 import React from 'react';
-import { Phone, Mail, MapPin, ShieldCheck, Clock, Headphones } from 'lucide-react';
+import { Phone, Mail, MapPin, ShieldCheck, Clock, MessageCircle } from 'lucide-react';
+import { CONTACT, LAUNCH_CITIES, waLink } from '../siteConfig';
 
 const Footer = ({ setActiveTab, openBookingModal }) => {
   const handleNavClick = (id) => {
@@ -14,26 +15,47 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
           {/* Brand Info */}
           <div className="footer-brand">
             <div className="footer-logo">
-              <span className="logo-zi">Zi</span>
-              <span className="logo-cab">CAB</span>
+              <img src="/zicab-logo.jpg" alt="ZI CAB" className="footer-logo-img" />
+              <div>
+                <div className="footer-logo-text">
+                  <span className="logo-zi">ZI</span>
+                  <span className="logo-cab">CAB</span>
+                </div>
+                <p className="footer-tagline">Your Ride. Our Priority.</p>
+              </div>
             </div>
-            <p className="footer-tagline">Your Ride. Our Priority.</p>
             <p className="footer-desc">
-              Zi CAB is India's leading premium cab booking platform providing safe, transparent, and 24x7 verified rides across 50+ cities.
+              ZI CAB is a premium cab booking platform providing safe, transparent, and 24x7 verified rides — now live in Bengaluru, Mangaluru and Hubballi.
             </p>
-            
+
             <div className="footer-contacts">
               <div className="contact-item">
                 <Phone size={16} color="#00BBA9" />
-                <span>24x7 Support: <strong>+91 1800 200 9999</strong></span>
+                <span>
+                  24x7 Toll-Free: <strong>{CONTACT.tollFree}</strong>
+                </span>
+              </div>
+              <div className="contact-item">
+                <MessageCircle size={16} color="#00BBA9" />
+                <span>
+                  WhatsApp:{' '}
+                  <a href={waLink()} target="_blank" rel="noreferrer" className="footer-inline-link">
+                    {CONTACT.whatsappDisplay}
+                  </a>
+                </span>
               </div>
               <div className="contact-item">
                 <Mail size={16} color="#00BBA9" />
-                <span>Email: support@zicab.in</span>
+                <span>
+                  Email:{' '}
+                  <a href={`mailto:${CONTACT.email}`} className="footer-inline-link">
+                    {CONTACT.email}
+                  </a>
+                </span>
               </div>
               <div className="contact-item">
                 <MapPin size={16} color="#00BBA9" />
-                <span>Headquarters: Indiranagar, Bengaluru, KA</span>
+                <span>Office: {CONTACT.address}</span>
               </div>
             </div>
           </div>
@@ -48,6 +70,7 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
               <li><button onClick={() => handleNavClick('corporate')}>Corporate Travel</button></li>
               <li><button onClick={() => handleNavClick('partner')}>Partner With Us</button></li>
               <li><button onClick={() => handleNavClick('driver')}>Attach Driver/Cab</button></li>
+              <li><button onClick={() => handleNavClick('advertise')}>Advertise with ZI CAB</button></li>
               <li><button onClick={() => handleNavClick('contact')}>Contact Us</button></li>
             </ul>
           </div>
@@ -69,7 +92,7 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
           <div className="footer-col">
             <h4 className="footer-heading">Download App</h4>
             <p className="footer-text-sm">
-              Book rides in seconds, track drivers live, and manage invoices with the Zi CAB app.
+              Book rides in seconds, track drivers live, and manage invoices with the ZI CAB app.
             </p>
             <div className="footer-app-badges">
               <div className="app-badge">
@@ -95,8 +118,17 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
           </div>
         </div>
 
+        <div className="footer-cities">
+          <span className="footer-cities-label">Now Live In:</span>
+          {LAUNCH_CITIES.map((c) => (
+            <span key={c.name} className="footer-city-pill">
+              <MapPin size={12} color="#00BBA9" /> {c.name}
+            </span>
+          ))}
+        </div>
+
         <div className="footer-bottom">
-          <p>© 2026 Zi CAB Technologies Pvt Ltd. All Rights Reserved.</p>
+          <p>© 2026 ZI CAB Technologies Pvt Ltd. All Rights Reserved.</p>
           <div className="footer-bottom-links">
             <a href="#privacy">Privacy Policy</a>
             <span>•</span>
@@ -126,8 +158,52 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
 
         .footer-logo {
           display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+
+        .footer-logo-img {
+          width: 54px;
+          height: 54px;
+          border-radius: 13px;
+          object-fit: cover;
+        }
+
+        .footer-logo-text {
+          display: flex;
           align-items: baseline;
-          margin-bottom: 4px;
+        }
+
+        .footer-inline-link:hover {
+          color: #00BBA9;
+        }
+
+        .footer-cities {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px;
+          padding-bottom: 24px;
+        }
+
+        .footer-cities-label {
+          font-size: 13px;
+          font-weight: 600;
+          color: #FFFFFF;
+        }
+
+        .footer-city-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: rgba(0, 187, 169, 0.1);
+          border: 1px solid rgba(0, 187, 169, 0.3);
+          color: #CBD5E1;
+          font-size: 12.5px;
+          font-weight: 500;
+          padding: 5px 12px;
+          border-radius: 20px;
         }
 
         .footer-logo .logo-zi {
@@ -146,9 +222,8 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
 
         .footer-tagline {
           color: #00BBA9;
-          font-size: 13px;
+          font-size: 12.5px;
           font-weight: 500;
-          margin-bottom: 14px;
         }
 
         .footer-desc {

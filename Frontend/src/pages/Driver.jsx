@@ -25,10 +25,10 @@ const Driver = () => {
     <div className="driver-page animate-fade-in">
       <div className="page-hero">
         <div className="container">
-          <span className="page-tag">Join Zi CAB Captains</span>
+          <span className="page-tag">Join ZI CAB Captains</span>
           <h1 className="page-title">Drive With Dignity, Security & Higher Income</h1>
           <p className="page-subtitle">
-            Become a Zi CAB Driver Partner. Enjoy daily/weekly settlements, zero arbitrary account blocks, and dedicated support for captains.
+            Become a ZI CAB Driver Partner. Enjoy daily/weekly settlements, zero arbitrary account blocks, and dedicated support for captains.
           </p>
         </div>
       </div>
@@ -37,7 +37,7 @@ const Driver = () => {
         <div className="container driver-grid">
           {/* Left Details */}
           <div className="driver-info">
-            <h2 className="section-title">Captain Benefits at Zi CAB</h2>
+            <h2 className="section-title">Captain Benefits at ZI CAB</h2>
             
             <div className="driver-perks">
               <div className="d-perk">
@@ -52,7 +52,7 @@ const Driver = () => {
                 <Shield size={24} color="#00BBA9" />
                 <div>
                   <h4>₹5 Lakh Insurance Cover</h4>
-                  <p>Free accidental insurance and medical assistance for every active Zi CAB driver partner.</p>
+                  <p>Free accidental insurance and medical assistance for every active ZI CAB driver partner.</p>
                 </div>
               </div>
 
@@ -81,7 +81,7 @@ const Driver = () => {
           {/* Right Driver Onboarding Form */}
           <div className="driver-form-card">
             <h3 className="form-card-title">Driver Onboarding Form</h3>
-            <p className="form-card-sub">Start driving with Zi CAB within 24 hours.</p>
+            <p className="form-card-sub">Start driving with ZI CAB within 24 hours.</p>
 
             {submitted ? (
               <div className="form-success text-center py-6">
@@ -119,10 +119,8 @@ const Driver = () => {
                   <label>Current Operating City</label>
                   <select value={city} onChange={(e) => setCity(e.target.value)}>
                     <option value="Bengaluru">Bengaluru</option>
-                    <option value="Mumbai">Mumbai</option>
-                    <option value="Delhi NCR">Delhi NCR</option>
-                    <option value="Hyderabad">Hyderabad</option>
-                    <option value="Chennai">Chennai</option>
+                    <option value="Mangaluru">Mangaluru</option>
+                    <option value="Hubballi">Hubballi</option>
                   </select>
                 </div>
 

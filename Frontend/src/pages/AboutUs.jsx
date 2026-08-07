@@ -1,12 +1,32 @@
 import React from 'react';
-import { ShieldCheck, Award, Users, MapPin, HeartHandshake, CheckCircle2, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Award, Users, MapPin, HeartHandshake, CheckCircle2, ArrowRight, ExternalLink, Navigation } from 'lucide-react';
+import { CONTACT, LAUNCH_CITIES } from '../siteConfig';
 
 const AboutUs = ({ openBookingModal }) => {
   const stats = [
     { label: 'Successful Rides', value: '100,000+' },
     { label: 'Customer Rating', value: '4.9 ★' },
-    { label: 'Cities Covered', value: '50+' },
-    { label: 'Verified Drivers', value: '5,000+' },
+    { label: 'Launch Cities', value: '3' },
+    { label: 'Verified Drivers', value: '500+' },
+  ];
+
+  // TODO(client): replace each placeholder with the real founder details.
+  // Photos go in Frontend/public/founders/ (square crop, 600x600 or larger).
+  const founders = [
+    {
+      name: 'Founder Name',
+      role: 'Founder & CEO',
+      photo: '/founders/founder-1.jpg',
+      bio: 'Two to three lines on background, years of experience and what they own at ZI CAB.',
+      linkedin: '',
+    },
+    {
+      name: 'Co-Founder Name',
+      role: 'Co-Founder & COO',
+      photo: '/founders/founder-2.jpg',
+      bio: 'Two to three lines on background, years of experience and what they own at ZI CAB.',
+      linkedin: '',
+    },
   ];
 
   const pillars = [
@@ -37,10 +57,11 @@ const AboutUs = ({ openBookingModal }) => {
       {/* Page Header */}
       <div className="page-hero">
         <div className="container">
-          <span className="page-tag">About Zi CAB</span>
-          <h1 className="page-title">Redefining Premium Cab Services Across India</h1>
+          <span className="page-tag">About ZI CAB</span>
+          <h1 className="page-title">Redefining Premium Cab Services Across Karnataka</h1>
           <p className="page-subtitle">
-            Built on trust, safety, and reliability. Providing seamless outstation, airport, and local rides since 2021.
+            Built on trust, safety, and reliability. Seamless city, outstation and airport rides —
+            now live in Bengaluru, Mangaluru and Hubballi.
           </p>
         </div>
       </div>
@@ -65,10 +86,10 @@ const AboutUs = ({ openBookingModal }) => {
           <div className="story-content">
             <h2 className="section-title">Our Story & Mission</h2>
             <p className="body-text">
-              Zi CAB was founded with a clear mission: to eliminate ride cancellations, surge pricing shocks, and unverified driver risks for travelers in India.
+              ZI CAB was founded with a clear mission: to eliminate ride cancellations, surge pricing shocks, and unverified driver risks for travelers in Karnataka.
             </p>
             <p className="body-text">
-              Whether you need an early morning 4 AM airport cab in Bengaluru, an executive sedan for corporate travel, or a family SUV for an outstation weekend trip to Coorg, Zi CAB ensures guaranteed on-time pickup with professional drivers.
+              Whether you need an early morning 4 AM airport cab in Bengaluru, an executive sedan for corporate travel, or a family SUV for an outstation weekend trip to Coorg, ZI CAB ensures guaranteed on-time pickup with professional drivers.
             </p>
             
             <div className="mission-list">
@@ -94,7 +115,7 @@ const AboutUs = ({ openBookingModal }) => {
           <div className="story-image-box">
             <img 
               src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80" 
-              alt="Zi CAB Premium Ride"
+              alt="ZI CAB Premium Ride"
               className="story-img"
             />
             <div className="story-badge">
@@ -105,10 +126,73 @@ const AboutUs = ({ openBookingModal }) => {
         </div>
       </section>
 
+      {/* Founders Section */}
+      <section className="section-padding founders-section">
+        <div className="container">
+          <div className="text-center mb-12">
+            <span className="page-tag dark-tag">Leadership</span>
+            <h2 className="section-title">Meet the Founders</h2>
+          </div>
+
+          <div className="founders-grid">
+            {founders.map((f, i) => (
+              <div key={i} className="founder-card">
+                <img
+                  src={f.photo}
+                  alt={f.name}
+                  className="founder-photo"
+                  onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+                />
+                <div className="founder-body">
+                  <h3 className="founder-name">{f.name}</h3>
+                  <span className="founder-role">{f.role}</span>
+                  <p className="founder-bio">{f.bio}</p>
+                  {f.linkedin && (
+                    <a href={f.linkedin} target="_blank" rel="noreferrer" className="founder-link">
+                      <ExternalLink size={15} /> LinkedIn
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Office & Launch Cities */}
+      <section className="section-padding presence-section">
+        <div className="container">
+          <div className="text-center mb-12">
+            <span className="page-tag">Our Presence</span>
+            <h2 className="section-title light">Office & Launch Cities</h2>
+          </div>
+
+          <div className="presence-grid">
+            <div className="presence-office">
+              <h3 className="presence-heading"><MapPin size={18} color="#00BBA9" /> Head Office</h3>
+              <p className="presence-addr">{CONTACT.address}</p>
+              <a className="btn btn-teal" href={CONTACT.mapsUrl} target="_blank" rel="noreferrer">
+                <Navigation size={16} /> View on Google Maps
+              </a>
+            </div>
+
+            <div className="presence-cities">
+              {LAUNCH_CITIES.map((c) => (
+                <div key={c.name} className="presence-city-card">
+                  <MapPin size={20} color="#00BBA9" />
+                  <h4>{c.name}</h4>
+                  <span>{c.note}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Pillars Section */}
       <section className="section-padding pillars-section">
         <div className="container">
-          <h2 className="section-title text-center mb-12">The Pillars of Zi CAB</h2>
+          <h2 className="section-title text-center mb-12">The Pillars of ZI CAB</h2>
           
           <div className="pillars-grid">
             {pillars.map((p, idx) => {
@@ -128,39 +212,6 @@ const AboutUs = ({ openBookingModal }) => {
       </section>
 
       <style>{`
-        .page-hero {
-          background: linear-gradient(135deg, #07152B 0%, #0B1F3A 100%);
-          padding: 60px 0 80px;
-          color: #FFFFFF;
-          text-align: center;
-        }
-
-        .page-tag {
-          font-size: 12px;
-          font-weight: 700;
-          color: #00BBA9;
-          background: rgba(0, 187, 169, 0.12);
-          padding: 4px 12px;
-          border-radius: 20px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          display: inline-block;
-          margin-bottom: 12px;
-        }
-
-        .page-title {
-          font-size: 38px;
-          font-weight: 800;
-          margin-bottom: 12px;
-        }
-
-        .page-subtitle {
-          font-size: 16px;
-          color: #94A3B8;
-          max-width: 650px;
-          margin: 0 auto;
-        }
-
         .stats-section {
           background-color: #07152B;
           border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -197,13 +248,6 @@ const AboutUs = ({ openBookingModal }) => {
           grid-template-columns: 1fr 1fr;
           gap: 50px;
           align-items: center;
-        }
-
-        .body-text {
-          font-size: 15px;
-          color: #475569;
-          line-height: 1.7;
-          margin-bottom: 16px;
         }
 
         .mission-list {
@@ -260,6 +304,152 @@ const AboutUs = ({ openBookingModal }) => {
           color: #CBD5E1;
         }
 
+        /* Founders */
+        .founders-section {
+          background-color: #FFFFFF;
+          border-top: 1px solid #E2E8F0;
+        }
+
+        .dark-tag {
+          background: rgba(0, 187, 169, 0.1);
+        }
+
+        .founders-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+          gap: 26px;
+          max-width: 900px;
+          margin: 0 auto;
+        }
+
+        .founder-card {
+          display: flex;
+          gap: 18px;
+          background: #F8FAFC;
+          border: 1px solid #E2E8F0;
+          border-radius: 16px;
+          padding: 22px;
+          transition: var(--transition);
+        }
+
+        .founder-card:hover {
+          border-color: #00BBA9;
+          box-shadow: var(--shadow-md);
+          transform: translateY(-4px);
+        }
+
+        .founder-photo {
+          width: 96px;
+          height: 96px;
+          border-radius: 14px;
+          object-fit: cover;
+          background: #E2E8F0;
+          flex-shrink: 0;
+        }
+
+        .founder-name {
+          font-size: 17.5px;
+          font-weight: 700;
+          color: #0F172A;
+        }
+
+        .founder-role {
+          display: block;
+          font-size: 12.5px;
+          font-weight: 600;
+          color: #00BBA9;
+          margin-bottom: 8px;
+        }
+
+        .founder-bio {
+          font-size: 13.5px;
+          color: #64748B;
+          line-height: 1.6;
+        }
+
+        .founder-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12.5px;
+          font-weight: 600;
+          color: #0F172A;
+          margin-top: 10px;
+        }
+
+        .founder-link:hover {
+          color: #00BBA9;
+        }
+
+        /* Presence */
+        .presence-section {
+          background: linear-gradient(135deg, #07152B 0%, #0B1F3A 100%);
+          color: #FFFFFF;
+        }
+
+        .presence-grid {
+          display: grid;
+          grid-template-columns: 0.9fr 1.1fr;
+          gap: 30px;
+          align-items: center;
+        }
+
+        .presence-office {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(0, 187, 169, 0.3);
+          border-radius: 16px;
+          padding: 28px;
+        }
+
+        .presence-heading {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 17px;
+          font-weight: 700;
+          color: #FFFFFF;
+          margin-bottom: 12px;
+        }
+
+        .presence-addr {
+          font-size: 14.5px;
+          color: #CBD5E1;
+          line-height: 1.65;
+          margin-bottom: 20px;
+        }
+
+        .presence-cities {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 18px;
+        }
+
+        .presence-city-card {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 14px;
+          padding: 22px 16px;
+          text-align: center;
+          transition: var(--transition);
+        }
+
+        .presence-city-card:hover {
+          border-color: #00BBA9;
+          transform: translateY(-4px);
+        }
+
+        .presence-city-card h4 {
+          font-size: 16px;
+          font-weight: 700;
+          color: #FFFFFF;
+          margin: 10px 0 4px;
+        }
+
+        .presence-city-card span {
+          font-size: 11.5px;
+          color: #94A3B8;
+        }
+
         .pillars-section {
           background-color: #F8FAFC;
         }
@@ -312,11 +502,17 @@ const AboutUs = ({ openBookingModal }) => {
           .story-grid, .stats-grid, .pillars-grid {
             grid-template-columns: 1fr 1fr;
           }
+          .presence-grid {
+            grid-template-columns: 1fr;
+          }
         }
 
         @media (max-width: 640px) {
-          .stats-grid, .pillars-grid {
+          .stats-grid, .pillars-grid, .presence-cities {
             grid-template-columns: 1fr;
+          }
+          .founder-card {
+            flex-direction: column;
           }
         }
       `}</style>
