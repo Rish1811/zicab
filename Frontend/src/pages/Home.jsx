@@ -3,6 +3,10 @@ import gsap from 'gsap';
 import useReveal from '../useReveal';
 import useEntrance from '../useEntrance';
 import useAutoScroll from '../useAutoScroll';
+import useScrollFx from '../useScrollFx';
+import useMagnetic from '../useMagnetic';
+import splitChars from '../splitChars';
+import { onIntro } from '../introGate';
 import {
   MapPin, Users, ArrowRight, ShieldCheck, Navigation,
   Headphones, Wallet, PhoneCall, Car, Plane, Compass,
@@ -20,6 +24,8 @@ const Home = ({ openBookingModal, setActiveTab }) => {
   const driverRail = useRef(null);
 
   useReveal(pageRef);
+  useScrollFx(pageRef);
+  useMagnetic(pageRef);
   useAutoScroll(vehicleRail);
   useAutoScroll(driverRail, { interval: 3800 });
 
@@ -32,28 +38,47 @@ const Home = ({ openBookingModal, setActiveTab }) => {
    * clearProps strips every inline style on completion.
    */
   useEntrance(pageRef, () => {
-    const hidden = { opacity: 0, y: 22 };
     const shown = { opacity: 1, y: 0, clearProps: 'opacity,transform' };
-
-    const words = gsap.utils.toArray('.hero-word');
+    const chars = splitChars(pageRef.current.querySelectorAll('.hero-word'));
     const rest = ['.hero-subtitle', '.hero-cta-group > *', '.badge-item', '.booking-card'];
+    let watchdog;
 
-    gsap.set(words, { yPercent: 110, opacity: 0 });
-    rest.forEach((sel) => gsap.set(sel, hidden));
+    // Build on the intro, not on mount. Setting the hidden state up front would
+    // leave the hero blank behind a curtain that never lifted.
+    const off = onIntro(() => {
+      gsap.set(chars, { yPercent: 115, opacity: 0 });
+      rest.forEach((sel) => gsap.set(sel, { opacity: 0, y: 22 }));
 
-    gsap.timeline({ defaults: { ease: 'power3.out' } })
-      // words rise out of their clipping mask, one after another
-      .to(words, {
-        yPercent: 0,
-        opacity: 1,
-        duration: 0.75,
-        stagger: 0.08,
-        clearProps: 'opacity,transform',
-      })
-      .to('.hero-subtitle', { ...shown, duration: 0.5 }, '-=0.45')
-      .to('.hero-cta-group > *', { ...shown, duration: 0.45, stagger: 0.08 }, '-=0.3')
-      .to('.badge-item', { ...shown, duration: 0.4, stagger: 0.06 }, '-=0.25')
-      .to('.booking-card', { ...shown, duration: 0.65 }, '-=0.6');
+      const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
+        // headline rises character by character out of its line mask
+        .to(chars, {
+          yPercent: 0,
+          opacity: 1,
+          duration: 0.8,
+          stagger: 0.022,
+          clearProps: 'opacity,transform',
+        })
+        .to('.hero-subtitle', { ...shown, duration: 0.5 }, '-=0.55')
+        .to('.hero-cta-group > *', { ...shown, duration: 0.45, stagger: 0.08 }, '-=0.32')
+        .to('.badge-item', { ...shown, duration: 0.4, stagger: 0.055 }, '-=0.26')
+        .to('.booking-card', { ...shown, duration: 0.7 }, '-=0.7');
+
+      // useEntrance probes the ticker on mount, but this build is deferred until
+      // the curtain lifts — by then that probe is long gone. A live ticker always
+      // advances a playing timeline within 700ms; if it has not, drop every
+      // inline style so the hero is simply visible rather than hidden forever.
+      watchdog = setTimeout(() => {
+        if (tl.progress() > 0) return;
+        tl.kill();
+        gsap.set(chars, { clearProps: 'all' });
+        rest.forEach((sel) => gsap.set(sel, { clearProps: 'all' }));
+      }, 700);
+    });
+
+    return () => {
+      clearTimeout(watchdog);
+      off();
+    };
   });
 
   const [tab, setTab] = useState('city');
@@ -215,7 +240,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
     <div className="home-page animate-fade-in" ref={pageRef}>
       {/* HERO SECTION */}
       <section className="hero-section">
-        <div className="hero-backdrop-glow" />
+        <div className="hero-backdrop-glow" data-parallax="-140" />
         <div className="container hero-container">
           {/* Left Content */}
           <div className="hero-left">
@@ -235,7 +260,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             </p>
 
             <div className="hero-cta-group">
-              <button className="btn btn-teal hero-btn-main" onClick={openBookingModal}>
+              <button className="btn btn-teal hero-btn-main" data-magnetic onClick={openBookingModal}>
                 Book a Ride <ArrowRight size={18} />
               </button>
               <button className="btn btn-outline-light hero-btn-app" onClick={() => setActiveTab('contact')}>
@@ -418,7 +443,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           <div className="vehicles-grid snap-row" data-reveal-stagger ref={vehicleRail}>
             {vehicles.map((v, i) => (
               <div key={i} className="vehicle-card">
-                <div className="vehicle-img-container">
+                <div className="vehicle-img-container" data-img-parallax>
                   <img src={v.image} alt={v.name} className="vehicle-img" loading="lazy" />
                   <span className="vehicle-type-badge">{v.type}</span>
                 </div>
@@ -546,7 +571,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           {/* Trusted Logos */}
           <div className="trusted-block">
             <h3 className="trusted-heading" data-reveal-mask><span>Trusted by Hotels, Airports &amp; Malls</span></h3>
-            <div className="partners-marquee">
+            <div className="partners-marquee" data-marquee-velocity>
               {/* rendered twice so the track loops without a visible seam; the
                   copy is aria-hidden so screen readers do not repeat it */}
               {[0, 1].map((pass) => (
@@ -586,7 +611,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             </div>
 
             <div className="app-banner-right">
-              <div className="mockup-phone">
+              <div className="mockup-phone" data-parallax="-70">
                 <div className="mockup-screen">
                   <div className="m-header">
                     <span className="m-logo">ZI CAB</span>

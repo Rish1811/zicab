@@ -305,6 +305,125 @@ svg {
   background: var(--navy-card);
 }
 
+/* ---- Intro curtain ---- */
+.preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.pl-panel {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 50.5%;
+  background: var(--navy-dark);
+}
+
+.pl-panel-top {
+  top: 0;
+}
+
+.pl-panel-bottom {
+  bottom: 0;
+}
+
+.pl-center {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+}
+
+.pl-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.pl-logo {
+  width: 54px;
+  height: 54px;
+  border-radius: 13px;
+  object-fit: cover;
+}
+
+.pl-wordmark {
+  display: flex;
+  align-items: baseline;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.pl-zi {
+  color: var(--text-white);
+  font-style: italic;
+}
+
+.pl-cab {
+  color: var(--primary-teal);
+  margin-left: 4px;
+  letter-spacing: 1px;
+}
+
+.pl-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.pl-bar {
+  width: 150px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.pl-bar-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-teal);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+
+.pl-count {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--text-light);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .pl-wordmark { font-size: 27px; }
+  .pl-logo { width: 44px; height: 44px; }
+  .pl-bar { width: 108px; }
+}
+
+/* Per-character spans from splitChars, staggered by the hero timeline. */
+.split-char {
+  display: inline-block;
+  white-space: pre;
+  will-change: transform;
+}
+
+/* Once useScrollFx takes over the marquee, its CSS keyframes must stand down or
+   the two animations fight over the same transform. */
+.partners-marquee.is-js-driven .partners-track {
+  animation: none !important;
+}
+
 /* Scroll reveals, driven by useReveal (IntersectionObserver).
    The hidden state is gated on `data-reveal-root`, which the hook sets on the
    page element it scopes to — so content is visible whenever the script hasn't

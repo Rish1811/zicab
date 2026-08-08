@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Menu, X, PhoneCall, Car, ChevronRight } from 'lucide-react';
+import { scrollToTop } from '../useSmoothScroll';
 
 const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -18,7 +19,7 @@ const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
   const handleNavClick = (id) => {
     setActiveTab(id);
     setMobileMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   return (

@@ -10,9 +10,13 @@ import Partner from './pages/Partner';
 import Driver from './pages/Driver';
 import Advertise from './pages/Advertise';
 import ContactUs from './pages/ContactUs';
+import Preloader from './Preloader';
+import useSmoothScroll from './useSmoothScroll';
 import { waLink } from './siteConfig';
 
 function App() {
+  useSmoothScroll();
+
   const [activeTab, setActiveTab] = useState('home');
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
@@ -28,6 +32,10 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Intro curtain. Sits over content that has already rendered, and lifts
+          itself on a hard timeout, so it can never block the site. */}
+      <Preloader />
+
       {/* Reading progress, driven entirely by CSS scroll timeline */}
       <div className="scroll-progress" aria-hidden="true" />
 

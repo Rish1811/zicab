@@ -1,11 +1,12 @@
 import React from 'react';
 import { Phone, Mail, MapPin, ShieldCheck, Clock, MessageCircle } from 'lucide-react';
+import { scrollToTop } from '../useSmoothScroll';
 import { CONTACT, LAUNCH_CITIES, waLink } from '../siteConfig';
 
 const Footer = ({ setActiveTab, openBookingModal }) => {
   const handleNavClick = (id) => {
     setActiveTab(id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   return (
