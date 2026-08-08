@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import gsap from 'gsap';
 import useReveal from '../useReveal';
 import useEntrance from '../useEntrance';
+import useAutoScroll from '../useAutoScroll';
 import {
   MapPin, Users, ArrowRight, ShieldCheck, Navigation,
   Headphones, Wallet, PhoneCall, Car, Plane, Compass,
@@ -15,16 +16,44 @@ const initials = (name) =>
 
 const Home = ({ openBookingModal, setActiveTab }) => {
   const pageRef = useRef(null);
-  useReveal(pageRef);
+  const vehicleRail = useRef(null);
+  const driverRail = useRef(null);
 
-  // Hero entrance, once on mount and independent of the scroll reveals.
+  useReveal(pageRef);
+  useAutoScroll(vehicleRail);
+  useAutoScroll(driverRail, { interval: 3800 });
+
+  /**
+   * Hero entrance. Deliberately `set` + `to` with clearProps rather than
+   * gsap.from: `from` leaves its targets at opacity 0 until the tween plays, so
+   * anything that stops the timeline mid-flight strands them invisible — that is
+   * what left a hole where the CTA buttons should be. Here the markup is visible
+   * by default, the tween owns the hidden state for its own duration only, and
+   * clearProps strips every inline style on completion.
+   */
   useEntrance(pageRef, () => {
+    const hidden = { opacity: 0, y: 22 };
+    const shown = { opacity: 1, y: 0, clearProps: 'opacity,transform' };
+
+    const words = gsap.utils.toArray('.hero-word');
+    const rest = ['.hero-subtitle', '.hero-cta-group > *', '.badge-item', '.booking-card'];
+
+    gsap.set(words, { yPercent: 110, opacity: 0 });
+    rest.forEach((sel) => gsap.set(sel, hidden));
+
     gsap.timeline({ defaults: { ease: 'power3.out' } })
-      .from('.hero-title', { opacity: 0, y: 30, duration: 0.7 })
-      .from('.hero-subtitle', { opacity: 0, y: 20, duration: 0.5 }, '-=0.4')
-      .from('.hero-cta-group > *', { opacity: 0, y: 16, duration: 0.4, stagger: 0.08 }, '-=0.25')
-      .from('.badge-item', { opacity: 0, y: 12, duration: 0.35, stagger: 0.05 }, '-=0.2')
-      .from('.booking-card', { opacity: 0, y: 26, duration: 0.6 }, '-=0.55');
+      // words rise out of their clipping mask, one after another
+      .to(words, {
+        yPercent: 0,
+        opacity: 1,
+        duration: 0.75,
+        stagger: 0.08,
+        clearProps: 'opacity,transform',
+      })
+      .to('.hero-subtitle', { ...shown, duration: 0.5 }, '-=0.45')
+      .to('.hero-cta-group > *', { ...shown, duration: 0.45, stagger: 0.08 }, '-=0.3')
+      .to('.badge-item', { ...shown, duration: 0.4, stagger: 0.06 }, '-=0.25')
+      .to('.booking-card', { ...shown, duration: 0.65 }, '-=0.6');
   });
 
   const [tab, setTab] = useState('city');
@@ -190,9 +219,16 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container hero-container">
           {/* Left Content */}
           <div className="hero-left">
+            {/* each word gets a clipping mask so it can rise into view */}
             <h1 className="hero-title">
-              Your Ride. <br />
-              <span className="teal-text">Our Priority.</span>
+              <span className="hero-line">
+                <span className="hero-word">Your</span>{' '}
+                <span className="hero-word">Ride.</span>
+              </span>
+              <span className="hero-line">
+                <span className="hero-word teal-text">Our</span>{' '}
+                <span className="hero-word teal-text">Priority.</span>
+              </span>
             </h1>
             <p className="hero-subtitle">
               Premium rides, verified drivers and 24x7 support with our dedicated ride coordinators.
@@ -316,7 +352,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container">
           <div className="section-title-group" data-reveal>
             <div>
-              <h2 className="section-title">Our Services</h2>
+              <h2 className="section-title" data-reveal-mask><span>Our Services</span></h2>
             </div>
             <button className="section-link" onClick={() => setActiveTab('services')}>
               View All Services <ChevronRight size={16} />
@@ -346,7 +382,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       {/* WHY CHOOSE ZI CAB? SECTION */}
       <section className="why-us-section">
         <div className="container">
-          <h2 className="section-title light mb-10" data-reveal>Why Choose ZI CAB?</h2>
+          <h2 className="section-title light mb-10" data-reveal-mask><span>Why Choose ZI CAB?</span></h2>
 
           <div className="why-us-grid" data-reveal-stagger>
             {valueProps.map((v, idx) => {
@@ -372,14 +408,14 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container">
           <div className="section-title-group" data-reveal>
             <div>
-              <h2 className="section-title">Popular Vehicles</h2>
+              <h2 className="section-title" data-reveal-mask><span>Popular Vehicles</span></h2>
             </div>
             <button className="section-link" onClick={() => setActiveTab('services')}>
               View All Vehicles <ChevronRight size={16} />
             </button>
           </div>
 
-          <div className="vehicles-grid snap-row" data-reveal-stagger>
+          <div className="vehicles-grid snap-row" data-reveal-stagger ref={vehicleRail}>
             {vehicles.map((v, i) => (
               <div key={i} className="vehicle-card">
                 <div className="vehicle-img-container">
@@ -417,7 +453,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container">
           <div className="section-title-group" data-reveal>
             <div>
-              <h2 className="section-title light">Meet Our Drivers</h2>
+              <h2 className="section-title light" data-reveal-mask><span>Meet Our Drivers</span></h2>
               <p className="section-sub">Every ZI CAB captain is background-verified, police-checked and rated by real riders.</p>
             </div>
             <button className="section-link" onClick={() => setActiveTab('driver')}>
@@ -425,7 +461,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             </button>
           </div>
 
-          <div className="drivers-grid snap-row" data-reveal-stagger>
+          <div className="drivers-grid snap-row" data-reveal-stagger ref={driverRail}>
             {drivers.map((d, i) => (
               <div key={i} className="driver-card">
                 <div className="driver-top">
@@ -467,7 +503,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container">
           <div className="section-title-group" data-reveal>
             <div>
-              <h2 className="section-title">Where You'll Find Us</h2>
+              <h2 className="section-title" data-reveal-mask><span>Where You&apos;ll Find Us</span></h2>
               <p className="section-sub-dark">{CONTACT.addressShort}</p>
             </div>
             <a className="section-link" href={CONTACT.mapsUrl} target="_blank" rel="noreferrer">
@@ -509,12 +545,18 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container">
           {/* Trusted Logos */}
           <div className="trusted-block">
-            <h3 className="trusted-heading" data-reveal>Trusted by Hotels, Airports & Malls</h3>
-            <div className="partners-flex" data-reveal-stagger>
-              {partners.map((p, index) => (
-                <div key={index} className="partner-logo-item">
-                  <span className="p-title">{p.name}</span>
-                  {p.subtitle && <span className="p-sub">{p.subtitle}</span>}
+            <h3 className="trusted-heading" data-reveal-mask><span>Trusted by Hotels, Airports &amp; Malls</span></h3>
+            <div className="partners-marquee">
+              {/* rendered twice so the track loops without a visible seam; the
+                  copy is aria-hidden so screen readers do not repeat it */}
+              {[0, 1].map((pass) => (
+                <div className="partners-track" key={pass} aria-hidden={pass === 1}>
+                  {partners.map((p, index) => (
+                    <div key={index} className="partner-logo-item">
+                      <span className="p-title">{p.name}</span>
+                      {p.subtitle && <span className="p-sub">{p.subtitle}</span>}
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
@@ -597,6 +639,19 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           line-height: 1.1;
           margin-bottom: 18px;
           letter-spacing: -1px;
+        }
+
+        /* Clipping mask per line: the words sit inside it and translate up from
+           below, so they appear to rise out of the line rather than just fade. */
+        .hero-line {
+          display: block;
+          overflow: hidden;
+          padding-bottom: 0.06em;
+        }
+
+        .hero-word {
+          display: inline-block;
+          will-change: transform;
         }
 
         .teal-text {
@@ -1188,11 +1243,35 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           margin-bottom: 24px;
         }
 
-        .partners-flex {
+        /* Continuous logo marquee. Two identical tracks slide left by exactly one
+           track width, so the second lands where the first started — seamless. */
+        .partners-marquee {
           display: flex;
-          flex-wrap: wrap;
           gap: 20px;
-          justify-content: space-between;
+          overflow: hidden;
+          mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+          -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+        }
+
+        .partners-track {
+          display: flex;
+          gap: 20px;
+          flex-shrink: 0;
+          animation: partnerScroll 32s linear infinite;
+        }
+
+        .partners-marquee:hover .partners-track {
+          animation-play-state: paused;
+        }
+
+        @keyframes partnerScroll {
+          to { transform: translateX(calc(-100% - 20px)); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .partners-track {
+            animation: none;
+          }
         }
 
         .partner-logo-item {
@@ -1205,6 +1284,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           align-items: center;
           justify-content: center;
           min-width: 150px;
+          flex-shrink: 0;
         }
 
         .partner-logo-item .p-title {
@@ -1355,15 +1435,22 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           .hero-title {
             font-size: 40px;
           }
+          /* tighten the stack: subtitle -> buttons -> badges was leaving a big
+             dead band in the middle of the hero on a phone */
           .hero-subtitle {
             font-size: 15.5px;
-            margin-bottom: 24px;
+            margin-bottom: 18px;
           }
           .hero-cta-group {
-            margin-bottom: 28px;
+            gap: 10px;
+            margin-bottom: 18px;
           }
           .hero-trust-badges {
-            gap: 14px;
+            gap: 12px 14px;
+            padding-top: 16px;
+          }
+          .hero-container {
+            gap: 24px;
           }
           .booking-card {
             max-width: 100%;
@@ -1392,13 +1479,14 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           .vehicles-grid, .why-us-grid, .drivers-grid, .cities-grid {
             grid-template-columns: 1fr;
           }
-          .partners-flex {
-            justify-content: center;
+          .partners-marquee, .partners-track {
             gap: 12px;
+          }
+          @keyframes partnerScroll {
+            to { transform: translateX(calc(-100% - 12px)); }
           }
           .partner-logo-item {
             min-width: 132px;
-            flex: 1 1 132px;
             padding: 12px 14px;
           }
           .app-download-banner {

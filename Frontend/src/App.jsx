@@ -28,6 +28,9 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Reading progress, driven entirely by CSS scroll timeline */}
+      <div className="scroll-progress" aria-hidden="true" />
+
       {/* Navigation Header */}
       <Navbar 
         activeTab={activeTab} 

@@ -5,6 +5,7 @@ import { useEffect } from 'react';
  * library. Inside the hook's scope:
  *   data-reveal          -> the element fades up when it scrolls in
  *   data-reveal-stagger  -> its direct children fade up one after another
+ *   data-reveal-mask     -> its child rises out of a clipping mask (headings)
  *   data-count="100000"  -> counts up to that number on first view
  *
  * The hidden state lives behind the `data-reveal-root` attribute this hook puts
@@ -81,7 +82,7 @@ export default function useReveal(scope, deps = []) {
       { rootMargin: '0px 0px -8% 0px' }
     );
 
-    Array.from(root.querySelectorAll('[data-reveal]'))
+    Array.from(root.querySelectorAll('[data-reveal], [data-reveal-mask]'))
       .concat(groups)
       .forEach((el) => revealIO.observe(el));
 

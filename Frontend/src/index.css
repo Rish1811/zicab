@@ -313,23 +313,82 @@ svg {
 [data-reveal-root] [data-reveal],
 [data-reveal-root] [data-reveal-stagger] > * {
   opacity: 0;
-  transform: translateY(24px);
+  /* cards settle up and forward rather than just fading */
+  transform: translateY(30px) scale(0.965);
 }
 
 [data-reveal-root] [data-reveal].is-visible,
 [data-reveal-root] [data-reveal-stagger] > .is-visible {
   opacity: 1;
   transform: none;
-  transition: opacity 0.55s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+  /* slight overshoot on the transform reads as weight, not a slide */
+  transition: opacity 0.5s ease-out,
+    transform 0.7s cubic-bezier(0.16, 0.84, 0.28, 1);
+}
+
+/* Masked line reveal for headings: the text rises out of its own box. Put
+   data-reveal-mask on a wrapper whose only child is the line of text. */
+[data-reveal-root] [data-reveal-mask] {
+  overflow: hidden;
+  /* the clip would otherwise cut descenders (the p in "Popular Vehicles");
+     pad the box and pull the extra space back out so layout is unchanged */
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+
+[data-reveal-root] [data-reveal-mask] > * {
+  display: block;
+  opacity: 0;
+  transform: translateY(105%);
+}
+
+[data-reveal-root] [data-reveal-mask].is-visible > * {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.4s ease-out,
+    transform 0.75s cubic-bezier(0.16, 0.84, 0.28, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
   [data-reveal-root] [data-reveal],
-  [data-reveal-root] [data-reveal-stagger] > * {
+  [data-reveal-root] [data-reveal-stagger] > *,
+  [data-reveal-root] [data-reveal-mask] > * {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+}
+
+/* Scroll progress bar. Pure CSS scroll-driven animation — no scroll listener.
+   Gated on @supports so browsers without it get no bar rather than a full one. */
+.scroll-progress {
+  display: none;
+}
+
+@supports (animation-timeline: scroll()) {
+  .scroll-progress {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    width: 100%;
+    z-index: 1100;
+    transform-origin: 0 50%;
+    background: linear-gradient(90deg, var(--primary-teal), #6ee7db);
+    animation: scrollProgress linear;
+    animation-timeline: scroll(root block);
+  }
+
+  @keyframes scrollProgress {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scroll-progress {
+      display: none;
+    }
   }
 }
 
