@@ -226,8 +226,10 @@ const ContactUs = () => {
                       <span>{faq.q}</span>
                       <ChevronDown size={18} className="faq-chevron" />
                     </button>
+                    {/* no animate-fade-in on the answer: .faq-item clips overflow,
+                        so the animation's 12px offset cuts the text while it plays */}
                     {openFaq === index && (
-                      <div className="faq-a-body animate-fade-in">
+                      <div className="faq-a-body">
                         <p>{faq.a}</p>
                       </div>
                     )}

@@ -223,6 +223,17 @@ const Driver = () => {
         @media (max-width: 992px) {
           .driver-grid {
             grid-template-columns: 1fr;
+            gap: 34px;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .driver-form-card, .d-perk, .docs-box {
+            padding: 20px 18px;
+          }
+          .d-perk {
+            flex-direction: column;
+            gap: 10px;
           }
         }
       `}</style>

@@ -225,9 +225,16 @@ const Partner = () => {
         @media (max-width: 992px) {
           .partner-grid {
             grid-template-columns: 1fr;
+            gap: 34px;
           }
           .partner-perks-grid {
             grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .partner-form-card {
+            padding: 20px 18px;
           }
         }
       `}</style>

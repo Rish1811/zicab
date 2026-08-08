@@ -256,6 +256,19 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
           box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
           overflow: hidden;
           color: #FFFFFF;
+          /* Cap to the viewport and let the body scroll — the step 1 form is
+             taller than a phone screen (and than a short laptop window). */
+          max-height: calc(100vh - 40px);
+          display: flex;
+          flex-direction: column;
+        }
+
+        .modal-header {
+          flex-shrink: 0;
+        }
+
+        .modal-body {
+          overflow-y: auto;
         }
 
         .modal-header {
@@ -480,6 +493,50 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
           display: flex;
           flex-direction: column;
           gap: 6px;
+        }
+
+        @media (max-width: 576px) {
+          /* Full-screen sheet on phones — a centred card with 20px gutters wastes
+             the width the 4 trip tabs and the vehicle list need. */
+          .modal-overlay {
+            padding: 0;
+            align-items: stretch;
+          }
+          .modal-card {
+            max-width: 100%;
+            max-height: 100vh;
+            border: none;
+            border-radius: 0;
+          }
+          .modal-header {
+            padding: 14px 16px;
+          }
+          .modal-title {
+            font-size: 17px;
+          }
+          .modal-body {
+            padding: 16px;
+            gap: 14px;
+          }
+          .tab-pills {
+            flex-wrap: wrap;
+          }
+          .tab-pill {
+            flex: 1 1 44%;
+            font-size: 12.5px;
+          }
+          .input-row, .vehicle-grid {
+            grid-template-columns: 1fr;
+          }
+          .row-btns {
+            flex-direction: column-reverse;
+          }
+          .row-btns .btn {
+            width: 100%;
+          }
+          .confirm-title {
+            font-size: 19px;
+          }
         }
 
         .py-6 {

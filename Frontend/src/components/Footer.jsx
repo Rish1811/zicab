@@ -386,6 +386,16 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
           }
         }
 
+        @media (max-width: 768px) {
+          .footer-container {
+            padding-top: 40px;
+          }
+          .footer-top-grid {
+            gap: 30px;
+            margin-bottom: 30px;
+          }
+        }
+
         @media (max-width: 576px) {
           .footer-top-grid {
             grid-template-columns: 1fr;
@@ -394,6 +404,21 @@ const Footer = ({ setActiveTab, openBookingModal }) => {
             flex-direction: column;
             gap: 12px;
             text-align: center;
+          }
+          .footer-bottom-links {
+            flex-wrap: wrap;
+            justify-content: center;
+          }
+          .footer-logo-img {
+            width: 46px;
+            height: 46px;
+          }
+          .contact-item {
+            align-items: flex-start;
+          }
+          /* 21px-tall text links are too small to tap reliably */
+          .footer-links button {
+            padding: 6px 0;
           }
         }
       `}</style>

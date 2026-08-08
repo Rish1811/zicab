@@ -231,6 +231,13 @@ const Corporate = () => {
         @media (max-width: 992px) {
           .corp-grid {
             grid-template-columns: 1fr;
+            gap: 34px;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .corp-form-card {
+            padding: 20px 18px;
           }
         }
       `}</style>

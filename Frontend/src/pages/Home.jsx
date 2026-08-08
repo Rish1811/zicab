@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 import { LAUNCH_CITIES, CONTACT } from '../siteConfig';
 
+const initials = (name) =>
+  name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+
 const Home = ({ openBookingModal, setActiveTab }) => {
   const [tab, setTab] = useState('city');
   const [pickup, setPickup] = useState('');
@@ -410,12 +413,15 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             {drivers.map((d, i) => (
               <div key={i} className="driver-card">
                 <div className="driver-top">
-                  <img
-                    src={d.photo}
-                    alt={d.name}
-                    className="driver-photo"
-                    onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
-                  />
+                  <div className="avatar driver-photo">
+                    {initials(d.name)}
+                    <img
+                      src={d.photo}
+                      alt={d.name}
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
                   <span className={`driver-badge ${d.badge === 'Top Driver' ? 'top' : ''}`}>
                     <BadgeCheck size={12} /> {d.badge}
                   </span>
@@ -553,8 +559,8 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           position: absolute;
           top: -20%;
           left: 30%;
-          width: 500px;
-          height: 500px;
+          width: min(500px, 70vw);
+          height: min(500px, 70vw);
           background: radial-gradient(circle, rgba(0, 187, 169, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
           pointer-events: none;
           z-index: 1;
@@ -591,6 +597,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
         .hero-cta-group {
           display: flex;
+          flex-wrap: wrap;
           gap: 16px;
           margin-bottom: 40px;
         }
@@ -627,7 +634,6 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         .hero-right {
           display: flex;
           justify-content: flex-end;
-          margin-right: -15px;
         }
 
         /* BOOKING CARD */
@@ -993,9 +999,8 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           width: 68px;
           height: 68px;
           border-radius: 50%;
-          object-fit: cover;
-          background: rgba(255, 255, 255, 0.12);
           border: 2px solid #00BBA9;
+          font-size: 22px;
         }
 
         .driver-badge {
@@ -1296,9 +1301,18 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         /* RESPONSIVE MEDIA QUERIES */
+        @media (max-width: 1200px) {
+          .vehicles-grid {
+            grid-template-columns: repeat(3, 1fr);
+          }
+        }
+
         @media (max-width: 1024px) {
           .hero-container {
             grid-template-columns: 1fr;
+          }
+          .hero-right {
+            justify-content: flex-start;
           }
           .services-grid {
             grid-template-columns: repeat(4, 1fr);
@@ -1317,9 +1331,44 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           }
         }
 
+        @media (max-width: 768px) {
+          .hero-section {
+            padding: 38px 0 48px;
+            background-position: 70% center;
+          }
+          .hero-title {
+            font-size: 40px;
+          }
+          .hero-subtitle {
+            font-size: 15.5px;
+            margin-bottom: 24px;
+          }
+          .hero-cta-group {
+            margin-bottom: 28px;
+          }
+          .hero-trust-badges {
+            gap: 14px;
+          }
+          .booking-card {
+            max-width: 100%;
+          }
+          .at-title {
+            font-size: 23px;
+          }
+          .app-banner-title {
+            font-size: 25px;
+          }
+          .trusted-app-section {
+            padding: 45px 0;
+          }
+          .trusted-block {
+            margin-bottom: 34px;
+          }
+        }
+
         @media (max-width: 640px) {
           .hero-title {
-            font-size: 36px;
+            font-size: 33px;
           }
           .services-grid {
             grid-template-columns: repeat(2, 1fr);
@@ -1327,13 +1376,35 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           .vehicles-grid, .why-us-grid, .drivers-grid, .cities-grid {
             grid-template-columns: 1fr;
           }
-          .section-title-group {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 12px;
-          }
           .partners-flex {
             justify-content: center;
+            gap: 12px;
+          }
+          .partner-logo-item {
+            min-width: 132px;
+            flex: 1 1 132px;
+            padding: 12px 14px;
+          }
+          .app-download-banner {
+            padding: 24px 20px;
+            border-radius: 16px;
+          }
+          .app-store-btns {
+            flex-wrap: wrap;
+          }
+          .hero-btn-main, .hero-btn-app {
+            flex: 1 1 auto;
+            justify-content: center;
+          }
+          .field-row {
+            grid-template-columns: 1fr;
+          }
+          .booking-tabs {
+            gap: 2px;
+          }
+          .b-tab {
+            font-size: 11.5px;
+            padding: 8px 2px;
           }
         }
       `}</style>

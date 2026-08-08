@@ -137,12 +137,15 @@ const AboutUs = ({ openBookingModal }) => {
           <div className="founders-grid">
             {founders.map((f, i) => (
               <div key={i} className="founder-card">
-                <img
-                  src={f.photo}
-                  alt={f.name}
-                  className="founder-photo"
-                  onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
-                />
+                <div className="avatar founder-photo">
+                  {f.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
+                  <img
+                    src={f.photo}
+                    alt={f.name}
+                    loading="lazy"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                </div>
                 <div className="founder-body">
                   <h3 className="founder-name">{f.name}</h3>
                   <span className="founder-role">{f.role}</span>
@@ -342,9 +345,7 @@ const AboutUs = ({ openBookingModal }) => {
           width: 96px;
           height: 96px;
           border-radius: 14px;
-          object-fit: cover;
-          background: #E2E8F0;
-          flex-shrink: 0;
+          font-size: 28px;
         }
 
         .founder-name {
@@ -499,17 +500,34 @@ const AboutUs = ({ openBookingModal }) => {
         }
 
         @media (max-width: 992px) {
-          .story-grid, .stats-grid, .pillars-grid {
+          .stats-grid, .pillars-grid {
             grid-template-columns: 1fr 1fr;
           }
-          .presence-grid {
+          /* story-grid must collapse to one column — two 100px columns is what
+             made this section unreadable on phones. */
+          .story-grid, .presence-grid {
             grid-template-columns: 1fr;
           }
         }
 
         @media (max-width: 640px) {
-          .stats-grid, .pillars-grid, .presence-cities {
+          .pillars-grid, .presence-cities {
             grid-template-columns: 1fr;
+          }
+          .stats-grid {
+            gap: 14px;
+          }
+          .stat-value {
+            font-size: 26px;
+          }
+          .story-grid {
+            gap: 30px;
+          }
+          .story-img {
+            height: 240px;
+          }
+          .presence-office {
+            padding: 20px;
           }
           .founder-card {
             flex-direction: column;
