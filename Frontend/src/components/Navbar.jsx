@@ -217,7 +217,6 @@ const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
         .nav-book-btn {
           padding: 10px 22px;
           font-size: 14.5px;
-          border-radius: 8px;
         }
 
         .mobile-toggle-btn {

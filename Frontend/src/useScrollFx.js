@@ -66,6 +66,23 @@ export default function useScrollFx(scope, deps = []) {
         );
       });
 
+      // Hero content drifts up, fades and shrinks slightly as it scrolls away,
+      // so the fold hands over instead of just sliding off.
+      self.selector('[data-hero-exit]').forEach((el) => {
+        gsap.to(el, {
+          y: -70,
+          scale: 0.955,
+          opacity: 0,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: el,
+            start: 'top top',
+            end: '+=520',
+            scrub: 0.6,
+          },
+        });
+      });
+
       self.selector('[data-marquee-velocity]').forEach((marquee) => {
         const tracks = marquee.querySelectorAll('.partners-track');
         if (!tracks.length) return;

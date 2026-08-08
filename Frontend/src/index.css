@@ -1,38 +1,57 @@
 /* ZI CAB Custom CSS Design System */
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
 
 :root {
   --primary-navy: #0B1F3A;
   --navy-dark: #07152B;
   --navy-card: #0C1B30;
+  /* one step deeper than navy-dark, for the recessed bands */
+  --navy-deep: #050F20;
+
   --primary-teal: #00BBA9;
   --teal-hover: #00a394;
   --teal-light: rgba(0, 187, 169, 0.12);
-  --bg-light: #F5F7FA;
-  --bg-white: #FFFFFF;
-  
-  --text-dark: #0F172A;
+  --teal-bright: #46E3D2;
+  --teal-ink: #04645C;
+
+  /* Warm off-white instead of #FFF for large fields — pure white next to a
+     saturated teal reads cheap and glares on an OLED phone. */
+  --bg-light: #F1F3F7;
+  --bg-white: #FBFBFC;
+  --bg-raised: #FFFFFF;
+
+  --text-dark: #0B1220;
   --text-body: #334155;
   --text-muted: #64748B;
   --text-light: #94A3B8;
   --text-white: #FFFFFF;
-  
-  --border-light: #E2E8F0;
+
+  --border-light: #E4E8EF;
   --border-dark: #1E293B;
-  
+
   --font-main: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --shadow-sm: 0 2px 8px rgba(11, 31, 58, 0.06);
-  --shadow-md: 0 8px 24px rgba(11, 31, 58, 0.08);
-  --shadow-lg: 0 16px 32px rgba(11, 31, 58, 0.12);
-  --shadow-teal: 0 8px 20px rgba(0, 187, 169, 0.3);
-  
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --font-display: 'Sora', 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Layered shadows with a hairline top highlight, so surfaces read as material
+     rather than as a rectangle with a grey outline. */
+  --shadow-sm: 0 1px 2px rgba(11, 18, 32, 0.04), 0 4px 12px rgba(11, 18, 32, 0.045);
+  --shadow-md: 0 2px 4px rgba(11, 18, 32, 0.045), 0 12px 28px rgba(11, 18, 32, 0.07);
+  --shadow-lg: 0 4px 8px rgba(11, 18, 32, 0.05), 0 24px 54px rgba(11, 18, 32, 0.1);
+  --shadow-teal: 0 6px 14px rgba(0, 187, 169, 0.28), 0 18px 40px rgba(0, 187, 169, 0.18);
+  --hairline: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --hairline-dark: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
   --radius-full: 9999px;
-  
+
   --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 0.84, 0.28, 1);
+
+  /* Film grain. An inline SVG turbulence, so it costs no request and no image
+     decode — it is what stops the flat fields reading as a template. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
 
 * {
@@ -45,9 +64,50 @@ html, body {
   font-family: var(--font-main);
   background-color: var(--bg-light);
   color: var(--text-body);
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   overflow-x: hidden;
+}
+
+/* Display type: tighter tracking and optical sizing at large sizes. Default
+   letter-spacing on a geometric sans at 48px+ is what makes headlines look
+   unset. */
+h1, h2, h3, .hero-title, .page-title, .section-title {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+  text-wrap: balance;
+}
+
+h4, h5, h6 {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+/* Grain overlay for dark bands. Applied on a ::before so it never intercepts
+   clicks and never affects layout. */
+.grain-layer {
+  position: relative;
+  isolation: isolate;
+}
+
+.grain-layer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--grain);
+  background-size: 140px 140px;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+}
+
+.grain-layer > * {
+  position: relative;
+  z-index: 1;
 }
 
 #root {
@@ -118,10 +178,44 @@ svg {
   margin-bottom: 36px;
 }
 
+/* Fluid so it never needs a breakpoint per size, and lands at a real display
+   scale on a large screen instead of stopping at 32px. */
 .section-title {
-  font-size: 32px;
+  font-size: clamp(1.55rem, 1.05rem + 1.9vw, 2.6rem);
   font-weight: 700;
   color: var(--text-dark);
+}
+
+/* Kicker above a section title: index number, rule, label. Gives every section
+   a hierarchy instead of a bare heading. */
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--primary-teal);
+}
+
+.eyebrow::after {
+  content: '';
+  flex: 1 1 auto;
+  max-width: 88px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--primary-teal), transparent);
+}
+
+.eyebrow-num {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-light);
+}
+
+.section-title-group.light .eyebrow-num {
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .section-title.light {
@@ -151,11 +245,37 @@ svg {
 /* Shared page-hero + text utilities.
    These live here (not in a page's <style> block) so every page renders them —
    a page style block only applies while that page is mounted. */
+/* Gradient mesh + grain + a hairline bottom edge, instead of a flat two-stop
+   gradient. The radial stops sit off-centre so the field is never uniform. */
 .page-hero {
-  background: linear-gradient(135deg, #07152B 0%, #0B1F3A 100%);
-  padding: 60px 0 80px;
+  position: relative;
+  isolation: isolate;
+  padding: clamp(46px, 5vw, 76px) 0 clamp(56px, 6vw, 92px);
   color: var(--text-white);
   text-align: center;
+  overflow: hidden;
+  background-color: var(--navy-deep);
+  background-image:
+    radial-gradient(110% 130% at 12% -10%, rgba(0, 187, 169, 0.22) 0%, transparent 52%),
+    radial-gradient(90% 120% at 88% 0%, rgba(43, 92, 168, 0.28) 0%, transparent 55%),
+    linear-gradient(160deg, #08182F 0%, #0B1F3A 55%, #071328 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.page-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--grain);
+  background-size: 140px 140px;
+  opacity: 0.055;
+}
+
+.page-hero .page-tag {
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(0, 187, 169, 0.3);
 }
 
 .page-tag {
@@ -172,16 +292,30 @@ svg {
 }
 
 .page-title {
-  font-size: 38px;
+  font-size: clamp(1.85rem, 1.15rem + 2.9vw, 3.35rem);
   font-weight: 800;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  color: var(--text-white);
+}
+
+/* Faint gradient for depth against the navy. Behind @supports because the
+   technique needs `color: transparent` — without background-clip support that
+   would render the headline invisible. */
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .page-title {
+    background-image: linear-gradient(180deg, #FFFFFF 30%, #C6D3E4 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 }
 
 .page-subtitle {
-  font-size: 16px;
-  color: var(--text-light);
-  max-width: 700px;
+  font-size: clamp(0.9rem, 0.84rem + 0.25vw, 1.05rem);
+  color: #A9B6C9;
+  max-width: 660px;
   margin: 0 auto;
+  line-height: 1.65;
 }
 
 .body-text {
@@ -213,49 +347,95 @@ svg {
 }
 
 @media (max-width: 640px) {
-  .page-title { font-size: 26px; }
-  .page-subtitle { font-size: 14.5px; }
-  .section-title { font-size: 22px; }
-  .btn { padding: 11px 20px; font-size: 14px; }
+  /* No font-size overrides here: .page-title / .section-title use clamp(), and a
+     fixed value would pin them at the small end and defeat the fluid scale. */
+  .btn { padding: 12px 22px; font-size: 14px; }
   .section-link { padding: 6px 0; }
 }
 
 /* Base Buttons */
 .btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
+  font-family: var(--font-display);
   font-weight: 600;
   font-size: 15px;
-  padding: 12px 26px;
-  border-radius: var(--radius-sm);
+  letter-spacing: -0.01em;
+  padding: 13px 26px;
+  border-radius: var(--radius-full);
   border: none;
   cursor: pointer;
-  transition: var(--transition);
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out),
+    background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
   white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Light sweep that crosses on hover. Sits on a pseudo-element under the label,
+   so it never affects the text colour. */
+.btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  transform: translateX(-120%) skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.32), transparent);
+  transition: transform 0.65s var(--ease-out);
+}
+
+.btn:hover::before {
+  transform: translateX(120%) skewX(-18deg);
+}
+
+.btn:active {
+  transform: translateY(0) scale(0.985);
 }
 
 .btn-teal {
-  background-color: var(--primary-teal);
+  background-image: linear-gradient(180deg, #14CDBA 0%, var(--primary-teal) 48%, #009C8D 100%);
   color: var(--text-white);
-  box-shadow: var(--shadow-teal);
+  box-shadow: var(--shadow-teal), inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
 }
+
 .btn-teal:hover {
-  background-color: var(--teal-hover);
   transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0, 187, 169, 0.34), 0 26px 52px rgba(0, 187, 169, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .btn-outline-light {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   color: var(--text-white);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--hairline-dark);
 }
+
 .btn-outline-light:hover {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: var(--primary-teal);
-  color: var(--primary-teal);
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(0, 187, 169, 0.65);
+  color: #FFFFFF;
+  transform: translateY(-2px);
+}
+
+/* Arrow nudges forward on hover — cheap affordance, reads considered. */
+.btn svg {
+  transition: transform 0.3s var(--ease-out);
+}
+
+.btn:hover svg:last-child {
+  transform: translateX(3px);
+}
+
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--teal-bright);
+  outline-offset: 2px;
 }
 
 .btn-navy {
@@ -411,6 +591,31 @@ svg {
   .pl-bar { width: 108px; }
 }
 
+/* 3D tilt cards (useTilt). perspective has to live on the card itself since each
+   one tilts independently of its neighbours in the grid. */
+[data-tilt] {
+  position: relative;
+  transform-style: preserve-3d;
+  perspective: 900px;
+  will-change: transform;
+}
+
+.tilt-gloss {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  /* radial highlight parked at the cursor, coordinates fed in by the hook */
+  background: radial-gradient(
+    260px circle at var(--gx, 50%) var(--gy, 50%),
+    rgba(255, 255, 255, 0.22),
+    transparent 62%
+  );
+  transition: opacity 0.3s ease;
+}
+
 /* Per-character spans from splitChars, staggered by the hero timeline. */
 .split-char {
   display: inline-block;
@@ -544,6 +749,45 @@ svg {
     width: 76%;
     min-width: 235px;
     max-width: 290px;
+  }
+
+  /* Cards lift and sharpen as they swipe into the middle of the rail and settle
+     back as they leave — the mobile equivalent of the desktop hover tilt.
+     view(inline) drives it off the card's own position in the scroller, so there
+     is no scroll listener and no JS at all. */
+  @supports (animation-timeline: view()) {
+    .container .snap-row > * {
+      animation: railFocus linear both;
+      animation-timeline: view(inline);
+      /* ramp in over the first/last 40% of the pass, flat through the middle */
+      animation-range: entry 0% cover 40%, cover 60% exit 100%;
+    }
+
+    @keyframes railFocus {
+      0% {
+        opacity: 0.55;
+        transform: scale(0.9) translateY(10px);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+  }
+
+  /* Touch press feedback. Without this a tap on a card feels inert, since none
+     of the hover states can fire. */
+  .container .snap-row > *:active,
+  .service-card:active,
+  .city-card:active {
+    transform: scale(0.975);
+    transition: transform 0.12s ease-out;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .container .snap-row > * {
+    animation: none;
   }
 }
 

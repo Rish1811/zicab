@@ -5,6 +5,7 @@ import useEntrance from '../useEntrance';
 import useAutoScroll from '../useAutoScroll';
 import useScrollFx from '../useScrollFx';
 import useMagnetic from '../useMagnetic';
+import useTilt from '../useTilt';
 import splitChars from '../splitChars';
 import { onIntro } from '../introGate';
 import {
@@ -26,6 +27,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
   useReveal(pageRef);
   useScrollFx(pageRef);
   useMagnetic(pageRef);
+  useTilt(pageRef);
   useAutoScroll(vehicleRail);
   useAutoScroll(driverRail, { interval: 3800 });
 
@@ -239,11 +241,11 @@ const Home = ({ openBookingModal, setActiveTab }) => {
   return (
     <div className="home-page animate-fade-in" ref={pageRef}>
       {/* HERO SECTION */}
-      <section className="hero-section">
+      <section className="hero-section grain-layer">
         <div className="hero-backdrop-glow" data-parallax="-140" />
         <div className="container hero-container">
           {/* Left Content */}
-          <div className="hero-left">
+          <div className="hero-left" data-hero-exit>
             {/* each word gets a clipping mask so it can rise into view */}
             <h1 className="hero-title">
               <span className="hero-line">
@@ -377,6 +379,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container">
           <div className="section-title-group" data-reveal>
             <div>
+              <span className="eyebrow"><span className="eyebrow-num">01</span> What We Move</span>
               <h2 className="section-title" data-reveal-mask><span>Our Services</span></h2>
             </div>
             <button className="section-link" onClick={() => setActiveTab('services')}>
@@ -405,9 +408,12 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       </section>
 
       {/* WHY CHOOSE ZI CAB? SECTION */}
-      <section className="why-us-section">
+      <section className="why-us-section grain-layer">
         <div className="container">
-          <h2 className="section-title light mb-10" data-reveal-mask><span>Why Choose ZI CAB?</span></h2>
+          <div className="why-head">
+            <span className="eyebrow"><span className="eyebrow-num">02</span> The Difference</span>
+            <h2 className="section-title light mb-10" data-reveal-mask><span>Why Choose ZI CAB?</span></h2>
+          </div>
 
           <div className="why-us-grid" data-reveal-stagger>
             {valueProps.map((v, idx) => {
@@ -433,6 +439,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container">
           <div className="section-title-group" data-reveal>
             <div>
+              <span className="eyebrow"><span className="eyebrow-num">03</span> The Fleet</span>
               <h2 className="section-title" data-reveal-mask><span>Popular Vehicles</span></h2>
             </div>
             <button className="section-link" onClick={() => setActiveTab('services')}>
@@ -442,7 +449,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
           <div className="vehicles-grid snap-row" data-reveal-stagger ref={vehicleRail}>
             {vehicles.map((v, i) => (
-              <div key={i} className="vehicle-card">
+              <div key={i} className="vehicle-card" data-tilt>
                 <div className="vehicle-img-container" data-img-parallax>
                   <img src={v.image} alt={v.name} className="vehicle-img" loading="lazy" />
                   <span className="vehicle-type-badge">{v.type}</span>
@@ -474,10 +481,11 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       </section>
 
       {/* MEET OUR DRIVERS SECTION */}
-      <section className="section-padding drivers-section">
+      <section className="section-padding drivers-section grain-layer">
         <div className="container">
           <div className="section-title-group" data-reveal>
             <div>
+              <span className="eyebrow"><span className="eyebrow-num">04</span> Who Drives You</span>
               <h2 className="section-title light" data-reveal-mask><span>Meet Our Drivers</span></h2>
               <p className="section-sub">Every ZI CAB captain is background-verified, police-checked and rated by real riders.</p>
             </div>
@@ -488,7 +496,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
           <div className="drivers-grid snap-row" data-reveal-stagger ref={driverRail}>
             {drivers.map((d, i) => (
-              <div key={i} className="driver-card">
+              <div key={i} className="driver-card" data-tilt>
                 <div className="driver-top">
                   <div className="avatar driver-photo">
                     {initials(d.name)}
@@ -528,6 +536,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container">
           <div className="section-title-group" data-reveal>
             <div>
+              <span className="eyebrow"><span className="eyebrow-num">05</span> Coverage</span>
               <h2 className="section-title" data-reveal-mask><span>Where You&apos;ll Find Us</span></h2>
               <p className="section-sub-dark">{CONTACT.addressShort}</p>
             </div>
@@ -699,15 +708,13 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .hero-btn-main {
-          padding: 14px 30px;
+          padding: 15px 32px;
           font-size: 16px;
-          border-radius: 30px;
         }
 
         .hero-btn-app {
-          padding: 14px 24px;
+          padding: 15px 26px;
           font-size: 15px;
-          border-radius: 30px;
         }
 
         .hero-trust-badges {
@@ -733,12 +740,17 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         /* BOOKING CARD */
+        /* Frosted glass over the hero photo rather than an opaque navy block --
+           the backdrop blur is what makes it read as a floating panel. */
         .booking-card {
-          background-color: #0C1B30;
-          border: 1px solid rgba(0, 187, 169, 0.25);
-          border-radius: 14px;
-          padding: 18px 20px;
-          box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+          background: linear-gradient(165deg, rgba(18, 38, 66, 0.82), rgba(8, 20, 38, 0.9));
+          backdrop-filter: blur(18px) saturate(140%);
+          -webkit-backdrop-filter: blur(18px) saturate(140%);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: var(--radius-lg);
+          padding: 20px 22px;
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), var(--hairline-dark),
+            0 0 0 1px rgba(0, 187, 169, 0.12);
           max-width: 420px;
           width: 100%;
         }
@@ -823,15 +835,14 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .booking-submit-btn {
-          margin-top: 4px;
-          padding: 11px;
+          margin-top: 6px;
+          padding: 13px;
           font-size: 14.5px;
-          border-radius: 7px;
         }
 
         /* SERVICES GRID */
         .services-section {
-          background-color: #FFFFFF;
+          background: var(--bg-white);
         }
 
         .services-grid {
@@ -841,10 +852,11 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .service-card {
-          background: #F8FAFC;
-          border: 1px solid #E2E8F0;
-          border-radius: 10px;
-          padding: 16px 6px;
+          background: var(--bg-raised);
+          border: 1px solid var(--border-light);
+          border-radius: var(--radius-md);
+          box-shadow: var(--shadow-sm), var(--hairline);
+          padding: 18px 8px;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -855,16 +867,26 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .service-card:hover {
-          background: #FFFFFF;
-          border-color: #00BBA9;
-          transform: translateY(-3px);
-          box-shadow: 0 10px 20px rgba(0, 187, 169, 0.12);
+          border-color: rgba(0, 187, 169, 0.5);
+          transform: translateY(-4px);
+          box-shadow: var(--shadow-md), 0 10px 26px rgba(0, 187, 169, 0.16), var(--hairline);
+        }
+
+        .service-card:hover .service-icon-wrapper {
+          background: linear-gradient(160deg, #14CDBA, #009C8D);
+          transform: scale(1.06);
+        }
+
+        .service-card:hover .service-icon-wrapper svg {
+          stroke: #FFFFFF;
         }
 
         .service-icon-wrapper {
           width: 46px;
           height: 46px;
-          background: #E6F8F6;
+          background: linear-gradient(160deg, #E9FAF8, #D3F2EE);
+          box-shadow: inset 0 0 0 1px rgba(0, 187, 169, 0.16);
+          transition: var(--transition);
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -881,9 +903,13 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
         /* WHY US SECTION */
         .why-us-section {
-          background-color: #0B1F3A;
           color: #FFFFFF;
-          padding: 50px 0 60px;
+          padding: clamp(44px, 5vw, 68px) 0 clamp(52px, 6vw, 74px);
+          background-color: var(--navy-deep);
+          background-image:
+            radial-gradient(70% 120% at 0% 0%, rgba(0, 187, 169, 0.18), transparent 55%),
+            radial-gradient(60% 100% at 100% 100%, rgba(43, 92, 168, 0.22), transparent 55%),
+            linear-gradient(150deg, #0A1D36, #071228);
         }
 
         .mb-10 {
@@ -931,7 +957,9 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
         /* VEHICLES GRID */
         .vehicles-section {
-          background-color: #F5F7FA;
+          background:
+            radial-gradient(80% 60% at 100% 0%, rgba(0, 187, 169, 0.07), transparent 60%),
+            var(--bg-light);
         }
 
         .vehicles-grid {
@@ -941,18 +969,19 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .vehicle-card {
-          background: #FFFFFF;
-          border: 1px solid #E2E8F0;
-          border-radius: 16px;
+          background: var(--bg-raised);
+          border: 1px solid var(--border-light);
+          border-radius: var(--radius-lg);
           overflow: hidden;
-          transition: var(--transition);
-          box-shadow: var(--shadow-sm);
+          transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out),
+            border-color 0.35s ease;
+          box-shadow: var(--shadow-sm), var(--hairline);
         }
 
         .vehicle-card:hover {
-          transform: translateY(-5px);
-          box-shadow: var(--shadow-md);
-          border-color: #00BBA9;
+          transform: translateY(-6px);
+          box-shadow: var(--shadow-lg), var(--hairline);
+          border-color: rgba(0, 187, 169, 0.45);
         }
 
         .vehicle-img-container {
@@ -1012,10 +1041,11 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .btn-outline-teal {
-          background: #E6F8F6;
-          color: #00BBA9;
-          border: 1px solid #00BBA9;
-          border-radius: 6px;
+          background: linear-gradient(180deg, #EEFBF9, #DFF6F3);
+          color: var(--teal-ink);
+          border: 1px solid rgba(0, 187, 169, 0.45);
+          box-shadow: var(--hairline);
+          border-radius: var(--radius-full);
           font-size: 13px;
           font-weight: 600;
           padding: 6px 14px;
@@ -1047,7 +1077,10 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
         /* DRIVER PROFILES */
         .drivers-section {
-          background: linear-gradient(135deg, #07152B 0%, #0B1F3A 100%);
+          background-color: var(--navy-deep);
+          background-image:
+            radial-gradient(60% 90% at 85% 0%, rgba(0, 187, 169, 0.16), transparent 58%),
+            linear-gradient(150deg, #071528 0%, #0B1F3A 100%);
         }
 
         .section-sub {
@@ -1070,12 +1103,16 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .driver-card {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 16px;
+          background: linear-gradient(165deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.03));
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.11);
+          border-radius: var(--radius-lg);
           padding: 22px;
           color: #FFFFFF;
-          transition: var(--transition);
+          box-shadow: var(--hairline-dark);
+          transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out),
+            border-color 0.35s ease;
         }
 
         .driver-card:hover {
@@ -1156,7 +1193,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
         /* LAUNCH CITIES */
         .cities-section {
-          background: #FFFFFF;
+          background: var(--bg-white);
         }
 
         .cities-grid {
@@ -1166,17 +1203,18 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .city-card {
-          background: #F8FAFC;
-          border: 1px solid #E2E8F0;
-          border-radius: 16px;
+          background: var(--bg-raised);
+          border: 1px solid var(--border-light);
+          border-radius: var(--radius-lg);
           padding: 26px 22px;
+          box-shadow: var(--shadow-sm), var(--hairline);
           transition: var(--transition);
         }
 
         .city-card:hover {
-          border-color: #00BBA9;
+          border-color: rgba(0, 187, 169, 0.45);
           transform: translateY(-4px);
-          box-shadow: 0 10px 24px rgba(0, 187, 169, 0.12);
+          box-shadow: var(--shadow-md), 0 12px 28px rgba(0, 187, 169, 0.14), var(--hairline);
         }
 
         .city-icon {
@@ -1253,8 +1291,8 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
         /* TRUSTED & APP SECTION */
         .trusted-app-section {
-          padding: 60px 0;
-          background: #FFFFFF;
+          padding: clamp(44px, 5vw, 66px) 0;
+          background: var(--bg-light);
         }
 
         .trusted-block {
@@ -1300,10 +1338,11 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         }
 
         .partner-logo-item {
-          background: #F8FAFC;
-          border: 1px solid #E2E8F0;
+          background: var(--bg-raised);
+          border: 1px solid var(--border-light);
+          box-shadow: var(--shadow-sm), var(--hairline);
           padding: 14px 20px;
-          border-radius: 10px;
+          border-radius: var(--radius-md);
           display: flex;
           flex-direction: column;
           align-items: center;
