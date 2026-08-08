@@ -305,6 +305,34 @@ svg {
   background: var(--navy-card);
 }
 
+/* Scroll reveals, driven by useReveal (IntersectionObserver).
+   The hidden state is gated on `data-reveal-root`, which the hook sets on the
+   page element it scopes to — so content is visible whenever the script hasn't
+   run and can never be stranded invisible. Only the shown state carries a
+   transition, so elements animate in and never animate back out. */
+[data-reveal-root] [data-reveal],
+[data-reveal-root] [data-reveal-stagger] > * {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+[data-reveal-root] [data-reveal].is-visible,
+[data-reveal-root] [data-reveal-stagger] > .is-visible {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.55s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal-root] [data-reveal],
+  [data-reveal-root] [data-reveal-stagger] > * {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
 /* Mobile swipe rail. Turns a stacked card grid into a single-row, snap-scrolling
    carousel so five stacked cards cost one screen instead of five. Pure CSS — no
    carousel library. Selector is `.container .snap-row` on purpose: it has to

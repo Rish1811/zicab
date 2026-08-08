@@ -81,7 +81,9 @@ const AboutUs = ({ openBookingModal }) => {
                 <span className="stat-value">
                   {s.count != null ? (
                     <>
-                      <span data-count={s.count}>0</span>
+                      {/* renders the final number, so it reads correctly if the
+                          count-up never runs; the animation starts it from 0 */}
+                      <span data-count={s.count}>{s.count.toLocaleString('en-IN')}</span>
                       {s.suffix}
                     </>
                   ) : (

@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "Frontend", "--", "--port", "5180", "--strictPort"],
       "port": 5180
+    },
+    {
+      "name": "zicab-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--prefix", "Frontend", "--", "--port", "5190", "--strictPort"],
+      "port": 5190
     }
   ]
 }

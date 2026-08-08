@@ -1,122 +1,113 @@
 import { useEffect } from 'react';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
-gsap.registerPlugin(ScrollTrigger);
+/**
+ * Scroll reveals with IntersectionObserver + CSS transitions — no animation
+ * library. Inside the hook's scope:
+ *   data-reveal          -> the element fades up when it scrolls in
+ *   data-reveal-stagger  -> its direct children fade up one after another
+ *   data-count="100000"  -> counts up to that number on first view
+ *
+ * The hidden state lives behind the `data-reveal-root` attribute this hook puts
+ * on its own scope element, so if the script never runs the content is simply
+ * visible. Nothing here needs requestAnimationFrame either, so a throttled
+ * background tab can't strand it.
+ *
+ * The marker is per-scope on purpose: a single shared class on <html> lets one
+ * page's cleanup strip the class another page's hook just set during a tab swap.
+ */
+
+const ROOT_ATTR = 'data-reveal-root';
+const STAGGER_MS = 60;
+const COUNT_MS = 1400;
 
 const reducedMotion = () =>
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/**
- * Content must never depend on JS to become visible, and these reveals hide
- * elements before animating them in. Two guards:
- *   - a hidden document throttles requestAnimationFrame, which freezes GSAP's
- *     ticker, so don't animate at all — leave everything visible
- *   - if the ticker never starts anyway, a backstop unhides everything
- */
-const canAnimate = () => !reducedMotion() && document.visibilityState === 'visible';
+const format = (n) => Math.round(n).toLocaleString('en-IN');
 
-// A live ticker fires within one frame; 1s is a generous margin.
-const TICKER_PROBE_MS = 1000;
+function countUp(el) {
+  const target = Number(el.dataset.count);
+  if (!Number.isFinite(target)) return;
 
-/** Runs `build(gsap)` inside a scoped context, with the same ticker guards. */
-export function useEntrance(scope, build, deps = []) {
-  useEffect(() => {
-    if (!scope.current || !canAnimate()) return;
+  // A hidden tab throttles rAF, so just show the final number.
+  if (document.visibilityState !== 'visible') {
+    el.textContent = format(target);
+    return;
+  }
 
-    const ctx = gsap.context(build, scope);
-
-    let tickerAlive = false;
-    requestAnimationFrame(() => { tickerAlive = true; });
-    const safety = setTimeout(() => {
-      if (!tickerAlive) ctx.revert();
-    }, TICKER_PROBE_MS);
-
-    return () => {
-      clearTimeout(safety);
-      ctx.revert();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  let start;
+  const step = (ts) => {
+    if (start === undefined) start = ts;
+    const p = Math.min((ts - start) / COUNT_MS, 1);
+    el.textContent = format(target * (1 - (1 - p) ** 3)); // ease-out cubic
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
-/**
- * Scroll-reveals everything inside `scope`:
- *   data-reveal          -> the element itself fades up
- *   data-reveal-stagger  -> its direct children fade up one after another
- *   data-count="1250"    -> counts up to that number (keeps any prefix/suffix
- *                           text you leave in a sibling span)
- *
- * gsap.context scopes every tween and ScrollTrigger to this page, so switching
- * tabs reverts them instead of leaking triggers.
- */
 export default function useReveal(scope, deps = []) {
   useEffect(() => {
     const root = scope.current;
-    if (!root) return;
+    if (!root || reducedMotion() || !('IntersectionObserver' in window)) return;
 
-    if (!canAnimate()) return;
+    root.setAttribute(ROOT_ATTR, '');
 
-    const ctx = gsap.context((self) => {
-      self.selector('[data-reveal]').forEach((el) => {
-        gsap.from(el, {
-          opacity: 0,
-          y: 24,
-          duration: 0.6,
-          ease: 'power2.out',
-          scrollTrigger: { trigger: el, start: 'top 90%', once: true },
-        });
+    const groups = Array.from(root.querySelectorAll('[data-reveal-stagger]'));
+    groups.forEach((row) => {
+      Array.from(row.children).forEach((child, i) => {
+        child.style.transitionDelay = `${i * STAGGER_MS}ms`;
       });
+    });
 
-      self.selector('[data-reveal-stagger]').forEach((row) => {
-        const items = Array.from(row.children);
-        if (!items.length) return;
-        gsap.from(items, {
-          opacity: 0,
-          y: 26,
-          duration: 0.5,
-          ease: 'power2.out',
-          stagger: 0.06,
-          scrollTrigger: { trigger: row, start: 'top 90%', once: true },
+    // IntersectionObserver always delivers an initial callback per observed
+    // target, so this is a liveness probe for the backstop below.
+    let observerFired = false;
+
+    const revealIO = new IntersectionObserver(
+      (entries) => {
+        observerFired = true;
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const el = entry.target;
+          if (el.hasAttribute('data-reveal-stagger')) {
+            Array.from(el.children).forEach((c) => c.classList.add('is-visible'));
+          } else {
+            el.classList.add('is-visible');
+          }
+          revealIO.unobserve(el);
         });
+      },
+      // start a little before the element is fully in view
+      { rootMargin: '0px 0px -8% 0px' }
+    );
+
+    Array.from(root.querySelectorAll('[data-reveal]'))
+      .concat(groups)
+      .forEach((el) => revealIO.observe(el));
+
+    const countIO = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        countUp(entry.target);
+        countIO.unobserve(entry.target);
       });
+    });
 
-      self.selector('[data-count]').forEach((el) => {
-        const target = Number(el.dataset.count);
-        if (!Number.isFinite(target)) return;
-        const counter = { v: 0 };
-        gsap.to(counter, {
-          v: target,
-          duration: 1.4,
-          ease: 'power1.out',
-          scrollTrigger: { trigger: el, start: 'top 92%', once: true },
-          onUpdate: () => {
-            el.textContent = Math.round(counter.v).toLocaleString('en-IN');
-          },
-        });
-      });
-    }, scope);
+    root.querySelectorAll('[data-count]').forEach((el) => countIO.observe(el));
 
-    // Images and fonts settle after mount and shift trigger positions.
-    const refresh = setTimeout(() => ScrollTrigger.refresh(), 300);
-
-    // Backstop, only for a dead ticker. Checking opacity alone would be wrong:
-    // elements below the fold are legitimately still hidden, waiting to scroll in.
-    let tickerAlive = false;
-    requestAnimationFrame(() => { tickerAlive = true; });
-
+    // Backstop for the observer never delivering at all: unhide everything.
+    // Keyed on the callback firing, not on anything having become visible — on a
+    // page whose first reveal sits below the fold, nothing visible yet is the
+    // normal case and must not disable the animation.
     const safety = setTimeout(() => {
-      if (tickerAlive) return;
-      ctx.revert();
-      root.querySelectorAll('[data-count]').forEach((el) => {
-        el.textContent = Number(el.dataset.count).toLocaleString('en-IN');
-      });
-    }, TICKER_PROBE_MS);
+      if (!observerFired) root.removeAttribute(ROOT_ATTR);
+    }, 1200);
 
     return () => {
-      clearTimeout(refresh);
       clearTimeout(safety);
-      ctx.revert();
+      revealIO.disconnect();
+      countIO.disconnect();
+      root.removeAttribute(ROOT_ATTR);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import gsap from 'gsap';
-import useReveal, { useEntrance } from '../useReveal';
+import useReveal from '../useReveal';
+import useEntrance from '../useEntrance';
 import {
   MapPin, Users, ArrowRight, ShieldCheck, Navigation,
   Headphones, Wallet, PhoneCall, Car, Plane, Compass,
