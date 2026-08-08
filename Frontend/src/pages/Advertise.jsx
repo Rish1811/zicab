@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Smartphone, Globe, Car, Image, CheckCircle2, Gift, BellRing,
   Building2, ShoppingBag, UtensilsCrossed, HardHat, Stethoscope, GraduationCap,
   Send, TrendingUp, Users, MapPin
 } from 'lucide-react';
+import useReveal from '../useReveal';
 import { CONTACT, LAUNCH_CITIES } from '../siteConfig';
 
 const Advertise = () => {
+  const pageRef = useRef(null);
+  useReveal(pageRef);
+
   const [submitted, setSubmitted] = useState(false);
   const [company, setCompany] = useState('');
   const [contactName, setContactName] = useState('');
@@ -93,7 +97,7 @@ const Advertise = () => {
   ];
 
   return (
-    <div className="advertise-page animate-fade-in">
+    <div className="advertise-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
           <span className="page-tag">Advertise with ZI CAB</span>
@@ -108,7 +112,7 @@ const Advertise = () => {
       {/* Why advertise */}
       <section className="section-padding why-ad-section">
         <div className="container">
-          <div className="why-ad-grid">
+          <div className="why-ad-grid" data-reveal-stagger>
             {whyUs.map((w, i) => {
               const Icon = w.icon;
               return (
@@ -131,7 +135,7 @@ const Advertise = () => {
             <h2 className="section-title">Where Your Brand Can Appear</h2>
           </div>
 
-          <div className="placements-grid">
+          <div className="placements-grid" data-reveal-stagger>
             {placements.map((p, i) => {
               const Icon = p.icon;
               return (
@@ -159,7 +163,7 @@ const Advertise = () => {
             <h2 className="section-title light">Built for Local & Regional Brands</h2>
           </div>
 
-          <div className="industries-grid">
+          <div className="industries-grid" data-reveal-stagger>
             {industries.map((ind, i) => {
               const Icon = ind.icon;
               return (
@@ -199,7 +203,7 @@ const Advertise = () => {
             </div>
           </div>
 
-          <div className="ad-form-card">
+          <div className="ad-form-card" data-reveal>
             {submitted ? (
               <div className="ad-success">
                 <CheckCircle2 size={50} color="#00BBA9" />

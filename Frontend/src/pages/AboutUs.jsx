@@ -1,13 +1,19 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { ShieldCheck, Award, Users, MapPin, HeartHandshake, CheckCircle2, ArrowRight, ExternalLink, Navigation } from 'lucide-react';
+import useReveal from '../useReveal';
 import { CONTACT, LAUNCH_CITIES } from '../siteConfig';
 
 const AboutUs = ({ openBookingModal }) => {
+  const pageRef = useRef(null);
+  useReveal(pageRef);
+
+  // `count` drives the scroll-triggered count-up in useReveal; `suffix` is the
+  // static bit that sits after the number.
   const stats = [
-    { label: 'Successful Rides', value: '100,000+' },
+    { label: 'Successful Rides', count: 100000, suffix: '+' },
     { label: 'Customer Rating', value: '4.9 ★' },
-    { label: 'Launch Cities', value: '3' },
-    { label: 'Verified Drivers', value: '500+' },
+    { label: 'Launch Cities', count: 3 },
+    { label: 'Verified Drivers', count: 500, suffix: '+' },
   ];
 
   // TODO(client): replace each placeholder with the real founder details.
@@ -53,7 +59,7 @@ const AboutUs = ({ openBookingModal }) => {
   ];
 
   return (
-    <div className="about-page animate-fade-in">
+    <div className="about-page animate-fade-in" ref={pageRef}>
       {/* Page Header */}
       <div className="page-hero">
         <div className="container">
@@ -69,10 +75,19 @@ const AboutUs = ({ openBookingModal }) => {
       {/* Stats Counter Bar */}
       <section className="stats-section">
         <div className="container">
-          <div className="stats-grid">
+          <div className="stats-grid" data-reveal-stagger>
             {stats.map((s, i) => (
               <div key={i} className="stat-card">
-                <span className="stat-value">{s.value}</span>
+                <span className="stat-value">
+                  {s.count != null ? (
+                    <>
+                      <span data-count={s.count}>0</span>
+                      {s.suffix}
+                    </>
+                  ) : (
+                    s.value
+                  )}
+                </span>
                 <span className="stat-label">{s.label}</span>
               </div>
             ))}
@@ -83,7 +98,7 @@ const AboutUs = ({ openBookingModal }) => {
       {/* Story & Mission Section */}
       <section className="section-padding story-section">
         <div className="container story-grid">
-          <div className="story-content">
+          <div className="story-content" data-reveal>
             <h2 className="section-title">Our Story & Mission</h2>
             <p className="body-text">
               ZI CAB was founded with a clear mission: to eliminate ride cancellations, surge pricing shocks, and unverified driver risks for travelers in Karnataka.
@@ -112,7 +127,7 @@ const AboutUs = ({ openBookingModal }) => {
             </button>
           </div>
 
-          <div className="story-image-box">
+          <div className="story-image-box" data-reveal>
             <img 
               src="https://images.unsplash.com/photo-1549399542-7e3f8b79c341?auto=format&fit=crop&w=800&q=80" 
               alt="ZI CAB Premium Ride"
@@ -134,7 +149,7 @@ const AboutUs = ({ openBookingModal }) => {
             <h2 className="section-title">Meet the Founders</h2>
           </div>
 
-          <div className="founders-grid">
+          <div className="founders-grid" data-reveal-stagger>
             {founders.map((f, i) => (
               <div key={i} className="founder-card">
                 <div className="avatar founder-photo">
@@ -171,7 +186,7 @@ const AboutUs = ({ openBookingModal }) => {
           </div>
 
           <div className="presence-grid">
-            <div className="presence-office">
+            <div className="presence-office" data-reveal>
               <h3 className="presence-heading"><MapPin size={18} color="#00BBA9" /> Head Office</h3>
               <p className="presence-addr">{CONTACT.address}</p>
               <a className="btn btn-teal" href={CONTACT.mapsUrl} target="_blank" rel="noreferrer">
@@ -179,7 +194,7 @@ const AboutUs = ({ openBookingModal }) => {
               </a>
             </div>
 
-            <div className="presence-cities">
+            <div className="presence-cities" data-reveal-stagger>
               {LAUNCH_CITIES.map((c) => (
                 <div key={c.name} className="presence-city-card">
                   <MapPin size={20} color="#00BBA9" />
@@ -197,7 +212,7 @@ const AboutUs = ({ openBookingModal }) => {
         <div className="container">
           <h2 className="section-title text-center mb-12">The Pillars of ZI CAB</h2>
           
-          <div className="pillars-grid">
+          <div className="pillars-grid" data-reveal-stagger>
             {pillars.map((p, idx) => {
               const Icon = p.icon;
               return (

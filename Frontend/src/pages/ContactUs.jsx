@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Phone, Mail, MapPin, MessageSquare, ChevronDown, CheckCircle2, Send, Navigation } from 'lucide-react';
+import useReveal from '../useReveal';
 import { CONTACT, LAUNCH_CITIES, waLink } from '../siteConfig';
 
 const ContactUs = () => {
+  const pageRef = useRef(null);
+  useReveal(pageRef);
+
   const [submitted, setSubmitted] = useState(false);
   const [openFaq, setOpenFaq] = useState(0);
   const [name, setName] = useState('');
@@ -39,7 +43,7 @@ const ContactUs = () => {
   ];
 
   return (
-    <div className="contact-page animate-fade-in">
+    <div className="contact-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
           <span className="page-tag">24x7 Customer Helpdesk</span>
@@ -53,7 +57,7 @@ const ContactUs = () => {
       <section className="section-padding">
         <div className="container">
           {/* Top Contact Info Cards */}
-          <div className="contact-cards-grid">
+          <div className="contact-cards-grid" data-reveal-stagger>
             <a className="c-info-card" href={`tel:${CONTACT.tollFree.replace(/\s/g, '')}`}>
               <div className="c-icon-wrap">
                 <Phone size={24} color="#00BBA9" />
@@ -92,7 +96,7 @@ const ContactUs = () => {
           </div>
 
           {/* TOLL-FREE SUPPORT EXPLAINER */}
-          <div className="tollfree-banner mt-12">
+          <div className="tollfree-banner mt-12" data-reveal>
             <div className="tf-left">
               <span className="tf-tag">Toll-Free Support</span>
               <h2 className="tf-number">{CONTACT.tollFree}</h2>
@@ -123,7 +127,7 @@ const ContactUs = () => {
           </div>
 
           {/* OFFICE LOCATION & LAUNCH CITIES */}
-          <div className="office-grid mt-12">
+          <div className="office-grid mt-12" data-reveal-stagger>
             <div className="office-card">
               <h3 className="office-title"><MapPin size={18} color="#00BBA9" /> Our Office</h3>
               <p className="office-addr">{CONTACT.address}</p>

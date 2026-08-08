@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Car, DollarSign, Award, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import useReveal from '../useReveal';
 
 const Partner = () => {
+  const pageRef = useRef(null);
+  useReveal(pageRef);
+
   const [submitted, setSubmitted] = useState(false);
   const [vehicleType, setVehicleType] = useState('Sedan (Dzire/Etios)');
   const [city, setCity] = useState('Bengaluru');
@@ -14,7 +18,7 @@ const Partner = () => {
   };
 
   return (
-    <div className="partner-page animate-fade-in">
+    <div className="partner-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
           <span className="page-tag">Attach Cabs & Earn</span>
@@ -31,7 +35,7 @@ const Partner = () => {
           <div className="partner-info">
             <h2 className="section-title">Why Fleet Owners Trust ZI CAB</h2>
             
-            <div className="partner-perks-grid">
+            <div className="partner-perks-grid" data-reveal-stagger>
               <div className="perk-card">
                 <DollarSign size={28} color="#00BBA9" />
                 <h4>Weekly Direct Payouts</h4>
@@ -78,7 +82,7 @@ const Partner = () => {
           </div>
 
           {/* Right Attachment Form */}
-          <div className="partner-form-card">
+          <div className="partner-form-card" data-reveal>
             <h3 className="form-card-title">Attach Your Cab Today</h3>
             <p className="form-card-sub">Fill the form below to receive callback within 30 minutes.</p>
 

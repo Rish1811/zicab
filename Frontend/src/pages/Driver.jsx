@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { UserCheck, Shield, Clock, Award, CheckCircle2, FileText, Smartphone } from 'lucide-react';
+import useReveal from '../useReveal';
 
 const Driver = () => {
+  const pageRef = useRef(null);
+  useReveal(pageRef);
+
   const [submitted, setSubmitted] = useState(false);
   const [driverName, setDriverName] = useState('');
   const [phone, setPhone] = useState('');
@@ -22,7 +26,7 @@ const Driver = () => {
   ];
 
   return (
-    <div className="driver-page animate-fade-in">
+    <div className="driver-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
           <span className="page-tag">Join ZI CAB Captains</span>
@@ -39,7 +43,7 @@ const Driver = () => {
           <div className="driver-info">
             <h2 className="section-title">Captain Benefits at ZI CAB</h2>
             
-            <div className="driver-perks">
+            <div className="driver-perks" data-reveal-stagger>
               <div className="d-perk">
                 <Clock size={24} color="#00BBA9" />
                 <div>
@@ -79,7 +83,7 @@ const Driver = () => {
           </div>
 
           {/* Right Driver Onboarding Form */}
-          <div className="driver-form-card">
+          <div className="driver-form-card" data-reveal>
             <h3 className="form-card-title">Driver Onboarding Form</h3>
             <p className="form-card-sub">Start driving with ZI CAB within 24 hours.</p>
 

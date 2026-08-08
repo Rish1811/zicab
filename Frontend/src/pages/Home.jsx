@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import gsap from 'gsap';
+import useReveal, { useEntrance } from '../useReveal';
 import {
   MapPin, Users, ArrowRight, ShieldCheck, Navigation,
   Headphones, Wallet, PhoneCall, Car, Plane, Compass,
@@ -11,6 +13,19 @@ const initials = (name) =>
   name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
 const Home = ({ openBookingModal, setActiveTab }) => {
+  const pageRef = useRef(null);
+  useReveal(pageRef);
+
+  // Hero entrance, once on mount and independent of the scroll reveals.
+  useEntrance(pageRef, () => {
+    gsap.timeline({ defaults: { ease: 'power3.out' } })
+      .from('.hero-title', { opacity: 0, y: 30, duration: 0.7 })
+      .from('.hero-subtitle', { opacity: 0, y: 20, duration: 0.5 }, '-=0.4')
+      .from('.hero-cta-group > *', { opacity: 0, y: 16, duration: 0.4, stagger: 0.08 }, '-=0.25')
+      .from('.badge-item', { opacity: 0, y: 12, duration: 0.35, stagger: 0.05 }, '-=0.2')
+      .from('.booking-card', { opacity: 0, y: 26, duration: 0.6 }, '-=0.55');
+  });
+
   const [tab, setTab] = useState('city');
   const [pickup, setPickup] = useState('');
   const [drop, setDrop] = useState('');
@@ -167,7 +182,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
   ];
 
   return (
-    <div className="home-page animate-fade-in">
+    <div className="home-page animate-fade-in" ref={pageRef}>
       {/* HERO SECTION */}
       <section className="hero-section">
         <div className="hero-backdrop-glow" />
@@ -298,7 +313,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       {/* OUR SERVICES SECTION */}
       <section className="section-padding services-section">
         <div className="container">
-          <div className="section-title-group">
+          <div className="section-title-group" data-reveal>
             <div>
               <h2 className="section-title">Our Services</h2>
             </div>
@@ -307,7 +322,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             </button>
           </div>
 
-          <div className="services-grid">
+          <div className="services-grid" data-reveal-stagger>
             {services.map((s) => {
               const IconComp = s.icon;
               return (
@@ -330,9 +345,9 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       {/* WHY CHOOSE ZI CAB? SECTION */}
       <section className="why-us-section">
         <div className="container">
-          <h2 className="section-title light mb-10">Why Choose ZI CAB?</h2>
+          <h2 className="section-title light mb-10" data-reveal>Why Choose ZI CAB?</h2>
 
-          <div className="why-us-grid">
+          <div className="why-us-grid" data-reveal-stagger>
             {valueProps.map((v, idx) => {
               const IconComponent = v.icon;
               return (
@@ -354,7 +369,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       {/* POPULAR VEHICLES SECTION */}
       <section className="section-padding vehicles-section">
         <div className="container">
-          <div className="section-title-group">
+          <div className="section-title-group" data-reveal>
             <div>
               <h2 className="section-title">Popular Vehicles</h2>
             </div>
@@ -363,7 +378,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             </button>
           </div>
 
-          <div className="vehicles-grid">
+          <div className="vehicles-grid snap-row" data-reveal-stagger>
             {vehicles.map((v, i) => (
               <div key={i} className="vehicle-card">
                 <div className="vehicle-img-container">
@@ -399,7 +414,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       {/* MEET OUR DRIVERS SECTION */}
       <section className="section-padding drivers-section">
         <div className="container">
-          <div className="section-title-group">
+          <div className="section-title-group" data-reveal>
             <div>
               <h2 className="section-title light">Meet Our Drivers</h2>
               <p className="section-sub">Every ZI CAB captain is background-verified, police-checked and rated by real riders.</p>
@@ -409,7 +424,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             </button>
           </div>
 
-          <div className="drivers-grid">
+          <div className="drivers-grid snap-row" data-reveal-stagger>
             {drivers.map((d, i) => (
               <div key={i} className="driver-card">
                 <div className="driver-top">
@@ -449,7 +464,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       {/* OFFICE & LAUNCH CITIES */}
       <section className="section-padding cities-section">
         <div className="container">
-          <div className="section-title-group">
+          <div className="section-title-group" data-reveal>
             <div>
               <h2 className="section-title">Where You'll Find Us</h2>
               <p className="section-sub-dark">{CONTACT.addressShort}</p>
@@ -459,7 +474,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             </a>
           </div>
 
-          <div className="cities-grid">
+          <div className="cities-grid" data-reveal-stagger>
             {LAUNCH_CITIES.map((c) => (
               <div key={c.name} className="city-card">
                 <div className="city-icon"><MapPin size={20} color="#00BBA9" /></div>
@@ -473,7 +488,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
       {/* ADVERTISE TEASER */}
       <section className="advertise-teaser">
-        <div className="container advertise-teaser-inner">
+        <div className="container advertise-teaser-inner" data-reveal>
           <div>
             <span className="at-tag"><Megaphone size={14} /> For Businesses</span>
             <h2 className="at-title">Advertise with ZI CAB</h2>
@@ -493,8 +508,8 @@ const Home = ({ openBookingModal, setActiveTab }) => {
         <div className="container">
           {/* Trusted Logos */}
           <div className="trusted-block">
-            <h3 className="trusted-heading">Trusted by Hotels, Airports & Malls</h3>
-            <div className="partners-flex">
+            <h3 className="trusted-heading" data-reveal>Trusted by Hotels, Airports & Malls</h3>
+            <div className="partners-flex" data-reveal-stagger>
               {partners.map((p, index) => (
                 <div key={index} className="partner-logo-item">
                   <span className="p-title">{p.name}</span>
@@ -505,7 +520,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           </div>
 
           {/* App Download Banner */}
-          <div className="app-download-banner">
+          <div className="app-download-banner" data-reveal>
             <div className="app-banner-left">
               <h2 className="app-banner-title">Download ZI CAB App</h2>
               <p className="app-banner-desc">Book rides on the go, anytime, anywhere.</p>
@@ -1405,6 +1420,76 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           .b-tab {
             font-size: 11.5px;
             padding: 8px 2px;
+          }
+
+          /* --- length trimming: same content, far less scrolling --- */
+
+          /* 9 icon tiles: 3 across = 3 rows instead of 5 */
+          .services-grid {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+          }
+          .service-card {
+            padding: 12px 4px;
+          }
+          .service-icon-wrapper {
+            width: 38px;
+            height: 38px;
+            margin-bottom: 7px;
+          }
+          .service-card-title {
+            font-size: 11px;
+          }
+
+          /* value props as compact rows rather than tall cards */
+          .why-us-section {
+            padding: 34px 0 38px;
+          }
+          .why-us-grid {
+            gap: 14px;
+          }
+          .why-icon-box {
+            width: 34px;
+            height: 34px;
+          }
+          .why-title {
+            font-size: 13.5px;
+          }
+          .why-desc {
+            font-size: 11.5px;
+          }
+          .mb-10 {
+            margin-bottom: 20px;
+          }
+
+          /* launch cities: icon on the left, name + note stacked beside it,
+             so each city is one short row instead of a tall stacked card */
+          .city-card {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            column-gap: 12px;
+            align-items: center;
+            padding: 14px 16px;
+          }
+          .city-icon {
+            grid-row: 1 / span 2;
+            width: 36px;
+            height: 36px;
+            margin-bottom: 0;
+          }
+          .city-card h3 {
+            font-size: 16px;
+            margin-bottom: 0;
+          }
+          .city-card span {
+            font-size: 11.5px;
+          }
+
+          .advertise-teaser {
+            padding: 30px 0;
+          }
+          .at-desc {
+            font-size: 13.5px;
           }
         }
       `}</style>

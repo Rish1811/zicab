@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Briefcase, Building, FileText, UserCheck, ShieldCheck, CheckCircle2, Send, PhoneCall } from 'lucide-react';
+import useReveal from '../useReveal';
 
 const Corporate = () => {
+  const pageRef = useRef(null);
+  useReveal(pageRef);
+
   const [submitted, setSubmitted] = useState(false);
   const [companyName, setCompanyName] = useState('');
   const [contactPerson, setContactPerson] = useState('');
@@ -38,7 +42,7 @@ const Corporate = () => {
   ];
 
   return (
-    <div className="corporate-page animate-fade-in">
+    <div className="corporate-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
           <span className="page-tag">ZI CAB Business</span>
@@ -77,7 +81,7 @@ const Corporate = () => {
           </div>
 
           {/* Right Form Card */}
-          <div className="corp-form-card">
+          <div className="corp-form-card" data-reveal>
             <h3 className="form-card-title">Request a Corporate Demo</h3>
             <p className="form-card-sub">Get custom pricing rates for your company in 2 hours.</p>
 

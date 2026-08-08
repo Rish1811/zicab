@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   Car, Plane, Compass, Briefcase, Building2, ShoppingBag,
   CheckCircle, ArrowRight, Bike
 } from 'lucide-react';
+import useReveal from '../useReveal';
 
 const Services = ({ openBookingModal }) => {
+  const pageRef = useRef(null);
+  useReveal(pageRef);
+
 
   const allServices = [
     {
@@ -91,7 +95,7 @@ const Services = ({ openBookingModal }) => {
   ];
 
   return (
-    <div className="services-page animate-fade-in">
+    <div className="services-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
           <span className="page-tag">ZI CAB Offerings</span>
@@ -104,7 +108,7 @@ const Services = ({ openBookingModal }) => {
 
       <section className="section-padding">
         <div className="container">
-          <div className="services-list-grid">
+          <div className="services-list-grid" data-reveal-stagger>
             {allServices.map((s) => {
               const IconComp = s.icon;
               return (
@@ -258,8 +262,34 @@ const Services = ({ openBookingModal }) => {
           .services-list-grid {
             grid-template-columns: 1fr;
           }
+        }
+
+        /* Nine full-bleed cards is a very long phone page — shrink the hero
+           image and keep the feature list two-up so each card stays compact. */
+        @media (max-width: 640px) {
+          .services-list-grid {
+            gap: 18px;
+          }
+          .s-card-img-box {
+            height: 140px;
+          }
+          .s-card-content {
+            padding: 18px 16px;
+          }
+          .s-title {
+            font-size: 17px;
+          }
+          .s-desc {
+            font-size: 13px;
+            margin-bottom: 12px;
+          }
           .s-features-list {
-            grid-template-columns: 1fr;
+            gap: 7px;
+            padding: 10px;
+            margin-bottom: 14px;
+          }
+          .sf-item {
+            font-size: 11.5px;
           }
         }
       `}</style>

@@ -104,6 +104,10 @@ svg {
   .container {
     padding: 0 16px;
   }
+  /* Nine sections at 45px top+bottom was ~800px of pure whitespace on a phone. */
+  .section-padding {
+    padding: 34px 0;
+  }
 }
 
 /* Headings & Texts */
@@ -301,6 +305,42 @@ svg {
   background: var(--navy-card);
 }
 
+/* Mobile swipe rail. Turns a stacked card grid into a single-row, snap-scrolling
+   carousel so five stacked cards cost one screen instead of five. Pure CSS — no
+   carousel library. Selector is `.container .snap-row` on purpose: it has to
+   out-specify the page-level `.vehicles-grid { display: grid }` rules. */
+@media (max-width: 768px) {
+  .container .snap-row {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* bleed into the container gutter so the next card peeks in and the row
+       reads as swipeable without a hint label */
+    margin: 0 -16px;
+    padding: 4px 16px 14px;
+  }
+
+  .container .snap-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Explicit width + flex-shrink: 0. A `flex: 0 0 76%` basis alone let the cards
+     collapse to min-content (lazy images report zero intrinsic width), which
+     squashed all five into one screen instead of overflowing into a scroll. */
+  .container .snap-row > * {
+    scroll-snap-align: start;
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: auto;
+    width: 76%;
+    min-width: 235px;
+    max-width: 290px;
+  }
+}
+
 /* Avatar with an initials fallback: the <img> sits on top of the initials, so a
    missing photo (drivers/founders not supplied yet) shows initials, not a blank box.
    Size and border-radius come from the caller's own class. */
@@ -346,6 +386,27 @@ svg {
 .wa-float:hover {
   transform: scale(1.08);
   box-shadow: 0 12px 28px rgba(37, 211, 102, 0.55);
+}
+
+.wa-float::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #25D366;
+  animation: waPulse 2.4s ease-out infinite;
+}
+
+@keyframes waPulse {
+  0% { transform: scale(1); opacity: 0.7; }
+  70% { transform: scale(1.7); opacity: 0; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wa-float::after {
+    animation: none;
+  }
 }
 
 @media (max-width: 640px) {
