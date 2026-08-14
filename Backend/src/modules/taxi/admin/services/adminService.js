@@ -5894,8 +5894,15 @@ const toAdminRideRow = (ride) => {
     liveStatus: ride.liveStatus,
     paymentOption: 'CASH',
     fare: Number(ride.fare || 0),
-    pickupLabel: formatRidePointLabel(ride.pickupLocation, 'Pickup'),
-    dropLabel: formatRidePointLabel(ride.dropLocation, 'Drop'),
+    // Prefer the human address the customer actually gave. Falling straight to
+    // coordinates showed "12.9716, 77.5946" for website bookings, which carry a
+    // placeholder point because the form has no map — useless to whoever is
+    // calling the customer back.
+    pickupLabel: ride.pickupAddress || formatRidePointLabel(ride.pickupLocation, 'Pickup'),
+    dropLabel: ride.dropAddress || formatRidePointLabel(ride.dropLocation, 'Drop'),
+    pickupAddress: ride.pickupAddress || '',
+    dropAddress: ride.dropAddress || '',
+    scheduledAt: ride.scheduledAt || null,
     pickupLocation: ride.pickupLocation,
     dropLocation: ride.dropLocation,
     lastDriverLocation: ride.lastDriverLocation || null,
