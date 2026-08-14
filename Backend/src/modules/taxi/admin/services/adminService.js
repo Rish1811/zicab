@@ -5903,6 +5903,7 @@ const toAdminRideRow = (ride) => {
     pickupAddress: ride.pickupAddress || '',
     dropAddress: ride.dropAddress || '',
     scheduledAt: ride.scheduledAt || null,
+    bookingSource: ride.bookingSource || 'app',
     pickupLocation: ride.pickupLocation,
     dropLocation: ride.dropLocation,
     lastDriverLocation: ride.lastDriverLocation || null,

@@ -1312,6 +1312,10 @@ export const restoreScheduledDispatches = async () => {
   const rides = await Ride.find({
     status: RIDE_STATUS.SEARCHING,
     liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+    // Website booking enquiries carry a placeholder pickup point, so dispatching
+    // them searches an arbitrary location, finds nobody, and auto-cancels the
+    // request before anyone in admin has seen it.
+    bookingSource: { $ne: 'website' },
   }).select('_id scheduledAt bookingMode dispatchTracking');
 
   for (const ride of rides) {

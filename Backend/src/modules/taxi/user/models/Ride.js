@@ -81,6 +81,14 @@ const rideSchema = new mongoose.Schema(
       ref: 'Delivery',
       default: null,
     },
+    // Where the booking originated. Website enquiries are leads with no real
+    // coordinates, so dispatch must skip them — see dispatchService.
+    bookingSource: {
+      type: String,
+      enum: ['app', 'website', 'admin'],
+      default: 'app',
+      trim: true,
+    },
     serviceType: {
       type: String,
       enum: ['ride', 'parcel', 'intercity'],

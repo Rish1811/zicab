@@ -57,6 +57,7 @@ export const createWebsiteBookingRequest = async (payload = {}) => {
   const ride = await Ride.create({
     userId: user._id,
     serviceType: 'ride',
+    bookingSource: 'website',
     status: RIDE_STATUS.SEARCHING,
     liveStatus: RIDE_LIVE_STATUS.SEARCHING,
     pickupAddress,
