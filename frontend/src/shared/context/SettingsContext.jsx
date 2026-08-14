@@ -21,8 +21,12 @@ const DEFAULT_SETTINGS_CONTEXT = {
     general: {
       // Shown until the CMS responds; settings.general.app_name overrides it.
       app_name: 'ZI CAB - Your Ride. Our Priority.',
-      logo: '/zicab-logo.jpg',
-      favicon: '/zicab-logo.jpg',
+      // Left empty on purpose. These are resolved against BACKEND_ORIGIN because
+      // the CMS serves uploaded assets, so a frontend-bundled path like
+      // /zicab-logo.jpg would 404. Empty means the static favicon in index.html
+      // stands, and a real CMS upload still overrides it.
+      logo: '',
+      favicon: '',
     },
     customization: {
       admin_theme_color: '',

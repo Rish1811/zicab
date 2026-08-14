@@ -6,3 +6,7 @@ coverage/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# local run artifacts
+server.log
+server.pid
