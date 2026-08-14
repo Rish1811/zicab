@@ -4,6 +4,7 @@ import { Env, StandardCheckoutClient, StandardCheckoutPayRequest, PrefillUserLog
 import { ApiError } from '../../../../utils/ApiError.js';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { User } from '../models/User.js';
+import { createWebsiteBookingRequest } from '../services/websiteBookingService.js';
 import { UserWallet } from '../models/UserWallet.js';
 import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import { Notification } from '../../admin/promotions/models/Notification.js';
@@ -4424,3 +4425,18 @@ export const getZones = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, results });
 });
 
+/**
+ * Public booking enquiry from the marketing site. Unauthenticated on purpose:
+ * the website form is a lead capture, not a signed-in booking flow.
+ */
+export const submitWebsiteBooking = async (req, res) => {
+  const data = await createWebsiteBookingRequest(req.body);
+
+  res.status(201).json({
+    success: true,
+    data: {
+      message: 'Booking request received. Our team will call you shortly.',
+      ...data,
+    },
+  });
+};

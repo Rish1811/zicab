@@ -37,6 +37,7 @@ import {
   registerUser,
   requestAccountDeletion,
   saveUserFcmToken,
+  submitWebsiteBooking,
   searchBuses,
   signupUser,
   startUserOtpRequest,
@@ -68,7 +69,7 @@ import {
   createPoolingBooking,
   getMyPoolingBookings
 } from '../controllers/poolingController.js';
-import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog } from '../../admin/controllers/adminController.js';
+import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog, getPublicLandingContent } from '../../admin/controllers/adminController.js';
 import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
 
 export const userRouter = Router();
@@ -79,6 +80,7 @@ userRouter.get('/settings/:category', asyncHandler(getGeneralSettingsCategory));
 userRouter.get('/intercity-packages', asyncHandler(getIntercityPackageCatalog));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
+userRouter.get('/landing-content', asyncHandler(getPublicLandingContent));
 userRouter.get('/set-prices', asyncHandler(getSetPrices));
 userRouter.get('/zones', asyncHandler(getZones));
 userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));
@@ -98,6 +100,10 @@ userRouter.post('/auth/send-otp', otpSendRateLimit, asyncHandler(startUserOtpReq
 userRouter.post('/auth/verify-otp', otpVerifyRateLimit, asyncHandler(verifyUserOtpRequest));
 userRouter.post('/otp-login', otpVerifyRateLimit, asyncHandler(verifyUserPhoneForOtpLogin));
 userRouter.post('/fcm-token', authenticate(['user']), asyncHandler(saveUserFcmToken));
+
+// Public: booking enquiry from the marketing site. Rate limited because it
+// is unauthenticated and writes a record.
+userRouter.post('/booking-request', loginRateLimit, asyncHandler(submitWebsiteBooking));
 userRouter.get('/me', authenticate(['user']), asyncHandler(getCurrentUser));
 userRouter.patch('/me', authenticate(['user']), asyncHandler(updateCurrentUser));
 userRouter.get('/subscriptions/plans', authenticate(['user']), asyncHandler(getAvailableSubscriptionPlans));

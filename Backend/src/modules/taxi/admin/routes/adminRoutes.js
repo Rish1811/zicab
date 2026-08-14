@@ -158,6 +158,8 @@ import {
   permanentlyDeleteDeletedUser,
   restoreDeletedDriver,
   permanentlyDeleteDeletedDriver,
+  getAdminLandingContent,
+  saveAdminLandingContent,
   getRideRequests,
   rejectUserDeletionRequest,
   rejectDriverDeletionRequest,
@@ -446,6 +448,8 @@ adminRouter.get('/admin/safety/alerts', authenticate(['admin']), listSafetyAlert
 adminRouter.patch('/admin/safety/alerts/:id/resolve', authenticate(['admin']), resolveSafetyAlert);
 adminRouter.get('/admin/ongoing-rides', getOngoingRides);
 adminRouter.get('/admin/ride-requests', getRideRequests);
+adminRouter.get('/admin/landing-content', getAdminLandingContent);
+adminRouter.put('/admin/landing-content', saveAdminLandingContent);
 adminRouter.delete('/admin/ongoing-rides/:id', deleteOngoingRide);
 adminRouter.get('/admin/deliveries', getDeliveries);
 adminRouter.get('/admin/trips', getIntercityTrips);

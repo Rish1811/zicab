@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, MapPin, Calendar, User, CheckCircle2, Car, Shield, ArrowRight } from 'lucide-react';
+import api from '../../../shared/api/axiosInstance';
 import { CONTACT } from '../siteConfig';
 
 const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
@@ -12,6 +13,9 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
   const [passengers, setPassengers] = useState('2');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [requestId, setRequestId] = useState('');
 
   if (!isOpen) return null;
 
@@ -30,9 +34,33 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
     { id: 'airport', label: 'Airport Transfer' },
   ];
 
-  const handleConfirmBooking = (e) => {
+  const handleConfirmBooking = async (e) => {
     e.preventDefault();
-    setStep(3); // Show confirmation screen
+    if (submitting) return;
+
+    setSubmitting(true);
+    setSubmitError('');
+
+    try {
+      const res = await api.post('/users/booking-request', {
+        name,
+        phone,
+        pickup,
+        drop,
+        vehicleType: vehicle,
+        scheduledAt: date || null,
+      });
+      // the reference the admin sees in Trip Requests, so support can match a call to a row
+      setRequestId(res?.data?.data?.requestId || '');
+      setStep(3);
+    } catch (err) {
+      setSubmitError(
+        err?.response?.data?.message ||
+          'Could not send your request. Please check your details and try again.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -188,6 +216,12 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
               />
             </div>
 
+            {submitError && (
+              <div className="booking-error" role="alert">
+                {submitError}
+              </div>
+            )}
+
             <div className="security-notice">
               <Shield size={16} color="#00BBA9" />
               <span>Zero cancellation fee • Pay directly to driver or via UPI after trip</span>
@@ -201,8 +235,8 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
               >
                 Back
               </button>
-              <button type="submit" className="btn btn-teal flex-1">
-                Confirm Cab Booking
+              <button type="submit" className="btn btn-teal flex-1" disabled={submitting}>
+                {submitting ? 'Sending…' : 'Confirm Cab Booking'}
               </button>
             </div>
           </form>
@@ -216,10 +250,10 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
             </div>
             <h4 className="confirm-title">Cab Booked Successfully!</h4>
             <p className="confirm-text">
-              Thank you, <strong>{name || 'Rider'}</strong>. Your ZI CAB booking ID is <strong>#ZC-89241</strong>.
+              Thank you, <strong>{name || 'Rider'}</strong>. Your request reference is <strong>{requestId || 'pending'}</strong>.
             </p>
             <div className="driver-assign-card">
-              <p>📍 Driver details will be sent via SMS / WhatsApp 20 minutes before pickup.</p>
+              <p>📍 Our team will call you shortly to confirm the driver and fare.</p>
               <p>📞 24x7 Toll-Free Support: {CONTACT.tollFree}</p>
             </div>
 
@@ -441,6 +475,15 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
             color: #00BBA9;
             font-weight: 700;
             font-size: 14px;
+          }
+
+          .booking-error {
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #FCA5A5;
+            font-size: 13px;
+            padding: 10px 12px;
+            border-radius: 8px;
           }
 
           .security-notice {

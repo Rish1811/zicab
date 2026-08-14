@@ -1,5 +1,6 @@
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import * as adminService from "../services/adminService.js";
+import * as landingContentService from "../services/landingContentService.js";
 import ExcelJS from 'exceljs';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
@@ -1693,3 +1694,14 @@ export const getAppBootstrap = asyncHandler(async (_req, res) => {
 
   ok(res, data);
 });
+
+// ---- public marketing site content -----------------------------------------
+export const getPublicLandingContent = asyncHandler(async (_req, res) =>
+  ok(res, await landingContentService.getLandingContent()),
+);
+export const getAdminLandingContent = asyncHandler(async (_req, res) =>
+  ok(res, await landingContentService.getLandingContent({ fresh: true })),
+);
+export const saveAdminLandingContent = asyncHandler(async (req, res) =>
+  ok(res, await landingContentService.updateLandingContent(req.body)),
+);

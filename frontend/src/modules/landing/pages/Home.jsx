@@ -14,7 +14,8 @@ import {
   Briefcase, Building2, ShoppingBag, Smartphone, QrCode, ChevronRight,
   Star, BadgeCheck, Megaphone, Bike
 } from 'lucide-react';
-import { LAUNCH_CITIES, CONTACT } from '../siteConfig';
+import useLandingContent from '../useLandingContent';
+import useVehicleTypes from '../useVehicleTypes';
 
 const initials = (name) =>
   name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
@@ -94,49 +95,11 @@ const Home = ({ openBookingModal, setActiveTab }) => {
     openBookingModal();
   };
 
-  const services = [
-    { id: 'auto', title: 'Auto Ride', icon: Bike, desc: 'Quick, metered short-distance autos' },
-    { id: 'city', title: 'City Ride', icon: Car, desc: 'Local hourly & point-to-point rides' },
-    { id: 'airport', title: 'Airport Transfer', icon: Plane, desc: 'On-time pickup & drop guaranteed' },
-    { id: 'outstation', title: 'Outstation', icon: Compass, desc: 'Intercity one-way & roundtrips' },
-    { id: 'sedan', title: 'Premium Sedan', icon: Car, desc: 'Comfortable Dzire & Etios sedans' },
-    { id: 'suv', title: 'SUV', icon: Car, desc: 'Spacious Ertiga & Innova Crysta' },
-    { id: 'corporate', title: 'Corporate Travel', icon: Briefcase, desc: 'B2B billing & employee cabs' },
-    { id: 'hotel', title: 'Hotel Pickup', icon: Building2, desc: 'Luxury airport to hotel transfers' },
-    { id: 'mall', title: 'Mall Pickup', icon: ShoppingBag, desc: 'Convenient shopping luggage rides' },
-  ];
 
-  const valueProps = [
-    {
-      icon: Headphones,
-      title: 'Dedicated Ride Coordinator',
-      desc: 'Our team stays connected with you, every step.'
-    },
-    {
-      icon: ShieldCheck,
-      title: 'Verified & Trained Drivers',
-      desc: 'Professional drivers for your safe journey.'
-    },
-    {
-      icon: Navigation,
-      title: 'Live Tracking & Safety',
-      desc: 'Real-time tracking and SOS button for safety.'
-    },
-    {
-      icon: Wallet,
-      title: 'Transparent Pricing',
-      desc: 'No hidden charges, what you see is what you pay.'
-    },
-    {
-      icon: PhoneCall,
-      title: '24x7 Customer Support',
-      desc: 'Call, WhatsApp or Chat - we are always here.'
-    }
-  ];
 
   // Photos live in Frontend/public/vehicles/ — see that folder's README + ATTRIBUTION
   // before swapping any of them out.
-  const vehicles = [
+  const fallbackVehicles = [
     {
       name: 'Auto Rickshaw',
       type: 'Auto',
@@ -184,59 +147,12 @@ const Home = ({ openBookingModal, setActiveTab }) => {
     }
   ];
 
-  // TODO(client): replace with real driver photos + details from the onboarding sheet.
-  // Photos go in Frontend/public/drivers/ (square crop, 400x400 or larger).
-  const drivers = [
-    {
-      name: 'Ramesh Kumar',
-      photo: '/drivers/driver-1.jpg',
-      rating: 4.9,
-      trips: '3,200+ trips',
-      experience: '8 years experience',
-      vehicle: 'Maruti Suzuki Dzire · KA 01 AB 1234',
-      badge: 'Top Driver',
-      city: 'Bengaluru'
-    },
-    {
-      name: 'Suresh Naik',
-      photo: '/drivers/driver-2.jpg',
-      rating: 4.8,
-      trips: '2,100+ trips',
-      experience: '6 years experience',
-      vehicle: 'Toyota Innova Crysta · KA 19 CD 5678',
-      badge: 'Verified',
-      city: 'Mangaluru'
-    },
-    {
-      name: 'Mahesh Patil',
-      photo: '/drivers/driver-3.jpg',
-      rating: 5.0,
-      trips: '1,450+ trips',
-      experience: '5 years experience',
-      vehicle: 'Maruti Suzuki Ertiga · KA 25 EF 9012',
-      badge: 'Top Driver',
-      city: 'Hubballi'
-    },
-    {
-      name: 'Imran Shaikh',
-      photo: '/drivers/driver-4.jpg',
-      rating: 4.9,
-      trips: '2,800+ trips',
-      experience: '10 years experience',
-      vehicle: 'Toyota Fortuner · KA 03 GH 3456',
-      badge: 'Verified',
-      city: 'Bengaluru'
-    }
-  ];
+  // All page content comes from the CMS, falling back to the bundled copy so the
+  // page is never blank while the request is in flight or if it fails.
+  const { services, valueProps, drivers, partners, launchCities, contact } = useLandingContent();
+  const { vehicles } = useVehicleTypes(fallbackVehicles);
 
-  const partners = [
-    { name: 'TAJ Hotels', subtitle: 'HOTELS' },
-    { name: 'THE LEELA', subtitle: 'PALACES HOTELS RESORTS' },
-    { name: 'NOVOTEL', subtitle: 'HOTELS & RESORTS' },
-    { name: 'HYATT REGENCY', subtitle: '' },
-    { name: 'LuLu MALL', subtitle: 'World of Happiness' },
-    { name: 'Kempegowda Int. Airport', subtitle: 'BENGALURU' },
-  ];
+
 
   return (
     <div className="home-page animate-fade-in" ref={pageRef}>
@@ -382,9 +298,6 @@ const Home = ({ openBookingModal, setActiveTab }) => {
               <span className="eyebrow"><span className="eyebrow-num">01</span> What We Move</span>
               <h2 className="section-title" data-reveal-mask><span>Our Services</span></h2>
             </div>
-            <button className="section-link" onClick={() => setActiveTab('services')}>
-              View All Services <ChevronRight size={16} />
-            </button>
           </div>
 
           <div className="services-grid" data-reveal-stagger>
@@ -442,9 +355,6 @@ const Home = ({ openBookingModal, setActiveTab }) => {
               <span className="eyebrow"><span className="eyebrow-num">03</span> The Fleet</span>
               <h2 className="section-title" data-reveal-mask><span>Popular Vehicles</span></h2>
             </div>
-            <button className="section-link" onClick={() => setActiveTab('services')}>
-              View All Vehicles <ChevronRight size={16} />
-            </button>
           </div>
 
           <div className="vehicles-grid snap-row" data-reveal-stagger ref={vehicleRail}>
@@ -538,15 +448,15 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             <div>
               <span className="eyebrow"><span className="eyebrow-num">05</span> Coverage</span>
               <h2 className="section-title" data-reveal-mask><span>Where You&apos;ll Find Us</span></h2>
-              <p className="section-sub-dark">{CONTACT.addressShort}</p>
+              <p className="section-sub-dark">{contact.addressShort}</p>
             </div>
-            <a className="section-link" href={CONTACT.mapsUrl} target="_blank" rel="noreferrer">
+            <a className="section-link" href={contact.mapsUrl} target="_blank" rel="noreferrer">
               Get Directions <ChevronRight size={16} />
             </a>
           </div>
 
           <div className="cities-grid" data-reveal-stagger>
-            {LAUNCH_CITIES.map((c) => (
+            {launchCities.map((c) => (
               <div key={c.name} className="city-card">
                 <div className="city-icon"><MapPin size={20} color="#00BBA9" /></div>
                 <h3>{c.name}</h3>
