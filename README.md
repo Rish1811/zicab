@@ -34,6 +34,18 @@ integrations (Cloudinary, Firebase, Razorpay, PhonePe, SMTP) stay off.
 Keep `PORT=5000` — the frontend defaults its API base to
 `http://localhost:5000/api/v1`, overridable with `VITE_API_BASE_URL`.
 
+After any deploy that changes a schema index, build the indexes:
+
+```bash
+node scripts/ensureIndexes.js
+```
+
+`config/database.js` connects with `autoIndex: false` in production, so Mongoose
+never creates indexes there. Nothing else in the repo did it either, which left
+every declared index missing — dispatch failed with "unable to find index for
+$geoNear query". The script uses `createIndexes()` (adds what is missing) rather
+than `syncIndexes()` (drops anything not in the schema).
+
 Frontend:
 
 ```bash
