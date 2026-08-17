@@ -1,24 +1,35 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Mail, Lock, ArrowRight, Loader2, AlertCircle, KeyRound, CheckCircle2, ArrowLeft, Building2 } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, Loader2, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminService } from '../../services/adminService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 
-const InputField = ({ icon: Icon, type, placeholder, value, onChange, id, ...props }) => (
-  <div className="relative group">
-    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-900 transition-colors">
-      <Icon size={18} strokeWidth={2.5} />
+/**
+ * Admin sign-in.
+ *
+ * Deliberately plain. This previously read as a security-cosplay terminal
+ * ("Terminal Access", "Security Token", "Encrypted Terminal v4.0") set in 900
+ * weight at 10px with 0.4em tracking and 3rem corner radii. It is an internal
+ * login form, so it should look like one.
+ */
+
+const Field = ({ icon: Icon, id, label, ...props }) => (
+  <div className="space-y-1.5">
+    <label htmlFor={id} className="block text-[13px] font-medium text-slate-700">
+      {label}
+    </label>
+    <div className="relative">
+      <Icon
+        size={16}
+        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+      />
+      <input
+        id={id}
+        className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-lg text-[14px] text-slate-900 placeholder:text-slate-400 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 transition"
+        {...props}
+      />
     </div>
-    <input
-      id={id}
-      type={type}
-      placeholder={placeholder}
-      value={value}
-      onChange={onChange}
-      className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-[14px] font-bold text-slate-900 placeholder:text-slate-300 outline-none focus:bg-white focus:border-slate-900 focus:ring-8 focus:ring-slate-900/5 transition-all"
-      {...props}
-    />
   </div>
 );
 
@@ -27,154 +38,200 @@ const AdminLogin = () => {
   const [view, setView] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
+  const [resetEmail, setResetEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const navigate = useNavigate();
 
   const appLogo = settings.general?.logo || settings.customization?.logo;
-  const appName = settings.general?.app_name || 'Appzeto ';
+  const appName = settings.general?.app_name || 'ZI CAB';
 
-  const resetMessages = () => {
+  const switchView = (next) => {
     setError('');
+    setNotice('');
+    setView(next);
   };
 
   const handleLogin = async (e) => {
-    if (e) e.preventDefault();
+    e.preventDefault();
     setIsLoading(true);
-    resetMessages();
+    setError('');
 
     try {
       const response = await adminService.login({ email, password });
       localStorage.setItem('adminToken', response?.token || '');
       localStorage.setItem('adminInfo', JSON.stringify(response?.admin || {}));
-      setTimeout(() => navigate('/admin/dashboard'), 300);
+      navigate('/admin/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Authentication failed.');
+      setError(err.response?.data?.message || err.message || 'Sign in failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // The "forgot password" link used to set a view that was never rendered, so it
+  // did nothing. Both adminService.forgotPassword and the backend route exist.
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+    setNotice('');
+
+    try {
+      await adminService.forgotPassword(resetEmail);
+      setNotice('If that email belongs to an admin account, reset instructions are on their way.');
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Could not send reset instructions.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex flex-col font-sans overflow-hidden">
-      {/* Immersive Decorative Elements */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-10%] right-[-5%] w-[60%] h-[60%] bg-white rounded-full blur-[160px] opacity-60" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-[50%] h-[50%] bg-slate-100 rounded-full blur-[140px] opacity-40" />
-      </div>
-
-      <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <main className="flex-1 flex items-center justify-center px-4 py-12">
         <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-[440px]"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          className="w-full max-w-[380px]"
         >
-          {/* Brand Header */}
-          <div className="flex flex-col items-center text-center mb-12">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
+          <div className="flex flex-col items-center text-center mb-7">
+            <button
+              type="button"
               onClick={() => navigate('/')}
-              className="cursor-pointer mb-8"
+              className="mb-4 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20"
+              aria-label={`${appName} home`}
             >
               {appLogo ? (
-                <div className="bg-white p-4 rounded-[2.5rem] shadow-2xl shadow-slate-200/50">
-                  <img src={appLogo} alt={appName} className="h-12 w-auto object-contain" />
-                </div>
+                <img src={appLogo} alt={appName} className="h-11 w-auto object-contain" />
               ) : (
-                <div className="w-20 h-20 bg-slate-900 rounded-[2.5rem] flex items-center justify-center text-white shadow-2xl shadow-slate-900/20">
-                  <ShieldCheck size={36} strokeWidth={2} />
-                </div>
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+                  <ShieldCheck size={22} />
+                </span>
               )}
-            </motion.div>
-
-            <div className="space-y-2">
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-tight">Terminal Access</h1>
-              <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em]">{appName} Cloud Services</p>
-            </div>
+            </button>
+            <h1 className="text-[22px] font-semibold text-slate-900">
+              {view === 'login' ? 'Sign in' : 'Reset password'}
+            </h1>
+            <p className="mt-1 text-[13px] text-slate-500">
+              {view === 'login' ? `${appName} admin panel` : 'We will email you a reset link'}
+            </p>
           </div>
 
-          {/* Card Container */}
-          <div className="bg-white border border-slate-200 rounded-[3rem] p-10 shadow-2xl shadow-slate-200/40 relative">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
             <AnimatePresence mode="wait">
-              {error && (
+              {(error || notice) && (
                 <motion.div
-                  initial={{ opacity: 0, y: -10 }}
+                  key={error || notice}
+                  initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="mb-8 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600"
+                  exit={{ opacity: 0 }}
+                  className={`mb-5 flex items-start gap-2 rounded-lg border p-3 text-[13px] ${
+                    error
+                      ? 'border-rose-200 bg-rose-50 text-rose-700'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  }`}
+                  role={error ? 'alert' : 'status'}
                 >
-                  <AlertCircle size={18} className="shrink-0" />
-                  <p className="text-[12px] font-bold leading-tight">{error}</p>
+                  {error ? (
+                    <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                  ) : (
+                    <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+                  )}
+                  <p className="leading-snug">{error || notice}</p>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div className="space-y-5">
-                <InputField
-                  id="admin-email"
+            {view === 'login' ? (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <Field
                   icon={Mail}
+                  id="admin-email"
+                  label="Email"
                   type="email"
-                  placeholder="Administrative ID"
+                  autoComplete="username"
+                  placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoFocus
                   required
                 />
-                <div className="space-y-3">
-                  <InputField
-                    id="admin-password"
-                    icon={Lock}
-                    type="password"
-                    placeholder="Security Token"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setView('forgot')}
-                      className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
-                    >
-                      Forgotten Identity?
-                    </button>
-                  </div>
-                </div>
-              </div>
+                <Field
+                  icon={Lock}
+                  id="admin-password"
+                  label="Password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="group w-full py-5 bg-slate-900 text-white rounded-[1.5rem] text-[15px] font-black shadow-2xl shadow-slate-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-              >
-                {isLoading ? (
-                  <Loader2 className="animate-spin" size={20} />
-                ) : (
-                  <>
-                    Authenticate Access
-                    <ArrowRight size={20} className="transition-transform group-hover:translate-x-1" strokeWidth={2.5} />
-                  </>
-                )}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-slate-900 py-2.5 text-[14px] font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {isLoading && <Loader2 className="animate-spin" size={16} />}
+                  {isLoading ? 'Signing in…' : 'Sign in'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => switchView('forgot')}
+                  className="w-full text-center text-[13px] text-slate-500 hover:text-slate-900 transition"
+                >
+                  Forgot password?
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleForgot} className="space-y-4">
+                <Field
+                  icon={Mail}
+                  id="reset-email"
+                  label="Email"
+                  type="email"
+                  autoComplete="username"
+                  placeholder="you@example.com"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  autoFocus
+                  required
+                />
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-slate-900 py-2.5 text-[14px] font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {isLoading && <Loader2 className="animate-spin" size={16} />}
+                  {isLoading ? 'Sending…' : 'Send reset link'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => switchView('login')}
+                  className="w-full flex items-center justify-center gap-1.5 text-[13px] text-slate-500 hover:text-slate-900 transition"
+                >
+                  <ArrowLeft size={14} />
+                  Back to sign in
+                </button>
+              </form>
+            )}
           </div>
 
-          <div className="mt-12 flex flex-col items-center gap-4">
-            <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full border border-slate-200/50">
-              <ShieldCheck size={14} className="text-slate-400" />
-              <span className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">Encrypted Terminal v4.0</span>
-            </div>
-            <p className="text-center text-[11px] text-slate-300 font-bold max-w-[280px]">
-              Authorized personnel only. All access attempts are monitored and logged to security infrastructure.
-            </p>
-          </div>
+          <p className="mt-6 text-center text-[12px] text-slate-400">
+            Authorised access only. Sign-in attempts are logged.
+          </p>
         </motion.div>
       </main>
 
-      <footer className="p-8 text-center relative z-10 border-t border-slate-100 bg-white/50 backdrop-blur-sm">
-        <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">&copy; 2026 {appName} Security Ops</p>
+      <footer className="py-6 text-center text-[12px] text-slate-400">
+        © {new Date().getFullYear()} {appName}
       </footer>
     </div>
   );
