@@ -82,7 +82,12 @@ const AdminLogin = () => {
       await adminService.forgotPassword(resetEmail);
       setNotice('If that email belongs to an admin account, reset instructions are on their way.');
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Could not send reset instructions.');
+      // Deliberately generic. The server surfaces raw transport failures here —
+      // an unconfigured mail host returns "connect ECONNREFUSED 127.0.0.1:587",
+      // which tells a visitor about our infrastructure and nothing useful. The
+      // detail still goes to the console for whoever is debugging.
+      console.error('[admin] password reset failed:', err.response?.data?.message || err.message);
+      setError('Could not send reset instructions right now. Please contact your administrator.');
     } finally {
       setIsLoading(false);
     }
