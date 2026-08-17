@@ -6,12 +6,28 @@ import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
 import { BusSeatHold } from '../../user/models/BusSeatHold.js';
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
-import { getOrLoadCachedValue, invalidateCachedPrefix } from '../../../../utils/cache.js';
+import { getOrLoadCachedValue, invalidateCachedPrefix, invalidateCachedValue } from '../../../../utils/cache.js';
 
 const PUBLIC_BOOTSTRAP_CACHE_TTL_MS = 30_000;
-// getAppModules caches per-query, so writes must clear the whole family or the
-// admin panel re-reads a stale list and an edit looks like it did not save.
+// These three public config caches all have a 30s TTL, and every one of them is
+// derived from data the admin panel edits. Without invalidation a save lands in
+// Mongo but the panel's refetch — and the app bootstrap the mobile clients read —
+// keep serving the old value, so the edit looks like it silently failed.
+//
+// app_bootstrap aggregates BOTH app modules and several general-settings
+// categories, so a write to either has to clear it too. That is why all writers
+// call the same helper rather than clearing just their own key.
 const APP_MODULES_CACHE_PREFIX = 'cache:public:app_modules:';
+const GENERAL_SETTINGS_CACHE_PREFIX = 'cache:public:general_settings:';
+const APP_BOOTSTRAP_CACHE_KEY = 'cache:public:app_bootstrap';
+
+const invalidatePublicConfigCaches = async () => {
+  await Promise.all([
+    invalidateCachedPrefix(APP_MODULES_CACHE_PREFIX),
+    invalidateCachedPrefix(GENERAL_SETTINGS_CACHE_PREFIX),
+    invalidateCachedValue(APP_BOOTSTRAP_CACHE_KEY),
+  ]);
+};
 
 const ok = (res, data, extra = {}) =>
   res.json({ success: true, data, ...extra });
@@ -1480,17 +1496,17 @@ export const getAppModules = asyncHandler(async (req, res) => {
 });
 export const createAppModule = asyncHandler(async (req, res) => {
   const result = await adminService.createAppModule(req.body);
-  await invalidateCachedPrefix(APP_MODULES_CACHE_PREFIX);
+  await invalidatePublicConfigCaches();
   ok(res, result);
 });
 export const updateAppModule = asyncHandler(async (req, res) => {
   const result = await adminService.updateAppModule(req.params.id, req.body);
-  await invalidateCachedPrefix(APP_MODULES_CACHE_PREFIX);
+  await invalidatePublicConfigCaches();
   ok(res, result);
 });
 export const deleteAppModule = asyncHandler(async (req, res) => {
   await adminService.deleteAppModule(req.params.id);
-  await invalidateCachedPrefix(APP_MODULES_CACHE_PREFIX);
+  await invalidatePublicConfigCaches();
   ok(res, { deleted: true });
 });
 
@@ -1661,12 +1677,11 @@ export const getUserHomeManagement = asyncHandler(async (req, res) => {
   const result = await adminService.getGeneralSettings('user-home-management');
   ok(res, result.settings || {});
 });
-export const updateGeneralSettingsCategory = asyncHandler(async (req, res) =>
-  ok(
-    res,
-    await adminService.updateGeneralSettings(req.params.category, req.body),
-  ),
-);
+export const updateGeneralSettingsCategory = asyncHandler(async (req, res) => {
+  const result = await adminService.updateGeneralSettings(req.params.category, req.body);
+  await invalidatePublicConfigCaches();
+  ok(res, result);
+});
 export const getTransportTypes = asyncHandler(async (_req, res) =>
   ok(res, await adminService.listTransportTypes()),
 );
