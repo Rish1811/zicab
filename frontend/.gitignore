@@ -27,3 +27,6 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+# .env.production holds the deployed build config; the pattern above misses it
+.env.production
+.env.development

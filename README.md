@@ -49,8 +49,19 @@ than `syncIndexes()` (drops anything not in the schema).
 Frontend:
 
 ```bash
+cp frontend/.env.production.example frontend/.env.production
+```
+
+```bash
 npm install --prefix frontend && npm run dev --prefix frontend
 ```
+
+Vite compiles every `VITE_*` value into the browser bundle, so only public values
+belong in that file. Web push needs all seven `VITE_FIREBASE_*` vars set at
+**build** time — miss any one and `registerBrowserFcmToken()` returns
+`firebase-web-config-missing` and push silently does nothing. `VITE_FIREBASE_VAPID_KEY`
+is the *public* half of the Web Push key pair; the private half is server-side only
+and the client SDK never needs it.
 
 It runs standalone too. Without the backend the CMS-driven values (app name,
 logo, favicon) fall back to their defaults.
