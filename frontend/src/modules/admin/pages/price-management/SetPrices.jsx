@@ -523,7 +523,7 @@ const SetPrices = ({ mode }) => {
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-3">
-               <h1 className="text-2xl font-bold text-[#1E293B]" style={{ fontFamily: '"Times New Roman", Times, serif' }}>Set Prices</h1>
+               <h1 className="text-2xl font-bold text-[#1E293B]">Set Prices</h1>
                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium tracking-tight">
                   <span className="hover:text-slate-600 transition-colors cursor-pointer" onClick={() => fetchInitialData()}>Set Prices</span>
                   <ChevronRight size={10} className="text-slate-300" />
@@ -795,7 +795,7 @@ const SetPrices = ({ mode }) => {
           >
             {/* Form Header */}
             <div className="flex items-center justify-between border-b border-gray-100 pb-1 mb-2">
-               <h1 className="text-xl font-bold text-[#1E293B]" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{mode === 'edit' ? 'Edit Set Price' : 'Create Set Price'}</h1>
+               <h1 className="text-xl font-bold text-[#1E293B]">{mode === 'edit' ? 'Edit Set Price' : 'Create Set Price'}</h1>
                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
                   <span className="hover:text-slate-600 transition-colors cursor-pointer" onClick={() => navigate('/admin/pricing/set-price')}>Set Prices</span>
                   <ChevronRight size={10} className="text-slate-300" />

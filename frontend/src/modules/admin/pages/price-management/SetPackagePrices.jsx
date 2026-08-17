@@ -70,7 +70,7 @@ const SetPackagePrices = () => {
     <div className="min-h-screen bg-[#F3F4F9] p-4 font-sans">
       <div className="flex flex-col gap-3 border-b border-gray-100 pb-3 mb-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#1E293B]" style={{ fontFamily: '"Times New Roman", Times, serif' }}>Package Pricing</h1>
+          <h1 className="text-2xl font-bold text-[#1E293B]">Package Pricing</h1>
           <p className="mt-1 text-xs text-slate-500">Manage package name, destination, availability, and vehicle-wise pricing in one place.</p>
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium tracking-tight">

@@ -9,8 +9,11 @@
   --admin-text-secondary: #64748B;
   --admin-border: #E5E7EB;
 
-  --font-heading: 'Times New Roman', serif;
-  --font-body: 'Times New Roman', serif;
+  /* Inter, not Times New Roman. A serif across a data-dense admin panel is what
+     made this look unfinished; Inter is designed for UI at small sizes and its
+     tabular figures keep table columns aligned. Already imported above. */
+  --font-heading: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   /* Page content fade-up on load */
   animation: adminFadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
@@ -31,7 +34,33 @@
 .redigo-admin-root,
 .redigo-admin-root * {
   font-family: var(--font-body) !important;
-  font-size: 16px !important;
+}
+
+/* Base size on the root only. This used to be `font-size: 16px !important` on
+   every descendant, which forced body copy, table cells, labels and captions to
+   one size and erased the hierarchy — every heading then had to fight it back
+   with another !important. Setting it once here lets the components' own
+   text-sm/text-xs sizing work as intended. */
+.redigo-admin-root {
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Numbers in tables and metrics line up column to column. */
+.redigo-admin-root table,
+.redigo-admin-root .admin-metric-value,
+.redigo-admin-root [class*='tabular'] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Inter needs slight negative tracking at display sizes or headings look loose. */
+.redigo-admin-root h1,
+.redigo-admin-root h2,
+.redigo-admin-root h3,
+.redigo-admin-root .admin-page-title {
+  letter-spacing: -0.02em;
 }
 
 /* 1. Page Title */

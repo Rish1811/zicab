@@ -1598,7 +1598,7 @@ const AdminLayout = () => {
         <header className="sticky top-0 z-40 flex h-[68px] items-center justify-between border-b border-slate-200 bg-white px-6 shadow-sm">
           <div className="flex flex-1 items-center gap-3">
             <div className="h-4 w-1 rounded-full bg-slate-900" />
-            <h2 className="text-lg font-bold tracking-tight text-slate-900 font-serif">{pageTitle}</h2>
+            <h2 className="text-lg font-bold tracking-tight text-slate-900">{pageTitle}</h2>
           </div>
 
           <div className="flex flex-1 justify-center">

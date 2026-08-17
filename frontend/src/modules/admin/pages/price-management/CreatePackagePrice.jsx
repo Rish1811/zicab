@@ -220,7 +220,7 @@ const CreatePackagePrice = ({ mode = 'create' }) => {
     <div className="min-h-screen bg-[#F8F9FD] p-3 lg:p-4 font-sans">
       <div className="flex flex-col gap-3 border-b border-gray-100 pb-2 mb-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#1E293B]" style={{ fontFamily: '"Times New Roman", Times, serif' }}>{isEdit ? 'Edit Package Pricing' : 'Create Package Pricing'}</h1>
+          <h1 className="text-2xl font-bold text-[#1E293B]">{isEdit ? 'Edit Package Pricing' : 'Create Package Pricing'}</h1>
           <p className="mt-1 text-xs text-slate-500">Use a simple package form and set a different price block for each vehicle.</p>
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium tracking-tight">

@@ -100,7 +100,7 @@ const SurgePricing = () => {
       {/* Header Block from Design System */}
       <div className="mb-4 flex flex-col lg:flex-row lg:items-center justify-between border-b border-gray-100 pb-2">
         <div>
-           <h1 className="text-xl font-bold text-[#1E293B]" style={{ fontFamily: '"Times New Roman", Times, serif' }}>Surge Pricing</h1>
+           <h1 className="text-xl font-bold text-[#1E293B]">Surge Pricing</h1>
            <div className="flex items-center gap-1.5 text-[11px] text-gray-400 mt-1 font-medium">
               <span className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => navigate('/admin/pricing/set-price')}>Surge</span>
               <ChevronRight size={10} />
