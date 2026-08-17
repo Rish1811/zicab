@@ -12,6 +12,25 @@
   /* Inter, not Times New Roman. A serif across a data-dense admin panel is what
      made this look unfinished; Inter is designed for UI at small sizes and its
      tabular figures keep table columns aligned. Already imported above. */
+
+  /* Single type scale for the panel. Sizes are referenced below rather than
+     repeated, so a change here moves the whole panel consistently. */
+  --admin-text-page-title: 22px;
+  --admin-text-h1: 19px;
+  --admin-text-h2: 15px;
+  --admin-text-body: 13.5px;
+  --admin-text-table: 13px;
+  --admin-text-label: 12.5px;
+  --admin-text-small: 12px;
+  --admin-text-micro: 11px;
+  --admin-text-metric: 22px;
+
+  --admin-weight-heading: 600;
+  --admin-weight-medium: 500;
+
+  --admin-radius-card: 16px;
+  --admin-radius-control: 8px;
+
   --font-heading: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
@@ -542,4 +561,114 @@
 .redigo-admin-root header span:not(.notification-dropdown span) {
   font-weight: 600 !important;
   font-size: 18px !important;
+}
+
+/* ==========================================================================
+   Folded in from src/index.css
+   These had no equivalent here. Where the two files disagreed, the value that
+   was already winning in the browser is kept, so this consolidation is not
+   meant to change how anything looks.
+   ========================================================================== */
+
+/* Tailwind's heaviest weight utilities, toned to the panel's heading weight.
+   font-black/extrabold render as shouting on 12-14px UI text. */
+.redigo-admin-root .font-black,
+.redigo-admin-root .font-extrabold {
+  font-weight: var(--admin-weight-heading) !important;
+}
+
+/* Text colour normalisation: components reach for both slate-* and gray-* for
+   the same intent, which read as two different greys side by side. */
+.redigo-admin-root .text-slate-900,
+.redigo-admin-root .text-gray-900 {
+  color: #0f172a !important;
+}
+.redigo-admin-root .text-slate-800,
+.redigo-admin-root .text-gray-800 {
+  color: #1e293b !important;
+}
+.redigo-admin-root .text-slate-700,
+.redigo-admin-root .text-gray-700 {
+  color: #334155 !important;
+}
+.redigo-admin-root .text-slate-500,
+.redigo-admin-root .text-gray-500 {
+  color: #64748b !important;
+}
+.redigo-admin-root .text-slate-400,
+.redigo-admin-root .text-gray-400 {
+  color: #94a3b8 !important;
+}
+
+/* Stops double padding where a page wrapper repeats AdminLayout's own padding. */
+.redigo-admin-root main > div,
+.redigo-admin-root main > section,
+.redigo-admin-root main > form {
+  padding: 0 !important;
+  background-color: transparent !important;
+  min-height: auto !important;
+}
+
+/* Form controls. Unified at --admin-text-body: index.css set the typed inputs to
+   14px via an attribute selector while this file set every other input to
+   13.5px, so a text field and a date field on one row disagreed. */
+.redigo-admin-root input[type='text'],
+.redigo-admin-root input[type='number'],
+.redigo-admin-root input[type='email'],
+.redigo-admin-root input[type='tel'],
+.redigo-admin-root input[type='password'],
+.redigo-admin-root input[type='date'],
+.redigo-admin-root input[type='search'],
+.redigo-admin-root select,
+.redigo-admin-root textarea {
+  border-radius: var(--admin-radius-control) !important;
+  border-color: #cbd5e1 !important;
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  font-size: var(--admin-text-body) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.redigo-admin-root input[type='text']:focus,
+.redigo-admin-root input[type='number']:focus,
+.redigo-admin-root input[type='email']:focus,
+.redigo-admin-root input[type='tel']:focus,
+.redigo-admin-root input[type='password']:focus,
+.redigo-admin-root input[type='date']:focus,
+.redigo-admin-root input[type='search']:focus,
+.redigo-admin-root select:focus,
+.redigo-admin-root textarea:focus {
+  border-color: #4f46e5 !important;
+  outline: 2px solid transparent !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 1px #4f46e5 !important;
+}
+
+/* Card radius: components use rounded-xl, rounded-2xl and rounded-[28px]
+   interchangeably for the same card, so pin them to one value. */
+.redigo-admin-root .rounded-xl,
+.redigo-admin-root .rounded-2xl,
+.redigo-admin-root .rounded-\[28px\] {
+  border-radius: var(--admin-radius-card) !important;
+}
+
+.redigo-admin-root .border-slate-200,
+.redigo-admin-root .border-gray-200 {
+  border-color: #e2e8f0 !important;
+}
+.redigo-admin-root .border-slate-100,
+.redigo-admin-root .border-gray-100 {
+  border-color: #f1f5f9 !important;
+}
+
+/* Tables */
+.redigo-admin-root thead {
+  background-color: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+.redigo-admin-root th {
+  color: #64748b !important;
+}
+.redigo-admin-root td {
+  border-color: #f1f5f9 !important;
 }
