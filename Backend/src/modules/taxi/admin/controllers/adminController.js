@@ -6,9 +6,12 @@ import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
 import { BusSeatHold } from '../../user/models/BusSeatHold.js';
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
-import { getOrLoadCachedValue } from '../../../../utils/cache.js';
+import { getOrLoadCachedValue, invalidateCachedPrefix } from '../../../../utils/cache.js';
 
 const PUBLIC_BOOTSTRAP_CACHE_TTL_MS = 30_000;
+// getAppModules caches per-query, so writes must clear the whole family or the
+// admin panel re-reads a stale list and an edit looks like it did not save.
+const APP_MODULES_CACHE_PREFIX = 'cache:public:app_modules:';
 
 const ok = (res, data, extra = {}) =>
   res.json({ success: true, data, ...extra });
@@ -1475,14 +1478,19 @@ export const getAppModules = asyncHandler(async (req, res) => {
 
   ok(res, data);
 });
-export const createAppModule = asyncHandler(async (req, res) =>
-  ok(res, await adminService.createAppModule(req.body)),
-);
-export const updateAppModule = asyncHandler(async (req, res) =>
-  ok(res, await adminService.updateAppModule(req.params.id, req.body)),
-);
+export const createAppModule = asyncHandler(async (req, res) => {
+  const result = await adminService.createAppModule(req.body);
+  await invalidateCachedPrefix(APP_MODULES_CACHE_PREFIX);
+  ok(res, result);
+});
+export const updateAppModule = asyncHandler(async (req, res) => {
+  const result = await adminService.updateAppModule(req.params.id, req.body);
+  await invalidateCachedPrefix(APP_MODULES_CACHE_PREFIX);
+  ok(res, result);
+});
 export const deleteAppModule = asyncHandler(async (req, res) => {
   await adminService.deleteAppModule(req.params.id);
+  await invalidateCachedPrefix(APP_MODULES_CACHE_PREFIX);
   ok(res, { deleted: true });
 });
 

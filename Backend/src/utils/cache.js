@@ -50,6 +50,38 @@ export const invalidateCachedValue = async (key) => {
   ).catch(() => null);
 };
 
+/**
+ * Drops every key beginning with `prefix`, from both the in-process map and
+ * Redis. Needed because cache keys embed the request query, so one logical list
+ * ("app modules") spans many keys and a single-key invalidation would leave the
+ * others stale.
+ */
+export const invalidateCachedPrefix = async (prefix) => {
+  if (!prefix) return;
+
+  for (const key of [...localCache.keys()]) {
+    if (key.startsWith(prefix)) {
+      localCache.delete(key);
+    }
+  }
+
+  await runRedisCommand(
+    async (client) => {
+      // SCAN rather than KEYS: KEYS blocks the server, and this Redis is shared
+      // with other projects on the box.
+      let cursor = 0;
+      do {
+        const res = await client.scan(cursor, { MATCH: `${prefix}*`, COUNT: 200 });
+        cursor = Number(res.cursor ?? res[0] ?? 0);
+        const found = res.keys ?? res[1] ?? [];
+        if (found.length) await client.del(found);
+      } while (cursor !== 0);
+      return true;
+    },
+    { label: `cache invalidate prefix ${prefix}` },
+  ).catch(() => null);
+};
+
 export const getOrLoadCachedValue = async (
   key,
   {
