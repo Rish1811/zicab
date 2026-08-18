@@ -63,6 +63,12 @@ belong in that file. Web push needs all seven `VITE_FIREBASE_*` vars set at
 is the *public* half of the Web Push key pair; the private half is server-side only
 and the client SDK never needs it.
 
+`VITE_GOOGLE_MAPS_API_KEY` drives the admin panel maps. Beyond setting it, the
+Google Cloud project needs **billing enabled** and the **Maps JavaScript API**
+turned on — without billing the map still renders but greyed out, stamped "For
+development purposes only", with a "This page can't load Google Maps correctly"
+dialog. Restrict the key by HTTP referrer, since it ships in the bundle.
+
 It runs standalone too. Without the backend the CMS-driven values (app name,
 logo, favicon) fall back to their defaults.
 
