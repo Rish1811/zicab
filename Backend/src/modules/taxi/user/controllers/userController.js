@@ -12,7 +12,7 @@ import { BusService } from '../../admin/models/BusService.js';
 import { Driver } from '../../driver/models/Driver.js';
 import { comparePassword, hashPassword, signAccessToken } from '../services/authService.js';
 import { env } from '../../../../config/env.js';
-import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
+import { uploadDataUrl } from '../../../../utils/fileUpload.js';
 import { resolveConfiguredGatewayCredentials } from '../../services/paymentGatewayService.js';
 import { getTransportRideSettings } from '../../services/transportSettingsService.js';
 import {
@@ -1946,9 +1946,9 @@ export const uploadUserProfileImage = async (req, res) => {
     throw new ApiError(413, 'Image is too large');
   }
 
-  const uploadResult = await uploadDataUrlToCloudinary({
+  const uploadResult = await uploadDataUrl({
     dataUrl,
-    folder: `${env.cloudinary.folder}/user-profile`,
+    folder: `${env.uploads.folder}/user-profile`,
     publicIdPrefix: 'user-profile',
   });
 

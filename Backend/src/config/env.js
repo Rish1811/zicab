@@ -66,11 +66,12 @@ export const env = {
     process.env.PHONEPE_CALLBACK_BASE_URL ||
     process.env.PUBLIC_PHONEPE_REDIRECT_URL ||
     '',
-  cloudinary: {
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
-    apiKey: process.env.CLOUDINARY_API_KEY || '',
-    apiSecret: process.env.CLOUDINARY_API_SECRET || '',
-    folder: process.env.CLOUDINARY_FOLDER || 'appzeto-taxi',
+  uploads: {
+    // Files are stored on this server under Backend/uploads and served by
+    // express.static at /uploads. UPLOAD_FOLDER is the default top-level
+    // directory; callers usually pass their own.
+    folder: process.env.UPLOAD_FOLDER || 'zicab',
+    maxBytes: process.env.UPLOAD_MAX_BYTES || '',
   },
   firebase: {
     databaseURL: process.env.FIREBASE_DATABASE_URL || '',

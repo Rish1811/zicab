@@ -6,7 +6,7 @@ import { User } from '../../../user/models/User.js';
 import { Banner } from '../models/Banner.js';
 import { Notification } from '../models/Notification.js';
 import { PromoCode } from '../models/PromoCode.js';
-import { uploadDataUrlToCloudinary } from '../../../../../utils/cloudinaryUpload.js';
+import { uploadDataUrl } from '../../../../../utils/fileUpload.js';
 import { sendPushNotificationToAudience } from '../../../services/pushNotificationService.js';
 
 const nextId = () => new mongoose.Types.ObjectId().toString();
@@ -342,16 +342,16 @@ const normalizeNotificationPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Message is required');
   }
 
-  // If image is a data URL (base64), upload it to Cloudinary
+  // If image is a data URL (base64), store it on this server
   if (image.startsWith('data:')) {
     try {
-      const uploaded = await uploadDataUrlToCloudinary({
+      const uploaded = await uploadDataUrl({
         dataUrl: image,
         publicIdPrefix: 'notification',
       });
       image = uploaded.secureUrl;
     } catch (error) {
-      console.error('Cloudinary upload error:', error);
+      console.error('Image upload error:', error);
       // We don't throw here to allow sending notification even if image upload fails?
       // Actually, it's better to throw so the user knows why it failed.
       throw new ApiError(500, `Failed to upload notification image: ${error.message}`);
@@ -384,16 +384,16 @@ const normalizeBannerPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Banner image is required');
   }
 
-  // If image is a data URL (base64), upload it to Cloudinary
+  // If image is a data URL (base64), store it on this server
   if (image.startsWith('data:')) {
     try {
-      const uploaded = await uploadDataUrlToCloudinary({
+      const uploaded = await uploadDataUrl({
         dataUrl: image,
         publicIdPrefix: 'banner',
       });
       image = uploaded.secureUrl;
     } catch (error) {
-      console.error('Cloudinary upload error:', error);
+      console.error('Image upload error:', error);
       throw new ApiError(500, `Failed to upload banner image: ${error.message}`);
     }
   }

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { env } from '../../../../config/env.js';
 import { normalizePoint, toPoint } from '../../../../utils/geo.js';
-import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
+import { uploadDataUrl } from '../../../../utils/fileUpload.js';
 import { Driver } from '../models/Driver.js';
 import { DriverRegistrationSession } from '../models/DriverRegistrationSession.js';
 import { Owner } from '../../admin/models/Owner.js';
@@ -627,7 +627,7 @@ const uploadRegistrationDocument = async (documentKey, value) => {
     .replace(/\.[^.]+$/, '')
     .replace(/[^a-zA-Z0-9-_]/g, '');
 
-  const uploaded = await uploadDataUrlToCloudinary({
+  const uploaded = await uploadDataUrl({
     dataUrl,
     folder: `${documentKey}/driver-documents`,
     publicIdPrefix: `driver-${documentKey}`,
@@ -664,7 +664,7 @@ const uploadRegistrationDocument = async (documentKey, value) => {
     account_holder_name: accountHolderName,
     beneficiaryName: accountHolderName,
     benificiary_name: accountHolderName,
-    cloudinary: uploaded,
+    upload: uploaded,
   };
 };
 

@@ -1,5 +1,5 @@
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
-import { uploadDataUrlToCloudinary } from '../../../../utils/cloudinaryUpload.js';
+import { uploadDataUrl } from '../../../../utils/fileUpload.js';
 import { env } from '../../../../config/env.js';
 import { getReferralSettings, getReferralTranslationContent } from '../../admin/services/adminService.js';
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
@@ -15,9 +15,9 @@ export const uploadImage = asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: 'Image data is required' });
     }
 
-    const uploadResult = await uploadDataUrlToCloudinary({
+    const uploadResult = await uploadDataUrl({
         dataUrl: image,
-        folder: `${env.cloudinary.folder}/${folder}`,
+        folder: `${env.uploads.folder}/${folder}`,
         publicIdPrefix: `content-${folder}`
     });
 

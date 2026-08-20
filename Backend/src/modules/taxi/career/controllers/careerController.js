@@ -1,7 +1,7 @@
 import { ApiError } from '../../../../utils/ApiError.js';
 import { CareerJob } from '../models/CareerJob.js';
 import { CareerApplication } from '../models/CareerApplication.js';
-import { uploadRawFileToCloudinary } from '../../../../utils/cloudinaryUpload.js';
+import { uploadRawFile } from '../../../../utils/fileUpload.js';
 
 // --- User / Public Handlers ---
 
@@ -70,7 +70,7 @@ export const uploadApplicationFile = async (req, res) => {
     throw new ApiError(400, 'dataUrl is required');
   }
 
-  const uploadResult = await uploadRawFileToCloudinary({
+  const uploadResult = await uploadRawFile({
     dataUrl,
     publicIdPrefix: 'career-resume',
   });
