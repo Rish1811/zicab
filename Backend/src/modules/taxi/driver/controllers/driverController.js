@@ -28,7 +28,7 @@ import { AdminBusinessSetting } from "../../admin/models/AdminBusinessSetting.js
 import { Notification } from "../../admin/promotions/models/Notification.js";
 import { FleetVehicle } from "../../admin/models/FleetVehicle.js";
 import { Zone } from "../models/Zone.js";
-import { uploadDataUrlToCloudinary } from "../../../../utils/cloudinaryUpload.js";
+import { uploadDataUrl } from "../../../../utils/fileUpload.js";
 import {
   comparePassword,
   hashPassword,
@@ -5074,9 +5074,9 @@ export const updateServiceCenterBookingBiometrics = async (req, res) => {
 
       let imageUrl = normalizeBiometricPreviewImage(rawImage);
       if (imageUrl.startsWith("data:image/")) {
-        const uploaded = await uploadDataUrlToCloudinary({
+        const uploaded = await uploadDataUrl({
           dataUrl: imageUrl,
-          folder: `${env.cloudinary.folder}/service-center/booking-${String(booking._id || "").trim()}/thumbs`,
+          folder: `${env.uploads.folder}/service-center/booking-${String(booking._id || "").trim()}/thumbs`,
           publicIdPrefix: `thumb-${String(item?.participantKey || "participant").replace(/[^a-z0-9_-]/gi, "-").toLowerCase()}-${String(item?.thumbCode || "thumb").toLowerCase()}`,
         });
         imageUrl = uploaded.secureUrl;
@@ -9678,7 +9678,7 @@ export const uploadPoolingOnboardingImageRequest = async (req, res) => {
     throw new ApiError(400, "Image data is required");
   }
 
-  const result = await uploadDataUrlToCloudinary({
+  const result = await uploadDataUrl({
     dataUrl: image,
     publicIdPrefix: "pooling-driver-onboarding",
   });
