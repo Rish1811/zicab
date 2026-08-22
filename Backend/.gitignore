@@ -10,3 +10,6 @@ yarn-error.log*
 # local run artifacts
 server.log
 server.pid
+
+# Firebase service account private key - must never be committed
+firebase-service-account.json
