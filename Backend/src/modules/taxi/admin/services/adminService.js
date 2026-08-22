@@ -2680,6 +2680,17 @@ const serializeDriver = (driver) => ({
   deletionRequest: driver.deletionRequest || { status: 'none' },
   documents: driver.documents || {},
   onboarding: driver.onboarding || {},
+  wallet: {
+    balance: Number(driver.wallet?.balance || 0),
+    cash_limit: Number(driver.wallet?.cashLimit ?? 500),
+    cashLimit: Number(driver.wallet?.cashLimit ?? 500),
+    is_blocked: Boolean(driver.wallet?.isBlocked),
+    isBlocked: Boolean(driver.wallet?.isBlocked),
+    total_credits: Number(driver.wallet?.totalCredits || 0),
+    total_debits: Number(driver.wallet?.totalDebits || 0),
+    updatedAt: driver.wallet?.updatedAt || null,
+  },
+  wallet_balance: Number(driver.wallet?.balance || 0),
   createdAt: driver.createdAt,
   updatedAt: driver.updatedAt,
 });
@@ -2708,6 +2719,7 @@ const DRIVER_LIST_SELECT = [
   'isOnRide',
   'onlineSelfie',
   'location',
+  'wallet',
   'approve',
   'status',
   'createdAt',
@@ -2753,6 +2765,17 @@ const serializeDriverListItem = (driver) => ({
   online_selfie_captured_at: driver.onlineSelfie?.capturedAt || null,
   online_selfie_for_date: driver.onlineSelfie?.forDate || '',
   location: driver.location || null,
+  wallet: {
+    balance: Number(driver.wallet?.balance || 0),
+    cash_limit: Number(driver.wallet?.cashLimit ?? 500),
+    cashLimit: Number(driver.wallet?.cashLimit ?? 500),
+    is_blocked: Boolean(driver.wallet?.isBlocked),
+    isBlocked: Boolean(driver.wallet?.isBlocked),
+    total_credits: Number(driver.wallet?.totalCredits || 0),
+    total_debits: Number(driver.wallet?.totalDebits || 0),
+    updatedAt: driver.wallet?.updatedAt || null,
+  },
+  wallet_balance: Number(driver.wallet?.balance || 0),
   latitude: Number(driver.location?.coordinates?.[1] ?? null),
   longitude: Number(driver.location?.coordinates?.[0] ?? null),
   approve: Boolean(driver.approve),
@@ -4841,69 +4864,66 @@ export const rejectDriverWithdrawalRequest = async (requestId) => {
 
 export const adjustDriverWallet = async (id, payload = {}) => {
   const amount = Number(payload.amount || 0);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new ApiError(400, 'Amount must be greater than 0');
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new ApiError(400, 'Amount must be 0 or greater');
   }
 
   const operation = String(payload.operation || 'credit').toLowerCase();
-  if (!['credit', 'debit'].includes(operation)) {
-    throw new ApiError(400, 'Operation must be credit or debit');
+  if (!['credit', 'debit', 'set'].includes(operation)) {
+    throw new ApiError(400, 'Operation must be credit, debit, or set');
   }
 
   const normalizedAmount = Math.round(amount * 100) / 100;
-  const signedAmount = operation === 'credit' ? normalizedAmount : -normalizedAmount;
   const description = payload.description || `Admin adjustment (${operation})`;
-  const session = await mongoose.startSession();
 
-  try {
-    session.startTransaction();
-
-    const driver = await Driver.findById(id).session(session);
-    if (!driver) {
-      throw new ApiError(404, 'Driver not found');
-    }
-
-    const currentBalance = Number(driver.wallet?.balance || 0);
-    const cashLimit = Number(driver.wallet?.cashLimit ?? 500);
-    const nextBalance = Math.round((currentBalance + signedAmount) * 100) / 100;
-    const isBlockedAfter = nextBalance < -cashLimit;
-
-    driver.wallet = driver.wallet || {};
-    driver.wallet.balance = nextBalance;
-    driver.wallet.cashLimit = cashLimit;
-    driver.wallet.isBlocked = isBlockedAfter;
-    driver.markModified('wallet');
-    await driver.save({ session });
-
-    await WalletTransaction.create(
-      [
-        {
-          driverId: id,
-          type: 'adjustment',
-          amount: signedAmount,
-          balanceBefore: currentBalance,
-          balanceAfter: nextBalance,
-          cashLimit,
-          isBlockedAfter,
-          description,
-          metadata: {
-            source: 'admin',
-            operation,
-            rawAmount: normalizedAmount,
-          },
-        },
-      ],
-      { session },
-    );
-
-    await session.commitTransaction();
-    return { balance: Number(nextBalance.toFixed(2)) };
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
+  const driver = await Driver.findById(id);
+  if (!driver) {
+    throw new ApiError(404, 'Driver not found');
   }
+
+  const currentBalance = Number(driver.wallet?.balance || 0);
+  const cashLimit = Number(driver.wallet?.cashLimit ?? 500);
+
+  let nextBalance;
+  let signedAmount;
+  if (operation === 'set') {
+    nextBalance = normalizedAmount;
+    signedAmount = Math.round((nextBalance - currentBalance) * 100) / 100;
+  } else if (operation === 'credit') {
+    signedAmount = normalizedAmount;
+    nextBalance = Math.round((currentBalance + signedAmount) * 100) / 100;
+  } else {
+    signedAmount = -normalizedAmount;
+    nextBalance = Math.round((currentBalance + signedAmount) * 100) / 100;
+  }
+
+  const isBlockedAfter = nextBalance < -cashLimit;
+
+  driver.wallet = driver.wallet || {};
+  driver.wallet.balance = nextBalance;
+  driver.wallet.cashLimit = cashLimit;
+  driver.wallet.isBlocked = isBlockedAfter;
+  driver.wallet.updatedAt = new Date();
+  driver.markModified('wallet');
+  await driver.save();
+
+  await WalletTransaction.create({
+    driverId: id,
+    type: 'adjustment',
+    amount: signedAmount,
+    balanceBefore: currentBalance,
+    balanceAfter: nextBalance,
+    cashLimit,
+    isBlockedAfter,
+    description,
+    metadata: {
+      source: 'admin',
+      operation,
+      rawAmount: normalizedAmount,
+    },
+  });
+
+  return { balance: Number(nextBalance.toFixed(2)), driverId: String(driver._id) };
 };
 
 export const listDriverWalletHistory = async (id) => {
