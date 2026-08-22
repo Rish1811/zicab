@@ -1,9 +1,11 @@
 import mongoose from 'mongoose';
+import { createDefaultRideVoiceSettings } from './defaultRideVoiceSettings.js';
 
 const objectId = () => new mongoose.Types.ObjectId().toString();
 
 export const createDefaultAppSettings = () => ({
   scope: 'default',
+  ride_voice: createDefaultRideVoiceSettings(),
   wallet_setting: {
     minimum_wallet_amount_for_transfer: '100',
     driver_wallet_minimum_amount_to_get_an_order: '100',

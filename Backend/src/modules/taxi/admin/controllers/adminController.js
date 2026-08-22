@@ -1728,3 +1728,18 @@ export const getAdminLandingContent = asyncHandler(async (_req, res) =>
 export const saveAdminLandingContent = asyncHandler(async (req, res) =>
   ok(res, await landingContentService.updateLandingContent(req.body)),
 );
+
+// ── Price hike (surge) ───────────────────────────────────────────────────────
+export const getPriceHikes = asyncHandler(async (req, res) =>
+  ok(res, await adminService.listPriceHikes(req.auth?.admin)),
+);
+export const createPriceHike = asyncHandler(async (req, res) =>
+  ok(res, await adminService.createPriceHike(req.body, req.auth?.admin)),
+);
+export const updatePriceHike = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updatePriceHike(req.params.id, req.body, req.auth?.admin)),
+);
+export const deletePriceHike = asyncHandler(async (req, res) => {
+  await adminService.deletePriceHike(req.params.id, req.auth?.admin);
+  ok(res, { deleted: true });
+});

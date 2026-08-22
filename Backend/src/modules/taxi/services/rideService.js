@@ -1552,87 +1552,109 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
 };
 
 export const acceptRideAssignment = async ({ rideId, driverId }) => {
-  let lastError = null;
+  // Written without a transaction on purpose.
+  //
+  // This deployment runs a standalone mongod, which rejects transactions
+  // outright ("Transaction numbers are only allowed on a replica set member or
+  // mongos") — so the previous version could never accept a ride here at all.
+  //
+  // The atomicity that actually matters is narrow: exactly one driver may win a
+  // ride, and one driver may hold only one ride. Both are single-document
+  // conditions, and a conditional findOneAndUpdate is atomic on a single
+  // document without any transaction. The validations below are ordinary reads
+  // because re-reading them inside a transaction bought nothing the two claims
+  // below do not already guarantee.
+  const ride = await Ride.findOne({
+    _id: rideId,
+    status: RIDE_STATUS.SEARCHING,
+    driverId: null,
+  });
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const session = await mongoose.startSession();
-
-    try {
-      session.startTransaction();
-
-      const ride = await Ride.findOne({
-        _id: rideId,
-        status: RIDE_STATUS.SEARCHING,
-        driverId: null,
-      }).session(session);
-
-      if (!ride) {
-        throw new ApiError(409, 'Ride is no longer available for acceptance');
-      }
-
-      if (ride.bookingMode === 'bidding') {
-        throw new ApiError(409, 'Bidding rides must be won through bid acceptance');
-      }
-
-      const driverVehicleFilter = await buildDriverVehicleAcceptFilter(ride);
-      const driver = await Driver.findOne({
-        _id: driverId,
-        isOnline: true,
-        isOnRide: false,
-        'wallet.isBlocked': { $ne: true },
-        ...driverVehicleFilter,
-      }).session(session);
-
-      if (!driver) {
-        throw new ApiError(409, 'Driver is unavailable to accept this ride');
-      }
-
-      const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides([driverId], { session });
-      if (blockedDriverIds.has(String(driverId))) {
-        throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
-      }
-
-      const conflictingScheduledRide = await findDriverConflictingScheduledRide({
-        driverId,
-        ride,
-        excludeRideId: ride._id,
-        session,
-      });
-      if (conflictingScheduledRide) {
-        throw new ApiError(409, 'Driver already has another scheduled trip in a similar time range');
-      }
-
-      await ensureDriverWalletCanAcceptRide(driver, { session });
-
-      ride.driverId = driver._id;
-      ride.status = RIDE_STATUS.ACCEPTED;
-      ride.liveStatus = RIDE_LIVE_STATUS.ACCEPTED;
-      ride.acceptedAt = new Date();
-      driver.isOnRide = !isRideScheduledForFuture(ride);
-
-      await ride.save({ session });
-      await driver.save({ session });
-      await session.commitTransaction();
-      await syncDeliveryWithRide(ride);
-
-      return ride;
-    } catch (error) {
-      lastError = error;
-      await session.abortTransaction();
-
-      const isTransient =
-        typeof error?.hasErrorLabel === 'function' &&
-        (error.hasErrorLabel('TransientTransactionError') || error.hasErrorLabel('UnknownTransactionCommitResult'));
-
-      if (!isTransient || attempt === 2) {
-        throw error;
-      }
-    } finally {
-      session.endSession();
-    }
+  if (!ride) {
+    throw new ApiError(409, 'Ride is no longer available for acceptance');
   }
 
-  throw lastError || new ApiError(500, 'Failed to accept ride');
+  if (ride.bookingMode === 'bidding') {
+    throw new ApiError(409, 'Bidding rides must be won through bid acceptance');
+  }
+
+  const driverVehicleFilter = await buildDriverVehicleAcceptFilter(ride);
+  const driverFilter = {
+    _id: driverId,
+    isOnline: true,
+    isOnRide: false,
+    'wallet.isBlocked': { $ne: true },
+    ...driverVehicleFilter,
+  };
+
+  const driver = await Driver.findOne(driverFilter);
+
+  if (!driver) {
+    throw new ApiError(409, 'Driver is unavailable to accept this ride');
+  }
+
+  const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides([driverId]);
+  if (blockedDriverIds.has(String(driverId))) {
+    throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
+  }
+
+  const conflictingScheduledRide = await findDriverConflictingScheduledRide({
+    driverId,
+    ride,
+    excludeRideId: ride._id,
+  });
+  if (conflictingScheduledRide) {
+    throw new ApiError(409, 'Driver already has another scheduled trip in a similar time range');
+  }
+
+  await ensureDriverWalletCanAcceptRide(driver);
+
+  // A trip booked for later does not occupy the driver now — they keep taking
+  // rides until it is due.
+  const occupyDriver = !isRideScheduledForFuture(ride);
+
+  // Claim the driver first. The filter still requires isOnRide:false, so two
+  // rides landing on the same driver at once cannot both succeed.
+  const claimedDriver = await Driver.findOneAndUpdate(
+    driverFilter,
+    { $set: { isOnRide: occupyDriver } },
+    { new: true },
+  );
+
+  if (!claimedDriver) {
+    throw new ApiError(409, 'Driver is unavailable to accept this ride');
+  }
+
+  // Then claim the ride. Same idea: the filter pins it to an unassigned,
+  // still-searching ride, so the second driver to arrive gets no document back.
+  const acceptedRide = await Ride.findOneAndUpdate(
+    { _id: rideId, status: RIDE_STATUS.SEARCHING, driverId: null },
+    {
+      $set: {
+        driverId: claimedDriver._id,
+        status: RIDE_STATUS.ACCEPTED,
+        liveStatus: RIDE_LIVE_STATUS.ACCEPTED,
+        acceptedAt: new Date(),
+      },
+    },
+    { new: true },
+  );
+
+  if (!acceptedRide) {
+    // Someone else won the race between the two claims. Release this driver so
+    // they keep receiving offers instead of being stuck marked as on a trip.
+    if (occupyDriver) {
+      await Driver.updateOne(
+        { _id: claimedDriver._id, isOnRide: true },
+        { $set: { isOnRide: false } },
+      ).catch(() => null);
+    }
+    throw new ApiError(409, 'Ride is no longer available for acceptance');
+  }
+
+  await syncDeliveryWithRide(acceptedRide);
+
+  return acceptedRide;
 };
 
 const rideStatusConfig = {
