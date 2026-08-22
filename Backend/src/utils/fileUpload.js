@@ -2,18 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 import { env } from '../config/env.js';
 import { ApiError } from './ApiError.js';
-
-/**
- * Stores uploads on the server's own disk under Backend/uploads, which app.js
- * already exposes via express.static at /uploads.
- *
- * This replaces a Cloudinary client whose credentials were never configured, so
- * every upload in the app failed with "Cloudinary credentials are not
- * configured". The public contract (secureUrl / publicId / format) is unchanged
- * so callers did not have to move.
- */
 
 const UPLOAD_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -24,8 +15,6 @@ const DATA_URL_PATTERN = /^data:([^;]+);base64,(.+)$/;
 
 const MAX_UPLOAD_BYTES = Number(env.uploads.maxBytes) || 15 * 1024 * 1024;
 
-// Extension is what express.static derives Content-Type from, so the mime type
-// a client claims is never trusted as a file extension directly.
 const IMAGE_EXTENSIONS = {
   'image/jpeg': 'jpg',
   'image/jpg': 'jpg',
@@ -36,8 +25,6 @@ const IMAGE_EXTENSIONS = {
   'image/heif': 'heif',
 };
 
-// Deliberately excludes svg and anything html-ish: these are served from our own
-// domain, and a stored .svg or .html is a stored-XSS vector.
 const RAW_EXTENSIONS = {
   ...IMAGE_EXTENSIONS,
   'application/pdf': 'pdf',
@@ -74,12 +61,6 @@ const parseDataUrl = (dataUrl, allowedExtensions) => {
   return { mimeType, extension, buffer };
 };
 
-/**
- * One path segment, stripped of anything that could escape the upload root.
- * Callers pass request-supplied values here — a driver's original filename
- * reaches publicIdSuffix, and commonController takes folder straight off the
- * request body — so this runs on every segment, not just suspicious ones.
- */
 export const safeSegment = (value, fallback = '') =>
   String(value ?? '')
     .toLowerCase()
@@ -101,23 +82,35 @@ const writeUpload = async ({ buffer, extension, folder, publicIdPrefix, publicId
   const prefix = safeSegment(publicIdPrefix, 'file');
   const suffix = safeSegment(publicIdSuffix);
 
-  // Random component, not just a timestamp: two uploads in the same millisecond
-  // would otherwise overwrite each other.
   const name = [prefix, Date.now(), crypto.randomBytes(6).toString('hex'), suffix]
     .filter(Boolean)
     .join('-');
 
-  const relativePath = `${cleanFolder}/${name}.${extension}`;
+  let finalBuffer = buffer;
+  let finalExtension = extension;
+
+  // Convert raster images to compressed WebP automatically for fast delivery
+  if (['jpg', 'jpeg', 'png', 'heic', 'heif'].includes(extension)) {
+    try {
+      finalBuffer = await sharp(buffer)
+        .webp({ quality: 82, effort: 4 })
+        .toBuffer();
+      finalExtension = 'webp';
+    } catch (e) {
+      finalBuffer = buffer;
+      finalExtension = extension;
+    }
+  }
+
+  const relativePath = `${cleanFolder}/${name}.${finalExtension}`;
   const absolutePath = path.resolve(UPLOAD_ROOT, relativePath);
 
-  // Defence in depth. The sanitisers above should make this unreachable, but a
-  // traversal here would write anywhere the process can reach.
   if (absolutePath !== UPLOAD_ROOT && !absolutePath.startsWith(UPLOAD_ROOT + path.sep)) {
     throw new ApiError(400, 'Invalid upload path');
   }
 
   await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-  await fs.writeFile(absolutePath, buffer);
+  await fs.writeFile(absolutePath, finalBuffer);
 
   const base = String(env.publicBackendUrl || '').replace(/\/+$/, '');
   const urlPath = `/uploads/${relativePath}`;
@@ -125,8 +118,8 @@ const writeUpload = async ({ buffer, extension, folder, publicIdPrefix, publicId
   return {
     secureUrl: base ? `${base}${urlPath}` : urlPath,
     publicId: `${cleanFolder}/${name}`,
-    format: extension,
-    bytes: buffer.length,
+    format: finalExtension,
+    bytes: finalBuffer.length,
     storedPath: absolutePath,
   };
 };
