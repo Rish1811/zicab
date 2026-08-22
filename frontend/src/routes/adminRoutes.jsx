@@ -116,7 +116,9 @@ import {
   AdminSupportTickets,
   AdminSupportTicketTitle,
   AdminSurgePricing,
+  AdminPriceHike,
   AdminTipSettings,
+  AdminRideVoiceSettings,
   AdminTransportRideSettings,
   AdminTrips,
   AdminUserBulkUpload,
@@ -360,6 +362,7 @@ const adminRoutes = (
         <Route path="package-pricing/edit/:packageId" element={<AdminCreatePackagePrice mode="edit" />} />
         <Route path="set-price/incentive/:id" element={<AdminDriverIncentive />} />
         <Route path="set-price/surge/:id" element={<AdminSurgePricing />} />
+        <Route path="price-hike" element={<AdminPriceHike />} />
         <Route path="goods-types" element={<AdminGoodsTypes />} />
         <Route path="goods-types/create" element={<AdminGoodsTypes mode="create" />} />
         <Route path="goods-types/edit/:id" element={<AdminGoodsTypes mode="edit" />} />
@@ -392,6 +395,7 @@ const adminRoutes = (
 
       <Route path="settings/app/wallet" element={<AdminWalletSettings />} />
       <Route path="settings/app/tip" element={<AdminTipSettings />} />
+      <Route path="settings/app/ride-voice" element={<AdminRideVoiceSettings />} />
       <Route path="settings/app/country" element={<AdminCountryManagement />} />
       <Route path="settings/app/onboard" element={<AdminOnboardingScreens />} />
 

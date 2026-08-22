@@ -182,6 +182,7 @@ export const AdminSetPackagePrices = lazy(() => import('../modules/admin/pages/p
 export const AdminCreatePackagePrice = lazy(() => import('../modules/admin/pages/price-management/CreatePackagePrice'));
 export const AdminDriverIncentive = lazy(() => import('../modules/admin/pages/price-management/DriverIncentive'));
 export const AdminSurgePricing = lazy(() => import('../modules/admin/pages/price-management/SurgePricing'));
+export const AdminPriceHike = lazy(() => import('../modules/admin/pages/price-management/PriceHike'));
 export const AdminVehicleType = lazy(() => import('../modules/admin/pages/price-management/VehicleType'));
 export const AdminRentalVehicleTypes = lazy(() => import('../modules/admin/pages/price-management/RentalVehicleTypes'));
 export const AdminRentalCommissionManager = lazy(() => import('../modules/admin/pages/price-management/RentalCommissionManager'));
@@ -236,6 +237,7 @@ export const AdminTransportRideSettings = lazy(() => import('../modules/admin/pa
 export const AdminBidRideSettings = lazy(() => import('../modules/admin/pages/settings/BidRideSettings'));
 export const AdminWalletSettings = lazy(() => import('../modules/admin/pages/settings/WalletSettings'));
 export const AdminTipSettings = lazy(() => import('../modules/admin/pages/settings/TipSettings'));
+export const AdminRideVoiceSettings = lazy(() => import('../modules/admin/pages/settings/RideVoiceSettings'));
 export const AdminAppModules = lazy(() => import('../modules/admin/pages/settings/AppModules'));
 export const AdminOnboardingScreens = lazy(() => import('../modules/admin/pages/settings/OnboardingScreens'));
 export const AdminPaymentGateways = lazy(() => import('../modules/admin/pages/settings/PaymentGateways'));
