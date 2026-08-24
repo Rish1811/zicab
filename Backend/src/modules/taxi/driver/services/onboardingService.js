@@ -46,7 +46,11 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const VEHICLE_NUMBER_PATTERNS = [
   /^[A-Z]{2}\d{1,2}[A-Z]{1,5}\d{4}$/,
 ];
-const ALLOWED_SERVICE_CATEGORIES = ['taxi', 'outstation', 'delivery', 'pooling'];
+// 'airport' lets a driver opt into the Zi Airport module specifically. Anything
+// not on this list is silently dropped by `normalizeServiceCategories`, so a
+// category the app offers but this array omits would look selected to the
+// driver and then vanish on save.
+const ALLOWED_SERVICE_CATEGORIES = ['taxi', 'outstation', 'delivery', 'pooling', 'airport'];
 
 const VEHICLE_TYPE_MAP = {
   v1: 'bike',
@@ -123,6 +127,10 @@ const getPrimaryRegisterFor = (serviceCategories = [], fallback = 'taxi') => {
 
   if (normalized.includes('taxi')) return 'taxi';
   if (normalized.includes('outstation')) return 'outstation';
+  // An airport-only driver still runs taxi trips, just sourced from one module,
+  // so they register as a taxi driver rather than a category dispatch has never
+  // heard of.
+  if (normalized.includes('airport')) return 'taxi';
   if (normalized.includes('delivery')) return 'delivery';
   if (normalized.includes('pooling')) return 'pooling';
 

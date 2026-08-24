@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
+import { getPendingRideOffers } from "../controllers/rideOfferController.js";
+import { getDriverHeatmap } from "../controllers/heatmapController.js";
 import {
   loginRateLimit,
   otpSendRateLimit,
@@ -154,6 +156,21 @@ driverRouter.post(
 driverRouter.post(
   "/pooling/onboarding/upload-image",
   asyncHandler(uploadPoolingOnboardingImageRequest),
+);
+// Offers dispatched to this driver that the socket may have missed. Polled by
+// the app on reconnect and on every `ride_request` push, so a dropped socket
+// no longer means a lost ride.
+driverRouter.get(
+  "/ride-offers",
+  authenticate(["driver"]),
+  asyncHandler(getPendingRideOffers),
+);
+// Aggregated ride demand around the driver. Geography and counts only — no
+// rider and no other driver's position ever appears in the response.
+driverRouter.get(
+  "/heatmap",
+  authenticate(["driver"]),
+  asyncHandler(getDriverHeatmap),
 );
 driverRouter.get(
   "/me",

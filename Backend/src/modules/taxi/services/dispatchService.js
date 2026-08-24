@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { zoneIdForCoordinates } from '../heatmap/heatmapService.js';
 import mongoose from 'mongoose';
 import { runRedisCommand } from '../../../infrastructure/redis/redisClient.js';
 import { Ride } from '../user/models/Ride.js';
@@ -33,6 +34,45 @@ const DISPATCH_RECOVERY_INTERVAL_MS = 30_000;
 const LATE_DRIVER_NOTIFICATION_COOLDOWN_MS = 10_000;
 
 const roundMoney = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+/// Straight-line metres between two GeoJSON `[lng, lat]` pairs.
+///
+/// Good enough for the "x km away" line on an offer card — the driver is being
+/// told roughly how far the pickup is, not given a route.
+const distanceBetweenCoordsMeters = (from, to) => {
+  if (!Array.isArray(from) || !Array.isArray(to) || from.length < 2 || to.length < 2) {
+    return null;
+  }
+
+  const [fromLng, fromLat] = from.map(Number);
+  const [toLng, toLat] = to.map(Number);
+  if ([fromLng, fromLat, toLng, toLat].some((value) => !Number.isFinite(value))) {
+    return null;
+  }
+
+  const EARTH_RADIUS_M = 6371000;
+  const toRadians = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRadians(toLat - fromLat);
+  const dLng = toRadians(toLng - fromLng);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRadians(fromLat)) * Math.cos(toRadians(toLat)) * Math.sin(dLng / 2) ** 2;
+
+  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+/// Empty rather than "0.0" when unknown, so the card can hide the line instead
+/// of claiming the pickup is zero kilometres away.
+const formatOfferKm = (meters) => {
+  const value = Number(meters);
+  if (!Number.isFinite(value) || value < 0) return '';
+  return (value / 1000).toFixed(1);
+};
+
+const formatOfferFare = (fare) => {
+  const value = Number(fare);
+  if (!Number.isFinite(value)) return '';
+  return String(Math.round(value));
+};
 const getDispatchLeaseKey = (rideId) => `dispatch:lease:${String(rideId)}`;
 
 const renewDispatchLease = async (rideId) => {
@@ -444,6 +484,28 @@ export const getUserRoom = (userId) => `user:${userId}`;
 export const getDriverRoom = (driverId) => `driver:${driverId}`;
 export const getAdminRoom = () => 'admin:broadcast';
 
+/// One shared room for every online driver watching the demand map.
+///
+/// Deliberately not per-driver: a zone changing is the same fact for everyone,
+/// and fanning out a tailored payload per driver would mean one query per
+/// online driver every time a ride is booked. Drivers ignore zones outside the
+/// area they are looking at.
+export const getHeatmapRoom = () => 'heatmap:drivers';
+
+/// Tells watching drivers that one zone's demand moved.
+///
+/// Carries the zone id only. The app refetches its own visible area, which
+/// keeps the payload tiny and — more importantly — keeps each driver's
+/// high/medium/low classification relative to *their* surroundings rather than
+/// to whatever the server last computed for someone else.
+export const notifyHeatmapZoneChanged = (zoneId) => {
+  if (!zoneId) return;
+  emitToRoom(getHeatmapRoom(), 'heatmap:update', {
+    zoneId: String(zoneId),
+    at: new Date().toISOString(),
+  });
+};
+
 export const setSocketServer = (io) => {
   ioInstance = io;
 };
@@ -467,6 +529,9 @@ export const addSocketSubscriptions = (socket, { role, entityId }) => {
 
   if (role === 'driver') {
     socket.join(getDriverRoom(entityId));
+    // Every online driver watches the same demand feed; the app decides what is
+    // on screen.
+    socket.join(getHeatmapRoom());
   }
 };
 
@@ -682,6 +747,10 @@ const closeDriverRequestWindow = (rideId, driverIds = []) => {
       reason: 'search-window-expired',
     });
   }
+
+  // The socket only reaches a driver whose app is awake; the push is what takes
+  // the native card down on a phone sitting in a pocket.
+  sendRideOfferClosedPush(safeDriverIds, rideId);
 };
 
 const emitRideRequestToDrivers = async ({
@@ -754,20 +823,72 @@ const emitRideRequestToDrivers = async ({
     });
   }
 
+  // Sent per driver, not as one multicast: the card shows how far *this*
+  // driver is from the pickup, which differs for each of them.
+  for (const driver of targetDrivers) {
+    sendPushNotificationToEntities({
+      driverIds: [String(driver._id)],
+      title: ride.serviceType === 'parcel' ? 'New delivery request' : 'New ride request',
+      body: ride.pickupAddress
+        ? `Pickup: ${ride.pickupAddress}`
+        : 'A new booking is waiting for your response.',
+      // Data-only. A `notification` block would be swallowed by the system tray
+      // while the driver's app is backgrounded, and the native full-screen card
+      // would never post — which is the whole point of this push.
+      dataOnly: true,
+      data: {
+        type: 'ride_request',
+        rideId: String(ride._id),
+        serviceType: ride.serviceType || 'ride',
+        userId: String(ride.userId?._id || ride.userId || ''),
+        // Everything below is what the native card renders. It has to be
+        // drawable with the app killed and no network, so anything missing here
+        // simply cannot be shown.
+        fare: formatOfferFare(ride.fare),
+        riderName: ride.userId?.name || 'Customer',
+        pickupAddress: ride.pickupAddress || '',
+        dropAddress: ride.dropAddress || '',
+        pickupDistanceKm: formatOfferKm(
+          distanceBetweenCoordsMeters(
+            driver?.location?.coordinates,
+            ride.pickupLocation?.coordinates,
+          ),
+        ),
+        tripDistanceKm: formatOfferKm(ride.estimatedDistanceMeters),
+        vehicleIconType: ride.vehicleIconType || '',
+        vehicleLabel: ride.serviceType === 'parcel' ? 'Parcel' : 'Ride',
+        expiresInSeconds: String(dispatchConfig.retryWindowSeconds),
+      },
+    }).catch((error) => {
+      console.error('Failed to send driver ride-request push notification', error);
+    });
+  }
+};
+
+/// Tells a driver's phone to take the offer card down.
+///
+/// Without this the native card outlives the offer: a ride cancelled, taken by
+/// someone else, or simply expired leaves a full-screen card on a parked
+/// driver's phone with a countdown that has already run out. The socket event
+/// only reaches an app that is awake, which is exactly the case the card exists
+/// to cover.
+export const sendRideOfferClosedPush = (driverIds = [], rideId) => {
+  const ids = [...new Set((driverIds || []).map((id) => String(id || '')).filter(Boolean))];
+  if (!ids.length || !rideId) {
+    return;
+  }
+
   sendPushNotificationToEntities({
-    driverIds: targetDrivers.map((driver) => String(driver._id)),
-    title: ride.serviceType === 'parcel' ? 'New delivery request' : 'New ride request',
-    body: ride.pickupAddress
-      ? `Pickup: ${ride.pickupAddress}`
-      : 'A new booking is waiting for your response.',
+    driverIds: ids,
+    title: 'Ride request closed',
+    body: 'This booking is no longer available.',
+    dataOnly: true,
     data: {
-      type: 'ride_request',
-      rideId: String(ride._id),
-      serviceType: ride.serviceType || 'ride',
-      userId: String(ride.userId?._id || ride.userId || ''),
+      type: 'ride_request_closed',
+      rideId: String(rideId),
     },
   }).catch((error) => {
-    console.error('Failed to send driver ride-request push notification', error);
+    console.error('Failed to send ride-request-closed push notification', error);
   });
 };
 
@@ -781,6 +902,15 @@ export const markDriverRejectedFromDispatch = async (rideId, driverId) => {
 
   saveDispatchState(rideId, { rejectedDriverIds });
   await persistDispatchTrackingProgress({ rideId, rejectedDriverIds: [String(driverId)] });
+};
+
+/// Resolves a ride's pickup to a zone and tells watching drivers it moved.
+const publishHeatmapChangeFor = async (ride) => {
+  const coords = ride?.pickupLocation?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) return;
+
+  const zoneId = await zoneIdForCoordinates(Number(coords[1]), Number(coords[0]));
+  notifyHeatmapZoneChanged(zoneId);
 };
 
 const closeRideAsUnmatched = async (rideId) => {
@@ -798,6 +928,8 @@ const closeRideAsUnmatched = async (rideId) => {
   if (!ride) {
     return;
   }
+
+  publishHeatmapChangeFor(ride).catch(() => null);
 
   if (ride.deliveryId) {
     await Delivery.findByIdAndUpdate(ride.deliveryId, {
@@ -826,6 +958,8 @@ const closeRideAsUnmatched = async (rideId) => {
       reason: 'unmatched',
     });
   }
+
+  sendRideOfferClosedPush(dispatchState.notifiedDriverIds, ride._id);
 
   emitToRoom(getRideRoom(ride._id), SOCKET_EVENTS.RIDE_STATUS_UPDATED, {
     rideId: String(ride._id),
@@ -896,61 +1030,83 @@ export const cancelRideByAdmin = async (rideId) => {
 export const cancelRideByUser = async ({ rideId, userId }) => {
   const dispatchState = getDispatchState(rideId);
   stopDispatchFlow(rideId, { releaseLease: false });
-  const session = await mongoose.startSession();
-  let ride = null;
+
+  // Written without a transaction on purpose: this deployment runs a standalone
+  // mongod, which rejects them outright ("Transaction numbers are only allowed
+  // on a replica set member or mongos"), so the previous version could not
+  // cancel a ride at all.
+  //
+  // The atomicity that matters is that a ride is cancelled exactly once — a
+  // second cancel must not settle the fee twice. That is a single-document
+  // condition, and a conditional findOneAndUpdate provides it without a
+  // transaction: whichever request flips the ride first wins, and every later
+  // one finds nothing left to flip.
+  const existing = await Ride.findOne({ _id: rideId, userId });
+
+  if (!existing) {
+    stopDispatchFlow(rideId);
+    return null;
+  }
+
+  if (existing.status === RIDE_STATUS.COMPLETED || existing.liveStatus === RIDE_LIVE_STATUS.COMPLETED) {
+    stopDispatchFlow(rideId);
+    throw new Error('Completed rides cannot be cancelled');
+  }
+
+  if (existing.status === RIDE_STATUS.CANCELLED || existing.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
+    stopDispatchFlow(rideId);
+    return existing;
+  }
+
+  const cancelUpdate = {
+    status: RIDE_STATUS.CANCELLED,
+    liveStatus: RIDE_LIVE_STATUS.CANCELLED,
+  };
+  if (existing.bookingMode === 'bidding') {
+    cancelUpdate.biddingStatus = 'cancelled';
+  }
+
+  let ride = await Ride.findOneAndUpdate(
+    {
+      _id: rideId,
+      userId,
+      status: { $nin: [RIDE_STATUS.CANCELLED, RIDE_STATUS.COMPLETED] },
+      liveStatus: { $nin: [RIDE_LIVE_STATUS.CANCELLED, RIDE_LIVE_STATUS.COMPLETED] },
+    },
+    { $set: cancelUpdate },
+    { new: true },
+  );
+
+  if (!ride) {
+    // Cancelled or completed between the read above and this write.
+    stopDispatchFlow(rideId);
+    return Ride.findOne({ _id: rideId, userId });
+  }
+
+  // Settled after the flip rather than before it, so the fee can only follow a
+  // cancellation that actually took. The wallet adjustments are keyed by a
+  // per-ride reference, so a retry cannot double-charge either way.
   let cancellationSettlement = null;
-
   try {
-    session.startTransaction();
+    cancellationSettlement = await settleUserCancellationFee(ride);
+  } catch (error) {
+    // A fee that cannot be settled must not leave the rider stuck in a ride
+    // they already cancelled.
+    console.error('Could not settle the rider cancellation fee', error);
+  }
 
-    ride = await Ride.findOne({ _id: rideId, userId }).session(session);
-
-    if (!ride) {
-      await session.abortTransaction();
-      stopDispatchFlow(rideId);
-      return null;
-    }
-
-    if (ride.status === RIDE_STATUS.COMPLETED || ride.liveStatus === RIDE_LIVE_STATUS.COMPLETED) {
-      throw new Error('Completed rides cannot be cancelled');
-    }
-
-    if (ride.status === RIDE_STATUS.CANCELLED || ride.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
-      await session.commitTransaction();
-      stopDispatchFlow(rideId);
-      return ride;
-    }
-
-    cancellationSettlement = await settleUserCancellationFee(ride, session);
-
-    ride.status = RIDE_STATUS.CANCELLED;
-    ride.liveStatus = RIDE_LIVE_STATUS.CANCELLED;
-    if (ride.bookingMode === 'bidding') {
-      ride.biddingStatus = 'cancelled';
-    }
-    await ride.save({ session });
-
-    if (ride.deliveryId) {
-      await Delivery.findByIdAndUpdate(ride.deliveryId, {
+  await Promise.all([
+    ride.deliveryId
+      ? Delivery.findByIdAndUpdate(ride.deliveryId, {
         driverId: ride.driverId || null,
         status: ride.status,
         liveStatus: ride.liveStatus,
-      }, { session });
-    }
+      })
+      : Promise.resolve(),
+    User.findByIdAndUpdate(ride.userId, { currentRideId: null }),
+    ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }) : Promise.resolve(),
+  ]);
 
-    await Promise.all([
-      User.findByIdAndUpdate(ride.userId, { currentRideId: null }, { session }),
-      ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }, { session }) : Promise.resolve(),
-    ]);
-
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    stopDispatchFlow(rideId);
-    throw error;
-  } finally {
-    session.endSession();
-  }
   await persistDispatchTrackingProgress({ rideId, reset: true }).catch(() => null);
 
   emitToRoom(getUserRoom(ride.userId), 'rideCancelled', {
@@ -974,6 +1130,8 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
       message: 'User cancelled the ride.',
     });
   }
+
+  sendRideOfferClosedPush(dispatchState.notifiedDriverIds, ride._id);
 
   emitToRoom(getRideRoom(ride._id), 'rideCancelled', {
     rideId: String(ride._id),
@@ -1013,68 +1171,86 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
 export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
   const dispatchState = getDispatchState(rideId);
   stopDispatchFlow(rideId, { releaseLease: false });
-  const session = await mongoose.startSession();
-  let ride = null;
+
+  // Written without a transaction on purpose: this deployment runs a standalone
+  // mongod, which rejects them outright ("Transaction numbers are only allowed
+  // on a replica set member or mongos"), so the previous version could not
+  // cancel a ride at all.
+  //
+  // The atomicity that matters is that a ride is cancelled exactly once — a
+  // second cancel must not settle the fee twice. That is a single-document
+  // condition, and a conditional findOneAndUpdate provides it without a
+  // transaction: whichever request flips the ride first wins, and every later
+  // one finds nothing left to flip.
+  const existing = await Ride.findOne({ _id: rideId, driverId });
+
+  if (!existing) {
+    stopDispatchFlow(rideId);
+    return null;
+  }
+
+  const scheduledAt = existing?.scheduledAt ? new Date(existing.scheduledAt) : null;
+  const isScheduledRide =
+    scheduledAt && Number.isFinite(scheduledAt.getTime()) && scheduledAt.getTime() > Date.now();
+
+  if (!isScheduledRide) {
+    stopDispatchFlow(rideId);
+    throw new Error('Only upcoming scheduled rides can be cancelled by the driver');
+  }
+
+  if (existing.status === RIDE_STATUS.COMPLETED || existing.liveStatus === RIDE_LIVE_STATUS.COMPLETED) {
+    stopDispatchFlow(rideId);
+    throw new Error('Completed rides cannot be cancelled');
+  }
+
+  if (existing.status === RIDE_STATUS.CANCELLED || existing.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
+    stopDispatchFlow(rideId);
+    return existing;
+  }
+
+  const cancelUpdate = {
+    status: RIDE_STATUS.CANCELLED,
+    liveStatus: RIDE_LIVE_STATUS.CANCELLED,
+  };
+  if (existing.bookingMode === 'bidding') {
+    cancelUpdate.biddingStatus = 'cancelled';
+  }
+
+  let ride = await Ride.findOneAndUpdate(
+    {
+      _id: rideId,
+      driverId,
+      status: { $nin: [RIDE_STATUS.CANCELLED, RIDE_STATUS.COMPLETED] },
+      liveStatus: { $nin: [RIDE_LIVE_STATUS.CANCELLED, RIDE_LIVE_STATUS.COMPLETED] },
+    },
+    { $set: cancelUpdate },
+    { new: true },
+  );
+
+  if (!ride) {
+    stopDispatchFlow(rideId);
+    return Ride.findOne({ _id: rideId, driverId });
+  }
+
   let cancellationSettlement = null;
-
   try {
-    session.startTransaction();
+    cancellationSettlement = await settleDriverCancellationFee(ride);
+  } catch (error) {
+    console.error('Could not settle the driver cancellation fee', error);
+  }
 
-    ride = await Ride.findOne({ _id: rideId, driverId }).session(session);
-
-    if (!ride) {
-      await session.abortTransaction();
-      stopDispatchFlow(rideId);
-      return null;
-    }
-
-    const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
-    const isScheduledRide = scheduledAt && Number.isFinite(scheduledAt.getTime()) && scheduledAt.getTime() > Date.now();
-
-    if (!isScheduledRide) {
-      throw new Error('Only upcoming scheduled rides can be cancelled by the driver');
-    }
-
-    if (ride.status === RIDE_STATUS.COMPLETED || ride.liveStatus === RIDE_LIVE_STATUS.COMPLETED) {
-      throw new Error('Completed rides cannot be cancelled');
-    }
-
-    if (ride.status === RIDE_STATUS.CANCELLED || ride.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
-      await session.commitTransaction();
-      stopDispatchFlow(rideId);
-      return ride;
-    }
-
-    cancellationSettlement = await settleDriverCancellationFee(ride, session);
-
-    ride.status = RIDE_STATUS.CANCELLED;
-    ride.liveStatus = RIDE_LIVE_STATUS.CANCELLED;
-    if (ride.bookingMode === 'bidding') {
-      ride.biddingStatus = 'cancelled';
-    }
-    await ride.save({ session });
-
-    if (ride.deliveryId) {
-      await Delivery.findByIdAndUpdate(ride.deliveryId, {
+  await Promise.all([
+    ride.deliveryId
+      ? Delivery.findByIdAndUpdate(ride.deliveryId, {
         driverId: ride.driverId || null,
         status: ride.status,
         liveStatus: ride.liveStatus,
-      }, { session });
-    }
+      })
+      : Promise.resolve(),
+    User.findByIdAndUpdate(ride.userId, { currentRideId: null }),
+    ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }) : Promise.resolve(),
+  ]);
 
-    await Promise.all([
-      User.findByIdAndUpdate(ride.userId, { currentRideId: null }, { session }),
-      ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }, { session }) : Promise.resolve(),
-    ]);
-
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    stopDispatchFlow(rideId);
-    throw error;
-  } finally {
-    session.endSession();
-  }
   await persistDispatchTrackingProgress({ rideId, reset: true }).catch(() => null);
 
   const cancelReason = 'Your scheduled ride was cancelled by the driver.';
@@ -1271,6 +1447,10 @@ export const startDispatchFlow = async (ride, { forceRestart = false } = {}) => 
   if (!ride?._id) {
     return;
   }
+
+  // New unmet demand in this zone. Fire-and-forget: the heat map is an
+  // advisory overlay and must never delay or fail a dispatch.
+  publishHeatmapChangeFor(ride).catch(() => null);
 
   if (!forceRestart && hasLocalDispatchFlow(ride._id)) {
     return;

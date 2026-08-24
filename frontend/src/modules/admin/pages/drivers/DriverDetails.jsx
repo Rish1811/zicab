@@ -442,7 +442,7 @@ const DriverDetails = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('Driver Profile');
   const [profile, setProfile] = useState(null);
-  const [walletForm, setWalletForm] = useState({ amount: '', operation: 'credit', isSubmitting: false });
+  const [walletForm, setWalletForm] = useState({ amount: '', operation: 'set', description: '', isSubmitting: false });
   const [walletHistory, setWalletHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -867,19 +867,8 @@ const DriverDetails = () => {
               </div>
 
               <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h3 className="text-sm text-gray-900 mb-4 font-bold">Credit or Debit wallet</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1.5">Amount *</label>
-                    <input
-                      type="number"
-                      min="0"
-                      className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
-                      placeholder="Enter Amount"
-                      value={walletForm.amount}
-                      onChange={(e) => setWalletForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    />
-                  </div>
+                <h3 className="text-sm text-gray-900 mb-4 font-bold">Manage Driver Wallet Balance</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 mb-1.5">Operation *</label>
                     <select
@@ -887,42 +876,65 @@ const DriverDetails = () => {
                       value={walletForm.operation}
                       onChange={(e) => setWalletForm((prev) => ({ ...prev, operation: e.target.value }))}
                     >
-                      <option value="credit">Credit</option>
-                      <option value="debit">Debit</option>
+                      <option value="set">Set Exact Balance (=)</option>
+                      <option value="credit">Credit (+ Add)</option>
+                      <option value="debit">Debit (- Deduct)</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1.5">
+                      {walletForm.operation === 'set' ? 'New Balance (₹) *' : 'Amount (₹) *'}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
+                      placeholder={walletForm.operation === 'set' ? 'e.g. 500' : 'Enter Amount'}
+                      value={walletForm.amount}
+                      onChange={(e) => setWalletForm((prev) => ({ ...prev, amount: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1.5">Reason / Note (Optional)</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
+                      placeholder="e.g. Admin adjustment"
+                      value={walletForm.description || ''}
+                      onChange={(e) => setWalletForm((prev) => ({ ...prev, description: e.target.value }))}
+                    />
+                  </div>
                 </div>
-                <div className="mt-4">
+                <div className="mt-4 flex items-center gap-3">
                   <button
                     type="button"
-                    disabled={walletForm.isSubmitting || !walletForm.amount}
+                    disabled={walletForm.isSubmitting || walletForm.amount === ''}
                     onClick={async () => {
                       setWalletForm((prev) => ({ ...prev, isSubmitting: true }));
                       try {
-                        const token = localStorage.getItem('adminToken');
-                        await fetch(
-                          `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/wallet/drivers/${id}/adjust`,
-                          {
-                            method: 'POST',
-                            headers: {
-                              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                              'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                              amount: Number(walletForm.amount),
-                              operation: walletForm.operation,
-                            }),
-                          },
-                        );
-                        setWalletForm({ amount: '', operation: 'credit', isSubmitting: false });
-                        await fetchProfile();
+                        await adminService.adjustDriverWallet(id, {
+                          amount: Number(walletForm.amount),
+                          operation: walletForm.operation,
+                          description: walletForm.description || `Admin wallet ${walletForm.operation}`,
+                        });
+                        alert(`Driver wallet balance successfully updated!`);
+                        setWalletForm({ amount: '', operation: 'set', description: '', isSubmitting: false });
+                        await Promise.all([
+                          fetchProfile(),
+                          adminService.getDriverWalletHistory(id).then((walletRes) => {
+                            const walletPayload = walletRes?.data?.data || walletRes?.data || walletRes || {};
+                            setWalletHistory(Array.isArray(walletPayload?.results) ? walletPayload.results : []);
+                          }).catch(() => null),
+                        ]);
                       } catch (err) {
+                        alert(err?.response?.data?.message || err?.message || 'Failed to update wallet balance');
                         setWalletForm((prev) => ({ ...prev, isSubmitting: false }));
                       }
                     }}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50"
                   >
-                    {walletForm.isSubmitting ? 'Saving...' : 'Submit'}
+                    {walletForm.isSubmitting ? 'Saving...' : 'Update Wallet Balance'}
                   </button>
                 </div>
               </div>

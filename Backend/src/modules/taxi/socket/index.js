@@ -1,5 +1,7 @@
+import { createAdapter } from '@socket.io/redis-adapter';
 import { Server } from 'socket.io';
 import { env } from '../../../config/env.js';
+import { connectRedis, isRedisEnabled } from '../../../infrastructure/redis/redisClient.js';
 import { normalizePoint, toPoint } from '../../../utils/geo.js';
 import { Driver } from '../driver/models/Driver.js';
 import {
@@ -77,13 +79,46 @@ const onAsync = (socket, handler) => async (payload = {}) => {
   }
 };
 
-export const configureTaxiSocketServer = (httpServer) => {
+/**
+ * Rooms live in each process's memory, so with more than one backend instance an
+ * io.to(room).emit() only reaches the sockets attached to *that* process. The
+ * Redis adapter fans every emit out over pub/sub so all instances deliver it.
+ * Without it, multi-instance silently drops ride offers, chat and live tracking
+ * whenever sender and receiver land on different processes.
+ */
+const attachRedisAdapter = async (io) => {
+  if (!isRedisEnabled()) {
+    console.warn('[socket] redis disabled - safe only while a single instance runs');
+    return;
+  }
+
+  const client = await connectRedis();
+  if (!client?.isReady) {
+    console.warn('[socket] redis not ready - adapter not attached');
+    return;
+  }
+
+  // The subscriber connection cannot issue normal commands, so the adapter needs
+  // its own pair rather than the shared client.
+  const pubClient = client.duplicate();
+  const subClient = client.duplicate();
+  pubClient.on('error', (error) => console.error('[socket] redis pub error', error.message));
+  subClient.on('error', (error) => console.error('[socket] redis sub error', error.message));
+  await Promise.all([pubClient.connect(), subClient.connect()]);
+
+  io.adapter(createAdapter(pubClient, subClient));
+  console.log('[socket] redis adapter attached');
+};
+
+export const configureTaxiSocketServer = async (httpServer) => {
   const io = new Server(httpServer, {
     cors: {
       origin: env.corsOrigin === '*' ? true : env.corsOrigin.split(','),
       credentials: true,
     },
   });
+
+  await attachRedisAdapter(io);
 
   attachSocketAuth(io);
   setSocketServer(io);

@@ -19,6 +19,7 @@ import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
+import { resolveRideRoute } from './routeService.js';
 
 const clearUserActiveRideIfPresent = async (user) => {
   if (!user?.currentRideId) {
@@ -350,6 +351,25 @@ const generateRideOtp = () => String(Math.floor(1000 + Math.random() * 9000));
 const DEFAULT_BID_STEP_AMOUNT = 10;
 const DEFAULT_MAX_BID_STEPS = 5;
 
+/// Sender photos: at most two, each a plain URL. Anything else is dropped
+/// rather than stored, so a malformed client cannot push arbitrary payloads
+/// into the ride document.
+const normalizeParcelPhotos = (value) => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((entry) => String(entry || '').trim())
+    .filter((entry) => entry.length > 0 && entry.length <= 2048)
+    .slice(0, 2);
+};
+
+/// Carries a stored proof forward unchanged. Only ever reads what the driver
+/// endpoint already wrote - never rider input.
+const normalizeParcelProof = (proof = {}) => ({
+  url: String(proof?.url || '').trim(),
+  at: proof?.at || null,
+});
+
 const normalizeParcelPayload = (parcel = {}) => ({
   category: String(parcel.category || '').trim(),
   weight: String(parcel.weight || '').trim(),
@@ -364,6 +384,8 @@ const normalizeParcelPayload = (parcel = {}) => ({
   senderMobile: String(parcel.senderMobile || '').trim(),
   receiverName: String(parcel.receiverName || '').trim(),
   receiverMobile: String(parcel.receiverMobile || '').trim(),
+  photos: normalizeParcelPhotos(parcel.photos),
+  instructions: String(parcel.instructions || parcel.specialInstructions || '').trim().slice(0, 500),
 });
 
 const normalizeIntercityPayload = (intercity = {}) => ({
@@ -858,7 +880,11 @@ const syncDeliveryWithRide = async (ride) => {
     dropAddress: normalizeAddress(ride.dropAddress),
     fare: ride.fare,
     paymentMethod: ride.paymentMethod,
-    parcel: normalizeParcelPayload(ride.parcel),
+    parcel: {
+      ...normalizeParcelPayload(ride.parcel),
+      pickupProof: normalizeParcelProof(ride.parcel?.pickupProof),
+      deliveryProof: normalizeParcelProof(ride.parcel?.deliveryProof),
+    },
     acceptedAt: ride.acceptedAt || null,
     startedAt: ride.startedAt || null,
     completedAt: ride.completedAt || null,
@@ -924,10 +950,20 @@ export const createRideRecord = async ({
 
   const primaryVehicleTypeId = dispatchVehicleTypeIds[0] || null;
   const primaryVehicle = primaryVehicleTypeId
-    ? await Vehicle.findById(primaryVehicleTypeId).select('icon map_icon image dispatch_type admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner').lean()
+    ? await Vehicle.findById(primaryVehicleTypeId).select('name icon_types category vehicle_type icon map_icon image dispatch_type admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner').lean()
     : null;
   const resolvedVehicleIconUrl = String(
     vehicleIconUrl || primaryVehicle?.image || primaryVehicle?.map_icon || primaryVehicle?.icon || '',
+  ).trim();
+  // Neither app sends this, so taking it only from the request left it empty on
+  // every ride and both maps fell through to the default car marker. The
+  // catalog already records the family ('bike' for a scooty, 'auto', ...).
+  const resolvedVehicleIconType = String(
+    vehicleIconType ||
+    primaryVehicle?.icon_types ||
+    primaryVehicle?.category ||
+    primaryVehicle?.vehicle_type ||
+    '',
   ).trim();
   const normalizedTransportType = normalizeRideTransportType(transport_type);
   const resolvedZoneId =
@@ -1088,13 +1124,36 @@ export const createRideRecord = async ({
     throw new ApiError(400, 'Promo codes cannot be combined with subscription rides');
   }
 
+  // Never fatal: `resolveRideRoute` swallows its own failures and returns null,
+  // so a routing outage costs a polyline rather than the booking.
+  const resolvedRoute = await resolveRideRoute({ pickupCoords, dropCoords });
+
+  // Deliveries send neither figure, and a rider's estimate is only ever a
+  // guess, so the routed values win where we have them.
+  const routedDistanceMeters = resolvedRoute?.distanceMeters > 0
+    ? resolvedRoute.distanceMeters
+    : safeEstimatedDistanceMeters;
+  const routedDurationMinutes = resolvedRoute?.durationMinutes > 0
+    ? resolvedRoute.durationMinutes
+    : safeEstimatedDurationMinutes;
+  const routeDocument = resolvedRoute
+    ? {
+        polyline: resolvedRoute.polyline,
+        distanceMeters: resolvedRoute.distanceMeters,
+        durationMinutes: resolvedRoute.durationMinutes,
+        provider: resolvedRoute.provider,
+        fetchedAt: resolvedRoute.fetchedAt,
+      }
+    : undefined;
+
   if (!promoCode) {
     const ride = await Ride.create({
       userId,
       vehicleTypeId: primaryVehicleTypeId,
       dispatchVehicleTypeIds,
-      vehicleIconType: vehicleIconType || '',
+      vehicleIconType: resolvedVehicleIconType,
       vehicleIconUrl: resolvedVehicleIconUrl,
+      ...(routeDocument ? { route: routeDocument } : {}),
       serviceType: normalizedServiceType,
       pickupLocation: toPoint(pickupCoords, 'pickup'),
       pickupAddress: normalizeAddress(pickupAddress),
@@ -1111,8 +1170,8 @@ export const createRideRecord = async ({
       bidCeilingMaxFare: effectiveBidCeilingMaxFare,
       fareIncreaseWaitMinutes: pricingNegotiationMode === 'user_increment_only' ? fareIncreaseWaitMinutes : 0,
       nextFareIncreaseAt,
-      estimatedDistanceMeters: safeEstimatedDistanceMeters,
-      estimatedDurationMinutes: safeEstimatedDurationMinutes,
+      estimatedDistanceMeters: routedDistanceMeters,
+      estimatedDurationMinutes: routedDurationMinutes,
       paymentMethod: effectivePaymentMethod,
       driverPaymentCollection: effectiveDriverPaymentCollection,
       subscriptionUsage: effectiveSubscriptionUsage,
@@ -1148,8 +1207,9 @@ export const createRideRecord = async ({
             userId,
             vehicleTypeId: primaryVehicleTypeId,
             dispatchVehicleTypeIds,
-            vehicleIconType: vehicleIconType || '',
+            vehicleIconType: resolvedVehicleIconType,
             vehicleIconUrl: resolvedVehicleIconUrl,
+            ...(routeDocument ? { route: routeDocument } : {}),
             serviceType: normalizedServiceType,
             pickupLocation: toPoint(pickupCoords, 'pickup'),
             pickupAddress: normalizeAddress(pickupAddress),
@@ -1166,8 +1226,8 @@ export const createRideRecord = async ({
             bidCeilingMaxFare: effectiveBidCeilingMaxFare,
             fareIncreaseWaitMinutes: pricingNegotiationMode === 'user_increment_only' ? fareIncreaseWaitMinutes : 0,
             nextFareIncreaseAt,
-            estimatedDistanceMeters: safeEstimatedDistanceMeters,
-            estimatedDurationMinutes: safeEstimatedDurationMinutes,
+            estimatedDistanceMeters: routedDistanceMeters,
+            estimatedDurationMinutes: routedDurationMinutes,
             paymentMethod: effectivePaymentMethod,
             driverPaymentCollection: effectiveDriverPaymentCollection,
             subscriptionUsage: effectiveSubscriptionUsage,
@@ -1267,6 +1327,16 @@ export const serializeRideRealtime = (ride) => ({
   acceptedBidId: ride.acceptedBidId ? String(ride.acceptedBidId) : null,
   estimatedDistanceMeters: ride.estimatedDistanceMeters || 0,
   estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
+  /// The stored road route. Both apps decode this rather than each fetching
+  /// their own, which is what keeps the rider's line and the driver's identical.
+  route: ride.route?.polyline
+    ? {
+        polyline: ride.route.polyline,
+        distanceMeters: Number(ride.route.distanceMeters || 0),
+        durationMinutes: Number(ride.route.durationMinutes || 0),
+        provider: ride.route.provider || '',
+      }
+    : null,
   paymentMethod: ride.paymentMethod,
   subscriptionUsage: ride.subscriptionUsage?.covered
     ? {
@@ -1325,6 +1395,9 @@ export const serializeRideRealtime = (ride) => ({
         resolvedAt: ride.pricingSnapshot.resolvedAt || null,
       }
     : null,
+  // Lets the rider's map pick this vehicle's own art rather than the generic
+  // family silhouette, so both maps show the same thing.
+  vehicleTypeId: ride.vehicleTypeId ? String(ride.vehicleTypeId) : '',
   vehicleIconType: ride.vehicleIconType || '',
   vehicleIconUrl: ride.vehicleIconUrl || '',
   pickupLocation: ride.pickupLocation,
@@ -1552,87 +1625,109 @@ export const listRideHistoryForIdentity = async ({ role, entityId, limit = 50, p
 };
 
 export const acceptRideAssignment = async ({ rideId, driverId }) => {
-  let lastError = null;
+  // Written without a transaction on purpose.
+  //
+  // This deployment runs a standalone mongod, which rejects transactions
+  // outright ("Transaction numbers are only allowed on a replica set member or
+  // mongos") — so the previous version could never accept a ride here at all.
+  //
+  // The atomicity that actually matters is narrow: exactly one driver may win a
+  // ride, and one driver may hold only one ride. Both are single-document
+  // conditions, and a conditional findOneAndUpdate is atomic on a single
+  // document without any transaction. The validations below are ordinary reads
+  // because re-reading them inside a transaction bought nothing the two claims
+  // below do not already guarantee.
+  const ride = await Ride.findOne({
+    _id: rideId,
+    status: RIDE_STATUS.SEARCHING,
+    driverId: null,
+  });
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const session = await mongoose.startSession();
-
-    try {
-      session.startTransaction();
-
-      const ride = await Ride.findOne({
-        _id: rideId,
-        status: RIDE_STATUS.SEARCHING,
-        driverId: null,
-      }).session(session);
-
-      if (!ride) {
-        throw new ApiError(409, 'Ride is no longer available for acceptance');
-      }
-
-      if (ride.bookingMode === 'bidding') {
-        throw new ApiError(409, 'Bidding rides must be won through bid acceptance');
-      }
-
-      const driverVehicleFilter = await buildDriverVehicleAcceptFilter(ride);
-      const driver = await Driver.findOne({
-        _id: driverId,
-        isOnline: true,
-        isOnRide: false,
-        'wallet.isBlocked': { $ne: true },
-        ...driverVehicleFilter,
-      }).session(session);
-
-      if (!driver) {
-        throw new ApiError(409, 'Driver is unavailable to accept this ride');
-      }
-
-      const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides([driverId], { session });
-      if (blockedDriverIds.has(String(driverId))) {
-        throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
-      }
-
-      const conflictingScheduledRide = await findDriverConflictingScheduledRide({
-        driverId,
-        ride,
-        excludeRideId: ride._id,
-        session,
-      });
-      if (conflictingScheduledRide) {
-        throw new ApiError(409, 'Driver already has another scheduled trip in a similar time range');
-      }
-
-      await ensureDriverWalletCanAcceptRide(driver, { session });
-
-      ride.driverId = driver._id;
-      ride.status = RIDE_STATUS.ACCEPTED;
-      ride.liveStatus = RIDE_LIVE_STATUS.ACCEPTED;
-      ride.acceptedAt = new Date();
-      driver.isOnRide = !isRideScheduledForFuture(ride);
-
-      await ride.save({ session });
-      await driver.save({ session });
-      await session.commitTransaction();
-      await syncDeliveryWithRide(ride);
-
-      return ride;
-    } catch (error) {
-      lastError = error;
-      await session.abortTransaction();
-
-      const isTransient =
-        typeof error?.hasErrorLabel === 'function' &&
-        (error.hasErrorLabel('TransientTransactionError') || error.hasErrorLabel('UnknownTransactionCommitResult'));
-
-      if (!isTransient || attempt === 2) {
-        throw error;
-      }
-    } finally {
-      session.endSession();
-    }
+  if (!ride) {
+    throw new ApiError(409, 'Ride is no longer available for acceptance');
   }
 
-  throw lastError || new ApiError(500, 'Failed to accept ride');
+  if (ride.bookingMode === 'bidding') {
+    throw new ApiError(409, 'Bidding rides must be won through bid acceptance');
+  }
+
+  const driverVehicleFilter = await buildDriverVehicleAcceptFilter(ride);
+  const driverFilter = {
+    _id: driverId,
+    isOnline: true,
+    isOnRide: false,
+    'wallet.isBlocked': { $ne: true },
+    ...driverVehicleFilter,
+  };
+
+  const driver = await Driver.findOne(driverFilter);
+
+  if (!driver) {
+    throw new ApiError(409, 'Driver is unavailable to accept this ride');
+  }
+
+  const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides([driverId]);
+  if (blockedDriverIds.has(String(driverId))) {
+    throw new ApiError(409, 'Driver is blocked from new rides within 30 minutes of a scheduled trip');
+  }
+
+  const conflictingScheduledRide = await findDriverConflictingScheduledRide({
+    driverId,
+    ride,
+    excludeRideId: ride._id,
+  });
+  if (conflictingScheduledRide) {
+    throw new ApiError(409, 'Driver already has another scheduled trip in a similar time range');
+  }
+
+  await ensureDriverWalletCanAcceptRide(driver);
+
+  // A trip booked for later does not occupy the driver now — they keep taking
+  // rides until it is due.
+  const occupyDriver = !isRideScheduledForFuture(ride);
+
+  // Claim the driver first. The filter still requires isOnRide:false, so two
+  // rides landing on the same driver at once cannot both succeed.
+  const claimedDriver = await Driver.findOneAndUpdate(
+    driverFilter,
+    { $set: { isOnRide: occupyDriver } },
+    { new: true },
+  );
+
+  if (!claimedDriver) {
+    throw new ApiError(409, 'Driver is unavailable to accept this ride');
+  }
+
+  // Then claim the ride. Same idea: the filter pins it to an unassigned,
+  // still-searching ride, so the second driver to arrive gets no document back.
+  const acceptedRide = await Ride.findOneAndUpdate(
+    { _id: rideId, status: RIDE_STATUS.SEARCHING, driverId: null },
+    {
+      $set: {
+        driverId: claimedDriver._id,
+        status: RIDE_STATUS.ACCEPTED,
+        liveStatus: RIDE_LIVE_STATUS.ACCEPTED,
+        acceptedAt: new Date(),
+      },
+    },
+    { new: true },
+  );
+
+  if (!acceptedRide) {
+    // Someone else won the race between the two claims. Release this driver so
+    // they keep receiving offers instead of being stuck marked as on a trip.
+    if (occupyDriver) {
+      await Driver.updateOne(
+        { _id: claimedDriver._id, isOnRide: true },
+        { $set: { isOnRide: false } },
+      ).catch(() => null);
+    }
+    throw new ApiError(409, 'Ride is no longer available for acceptance');
+  }
+
+  await syncDeliveryWithRide(acceptedRide);
+
+  return acceptedRide;
 };
 
 const rideStatusConfig = {
@@ -1658,6 +1753,60 @@ const rideStatusConfig = {
   },
 };
 
+/// A parcel trip may only move forward once the driver has photographed the
+/// parcel at that stage.
+///
+/// This is the entire point of the proof photos: without the gate a driver
+/// could mark a parcel collected, or delivered, having never handled it, and
+/// neither sender nor receiver would have any record. Ordinary rides are
+/// untouched.
+const assertParcelProof = (ride, nextStatus) => {
+  if (String(ride?.serviceType || '') !== 'parcel') return;
+
+  if (nextStatus === RIDE_LIVE_STATUS.STARTED && !String(ride?.parcel?.pickupProof?.url || '').trim()) {
+    throw new ApiError(400, 'Upload a photo of the parcel before starting the delivery');
+  }
+
+  if (nextStatus === RIDE_LIVE_STATUS.COMPLETED && !String(ride?.parcel?.deliveryProof?.url || '').trim()) {
+    throw new ApiError(400, 'Upload a photo of the delivered parcel before completing');
+  }
+};
+
+/// Records a parcel proof photo against the ride.
+///
+/// `stage` is 'pickup' or 'delivery'. The updated ride comes back so the driver
+/// app can go straight on to the status change it was held up on. The Delivery
+/// mirror is refreshed too, since ride details read the parcel from there.
+export const saveParcelProof = async ({ rideId, driverId, stage, imageUrl }) => {
+  const normalizedStage = String(stage || '').trim().toLowerCase();
+
+  if (!['pickup', 'delivery'].includes(normalizedStage)) {
+    throw new ApiError(400, 'Proof stage must be pickup or delivery');
+  }
+
+  const url = String(imageUrl || '').trim();
+
+  if (!url || url.length > 2048) {
+    throw new ApiError(400, 'A parcel photo is required');
+  }
+
+  const field = normalizedStage === 'pickup' ? 'parcel.pickupProof' : 'parcel.deliveryProof';
+
+  const ride = await Ride.findOneAndUpdate(
+    { _id: rideId, driverId, serviceType: 'parcel' },
+    { $set: { [field + '.url']: url, [field + '.at']: new Date() } },
+    { returnDocument: 'after' },
+  );
+
+  if (!ride) {
+    throw new ApiError(404, 'Parcel delivery not found for this driver');
+  }
+
+  await syncDeliveryWithRide(ride);
+
+  return ride;
+};
+
 export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymentMethod }) => {
   const config = rideStatusConfig[nextStatus];
 
@@ -1670,6 +1819,8 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
   if (!ride) {
     throw new ApiError(404, 'Assigned ride not found');
   }
+
+  assertParcelProof(ride, nextStatus);
 
   if (!config.allowedCurrent.includes(ride.liveStatus)) {
     throw new ApiError(409, `Ride cannot move from ${ride.liveStatus} to ${nextStatus}`);

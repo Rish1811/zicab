@@ -13,6 +13,10 @@ const adminBusinessSettingSchema = new mongoose.Schema(
     transport_ride: { type: mongoose.Schema.Types.Mixed, default: {} },
     bid_ride: { type: mongoose.Schema.Types.Mixed, default: {} },
     user_home_settings: { type: mongoose.Schema.Types.Mixed, default: {} },
+    /// Demand heat-map tuning (window, decay, thresholds, weights). Mixed so a
+    /// new dial can be added without a migration — defaults live in
+    /// `heatmap/heatmapConfig.js` and this only overrides them.
+    heatmap: { type: mongoose.Schema.Types.Mixed, default: {} },
     subscription: { type: mongoose.Schema.Types.Mixed, default: { mode: 'commissionOnly' } },
     referral: {
       type: mongoose.Schema.Types.Mixed,
