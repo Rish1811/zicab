@@ -54,7 +54,7 @@ import { WithdrawalRequest } from '../models/WithdrawalRequest.js';
 import { SupportTicket } from '../../support/models/SupportTicket.js';
 import TaxiTransportType from '../models/TaxiTransportType.js';
 import { comparePassword, hashPassword } from '../../driver/services/authService.js';
-import {
+import { grantDriverJoiningBonus,
   applyDriverWalletAdjustment,
   serializeDriverWallet,
 } from '../../driver/services/walletService.js';
@@ -5374,6 +5374,17 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
 
   const driver = await Driver.findByIdAndUpdate(id, update, { returnDocument: 'after' });
   if (!driver) throw new ApiError(404, 'Driver not found');
+
+  // Approval is the trigger for the one-time joining bonus. Deliberately not
+  // awaited into the failure path of the approval itself: the driver is already
+  // approved by this point, so throwing here would tell the admin the approval
+  // failed when it did not. grantDriverJoiningBonus releases its claim on error,
+  // so the credit is retried the next time approval is saved.
+  if (update.approve === true) {
+    await grantDriverJoiningBonus({ driverId: driver._id, grantedBy: currentAdmin?._id || null })
+      .catch((error) => console.error('Driver joining bonus failed', driver._id, error.message));
+  }
+
   return serializeDriver(driver);
 };
 

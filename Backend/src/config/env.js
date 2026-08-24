@@ -99,6 +99,9 @@ export const env = {
     },
   },
   driverWallet: {
+    joiningBonus: Number.isFinite(Number(process.env.DRIVER_JOINING_BONUS))
+      ? Number(process.env.DRIVER_JOINING_BONUS)
+      : 100,
     defaultCashLimit: Number.isFinite(Number(process.env.DRIVER_WALLET_DEFAULT_CASH_LIMIT))
       ? Number(process.env.DRIVER_WALLET_DEFAULT_CASH_LIMIT)
       : 500,

@@ -275,6 +275,48 @@ export const applyDriverWalletAdjustment = async ({
   };
 };
 
+/**
+ * One-time joining bonus, credited when a driver is first approved.
+ *
+ * Claims the grant before paying it: the updateOne only matches while
+ * joiningBonusGrantedAt is still null, so whichever call wins the race is the
+ * only one that credits. Approving twice, un-approving and re-approving, or two
+ * admins clicking at the same moment across our four instances all pay once.
+ *
+ * Returns null when there was nothing to do, so callers can stay quiet.
+ */
+export const grantDriverJoiningBonus = async ({ driverId, grantedBy = null }) => {
+  const amount = normalizeAmount(env.driverWallet.joiningBonus);
+
+  if (!amount || amount <= 0) {
+    return null;
+  }
+
+  const claim = await Driver.updateOne(
+    { _id: driverId, joiningBonusGrantedAt: null },
+    { $set: { joiningBonusGrantedAt: new Date() } },
+  );
+
+  if (!claim.modifiedCount) {
+    return null;
+  }
+
+  try {
+    return await applyDriverWalletAdjustment({
+      driverId,
+      amount,
+      type: 'adjustment',
+      description: 'Joining bonus on approval',
+      metadata: { reason: 'driver_joining_bonus', grantedBy },
+    });
+  } catch (error) {
+    // Release the claim so a retry can still pay them. Leaving it set would mark
+    // the bonus as given when no money ever moved.
+    await Driver.updateOne({ _id: driverId }, { $set: { joiningBonusGrantedAt: null } }).catch(() => null);
+    throw error;
+  }
+};
+
 export const topUpDriverWallet = async ({ driverId, amount, metadata = {} }) => {
   const session = await mongoose.startSession();
 
