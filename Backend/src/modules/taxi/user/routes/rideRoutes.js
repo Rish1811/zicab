@@ -14,6 +14,7 @@ import {
   createRide,
   getRideBids,
   getRideAppTipSettings,
+  getRideBiddingSettings,
   getMyActiveRide,
   getRideById,
   listMyRides,
@@ -22,6 +23,7 @@ import {
   submitRideReview,
   updateRideBidCeiling,
   updateRideStatus,
+  uploadParcelProof,
   verifyRazorpayRideCompletion,
   verifyRazorpayRideTip,
 } from '../controllers/rideController.js';
@@ -31,6 +33,7 @@ export const rideRouter = Router();
 rideRouter.post('/', authenticate(['user']), rideCreationRateLimit, asyncHandler(createRide));
 rideRouter.get('/', authenticate(['user', 'driver']), asyncHandler(listMyRides));
 rideRouter.get('/app-settings/tip', asyncHandler(getRideAppTipSettings));
+rideRouter.get('/app-settings/bidding', asyncHandler(getRideBiddingSettings));
 rideRouter.get('/available-drivers', availableDriversRateLimit, asyncHandler(listAvailableDrivers));
 rideRouter.get('/active/me', authenticate(['user', 'driver']), asyncHandler(getMyActiveRide));
 rideRouter.patch('/:rideId/cancel', authenticate(['user']), asyncHandler(cancelRide));
@@ -39,6 +42,8 @@ rideRouter.patch('/:rideId/bids/ceiling', authenticate(['user']), asyncHandler(u
 rideRouter.post('/:rideId/bids/:bidId/accept', authenticate(['user']), asyncHandler(acceptRideBid));
 rideRouter.get('/:rideId', authenticate(['user', 'driver']), asyncHandler(getRideById));
 rideRouter.patch('/:rideId/status', authenticate(['driver']), asyncHandler(updateRideStatus));
+// Parcel handover photos. The delivery cannot start or complete without them.
+rideRouter.post('/:rideId/parcel-proof', authenticate(['driver']), asyncHandler(uploadParcelProof));
 rideRouter.post('/:rideId/complete-payment/razorpay/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createRazorpayRideCompletionOrder));
 rideRouter.post('/:rideId/complete-payment/razorpay/verify', authenticate(['user']), asyncHandler(verifyRazorpayRideCompletion));
 rideRouter.post('/:rideId/complete-payment/wallet', authenticate(['user']), asyncHandler(payRideCompletionWithWallet));

@@ -19,6 +19,7 @@ import {
   listRideBidsForUser,
   listRideHistoryForIdentity,
   serializeRideRealtime,
+  saveParcelProof,
   submitRideFeedback,
   updateRideLifecycle,
 } from '../../services/rideService.js';
@@ -32,6 +33,7 @@ import {
   startDispatchFlow,
 } from '../../services/dispatchService.js';
 import { getTipSettings } from '../../services/appSettingsService.js';
+import { getBidRideSettings } from '../../services/transportSettingsService.js';
 import { matchDrivers } from '../../services/matchingService.js';
 import { Ride } from '../models/Ride.js';
 import { UserWallet } from '../models/UserWallet.js';
@@ -393,6 +395,51 @@ export const listMyRides = async (req, res) => {
       results: history.results,
       total: history.pagination.total,
       pagination: history.pagination,
+    },
+  });
+};
+
+/// Driver posts the URL of a parcel photo already uploaded through
+/// `/common/upload/image`. Keeping the upload separate leaves this endpoint a
+/// small JSON write and lets the app show upload progress on its own.
+export const uploadParcelProof = async (req, res) => {
+  const stage = String(req.body.stage || '').trim().toLowerCase();
+
+  const ride = await saveParcelProof({
+    rideId: req.params.rideId,
+    driverId: req.auth.sub,
+    stage,
+    imageUrl: req.body.imageUrl || req.body.url || req.body.image,
+  });
+
+  // Push the fresh state to the rider so the photo shows up on their tracking
+  // screen the moment it is taken, rather than at the next status change.
+  try {
+    const io = getSocketServer();
+
+    if (io) {
+      const populatedRide = await getRideDetails(ride._id);
+      io.to(getRideRoom(populatedRide._id)).emit('ride:state', serializeRideRealtime(populatedRide));
+    }
+  } catch (error) {
+    // A socket hiccup must not fail a write that already succeeded.
+    console.error('parcel proof broadcast failed', error?.message || error);
+  }
+
+  res.json({
+    success: true,
+    message: stage === 'pickup' ? 'Pickup photo saved' : 'Delivery photo saved',
+    results: {
+      rideId: String(ride._id),
+      stage,
+      pickupProof: {
+        url: ride.parcel?.pickupProof?.url || '',
+        at: ride.parcel?.pickupProof?.at || null,
+      },
+      deliveryProof: {
+        url: ride.parcel?.deliveryProof?.url || '',
+        at: ride.parcel?.deliveryProof?.at || null,
+      },
     },
   });
 };
@@ -965,6 +1012,38 @@ export const verifyRazorpayRideTip = async (req, res) => {
   res.json({
     success: true,
     data: populatedRide,
+  });
+};
+
+/// The admin's negotiation bands, so the apps step fares the way the server
+/// expects rather than guessing.
+///
+/// Public for the same reason the tip settings are: the rider needs the
+/// increment before a ride exists, while they are still deciding whether to
+/// name their own price.
+export const getRideBiddingSettings = async (_req, res) => {
+  const settings = await getBidRideSettings();
+
+  const toNumber = (value, fallback) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  };
+
+  res.json({
+    success: true,
+    data: {
+      settings: {
+        // What a driver may bid, as a percentage either side of the fare.
+        driverLowPercentage: toNumber(settings.bidding_low_percentage, 10),
+        driverHighPercentage: toNumber(settings.bidding_high_percentage, 20),
+        driverStepAmount: toNumber(settings.bidding_amount_increase_or_decrease, 10),
+        // What a rider may set as their own ceiling, above the quoted fare.
+        userLowPercentage: toNumber(settings.user_bidding_low_percentage, 10),
+        userHighPercentage: toNumber(settings.user_bidding_high_percentage, 20),
+        userStepAmount: toNumber(settings.user_bidding_amount_increase_or_decrease, 10),
+        userFareIncreaseWaitMinutes: toNumber(settings.user_fare_increase_wait_minutes, 2),
+      },
+    },
   });
 };
 
