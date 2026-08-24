@@ -76,6 +76,10 @@ import {
   getAdminBusBookings,
   getAdminEarnings,
   getAirports,
+  getPriceHikes,
+  createPriceHike,
+  updatePriceHike,
+  deletePriceHike,
   getPendingBusDriverSignups,
   getPendingServiceCenterStaffSignups,
   getPendingServiceStoreSignups,
@@ -244,6 +248,12 @@ import {
   updatePoolingBookingStatus,
   uploadImage,
 } from '../controllers/poolingController.js';
+import {
+  createCancellationReason,
+  deleteCancellationReason,
+  listCancellationReasons,
+  updateCancellationReason,
+} from '../controllers/cancellationReasonController.js';
 import { promotionsRouter } from '../promotions/routes/index.js';
 import { listSafetyAlerts, resolveSafetyAlert } from '../../safety/controllers/safetyController.js';
 
@@ -509,6 +519,11 @@ adminRouter.post('/admin/integration-settings/recharge-api/test', runRechargeApi
 adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory);
 adminRouter.patch('/admin/general-settings/:category', updateGeneralSettingsCategory);
 
+adminRouter.get('/admin/cancellation-reasons', listCancellationReasons);
+adminRouter.post('/admin/cancellation-reasons', createCancellationReason);
+adminRouter.patch('/admin/cancellation-reasons/:id', updateCancellationReason);
+adminRouter.delete('/admin/cancellation-reasons/:id', deleteCancellationReason);
+
 adminRouter.get('/on-boarding', getUserOnboarding);
 adminRouter.post('/on-boarding', createOnboardingScreen);
 adminRouter.patch('/on-boarding/:id', updateOnboardingScreen);
@@ -524,3 +539,9 @@ adminRouter.get('/admin/reports/finance/download', downloadFinanceReport);
 adminRouter.get('/admin/reports/fleet-finance/download', downloadFleetFinanceReport);
 
 adminRouter.use('/', promotionsRouter);
+
+// Price hike (surge). Sits under the authenticate(['admin']) mount above.
+adminRouter.get('/admin/price-hikes', getPriceHikes);
+adminRouter.post('/admin/price-hikes', createPriceHike);
+adminRouter.patch('/admin/price-hikes/:id', updatePriceHike);
+adminRouter.delete('/admin/price-hikes/:id', deletePriceHike);

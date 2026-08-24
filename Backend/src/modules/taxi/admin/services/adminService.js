@@ -12,6 +12,7 @@ import { AdminAppSetting } from '../models/AdminAppSetting.js';
 // AppModule import removed
 import { createDefaultBusinessSettings } from '../data/defaultBusinessSettings.js';
 import { createDefaultAppSettings } from '../data/defaultAppSettings.js';
+import { createDefaultRideVoiceSettings } from '../data/defaultRideVoiceSettings.js';
 import { Airport } from '../models/Airport.js';
 import { Employee } from '../models/Employee.js';
 import { BusService } from '../models/BusService.js';
@@ -53,7 +54,7 @@ import { WithdrawalRequest } from '../models/WithdrawalRequest.js';
 import { SupportTicket } from '../../support/models/SupportTicket.js';
 import TaxiTransportType from '../models/TaxiTransportType.js';
 import { comparePassword, hashPassword } from '../../driver/services/authService.js';
-import {
+import { grantDriverJoiningBonus,
   applyDriverWalletAdjustment,
   serializeDriverWallet,
 } from '../../driver/services/walletService.js';
@@ -67,6 +68,8 @@ import { buildRentalTrackingSnapshot, listActiveRentalTrackingBookings } from '.
 import { sendEmail } from '../../services/mailService.js';
 import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
 import { signAccessToken } from '../../services/tokenService.js';
+import { applyPriceHikeToSetPrice, getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
+import { PriceHike } from '../models/PriceHike.js';
 import {
   ADMIN_PERMISSIONS,
   SUPERADMIN_PERMISSION,
@@ -2677,6 +2680,17 @@ const serializeDriver = (driver) => ({
   deletionRequest: driver.deletionRequest || { status: 'none' },
   documents: driver.documents || {},
   onboarding: driver.onboarding || {},
+  wallet: {
+    balance: Number(driver.wallet?.balance || 0),
+    cash_limit: Number(driver.wallet?.cashLimit ?? 500),
+    cashLimit: Number(driver.wallet?.cashLimit ?? 500),
+    is_blocked: Boolean(driver.wallet?.isBlocked),
+    isBlocked: Boolean(driver.wallet?.isBlocked),
+    total_credits: Number(driver.wallet?.totalCredits || 0),
+    total_debits: Number(driver.wallet?.totalDebits || 0),
+    updatedAt: driver.wallet?.updatedAt || null,
+  },
+  wallet_balance: Number(driver.wallet?.balance || 0),
   createdAt: driver.createdAt,
   updatedAt: driver.updatedAt,
 });
@@ -2705,6 +2719,7 @@ const DRIVER_LIST_SELECT = [
   'isOnRide',
   'onlineSelfie',
   'location',
+  'wallet',
   'approve',
   'status',
   'createdAt',
@@ -2750,6 +2765,17 @@ const serializeDriverListItem = (driver) => ({
   online_selfie_captured_at: driver.onlineSelfie?.capturedAt || null,
   online_selfie_for_date: driver.onlineSelfie?.forDate || '',
   location: driver.location || null,
+  wallet: {
+    balance: Number(driver.wallet?.balance || 0),
+    cash_limit: Number(driver.wallet?.cashLimit ?? 500),
+    cashLimit: Number(driver.wallet?.cashLimit ?? 500),
+    is_blocked: Boolean(driver.wallet?.isBlocked),
+    isBlocked: Boolean(driver.wallet?.isBlocked),
+    total_credits: Number(driver.wallet?.totalCredits || 0),
+    total_debits: Number(driver.wallet?.totalDebits || 0),
+    updatedAt: driver.wallet?.updatedAt || null,
+  },
+  wallet_balance: Number(driver.wallet?.balance || 0),
   latitude: Number(driver.location?.coordinates?.[1] ?? null),
   longitude: Number(driver.location?.coordinates?.[0] ?? null),
   approve: Boolean(driver.approve),
@@ -4838,69 +4864,66 @@ export const rejectDriverWithdrawalRequest = async (requestId) => {
 
 export const adjustDriverWallet = async (id, payload = {}) => {
   const amount = Number(payload.amount || 0);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new ApiError(400, 'Amount must be greater than 0');
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new ApiError(400, 'Amount must be 0 or greater');
   }
 
   const operation = String(payload.operation || 'credit').toLowerCase();
-  if (!['credit', 'debit'].includes(operation)) {
-    throw new ApiError(400, 'Operation must be credit or debit');
+  if (!['credit', 'debit', 'set'].includes(operation)) {
+    throw new ApiError(400, 'Operation must be credit, debit, or set');
   }
 
   const normalizedAmount = Math.round(amount * 100) / 100;
-  const signedAmount = operation === 'credit' ? normalizedAmount : -normalizedAmount;
   const description = payload.description || `Admin adjustment (${operation})`;
-  const session = await mongoose.startSession();
 
-  try {
-    session.startTransaction();
-
-    const driver = await Driver.findById(id).session(session);
-    if (!driver) {
-      throw new ApiError(404, 'Driver not found');
-    }
-
-    const currentBalance = Number(driver.wallet?.balance || 0);
-    const cashLimit = Number(driver.wallet?.cashLimit ?? 500);
-    const nextBalance = Math.round((currentBalance + signedAmount) * 100) / 100;
-    const isBlockedAfter = nextBalance < -cashLimit;
-
-    driver.wallet = driver.wallet || {};
-    driver.wallet.balance = nextBalance;
-    driver.wallet.cashLimit = cashLimit;
-    driver.wallet.isBlocked = isBlockedAfter;
-    driver.markModified('wallet');
-    await driver.save({ session });
-
-    await WalletTransaction.create(
-      [
-        {
-          driverId: id,
-          type: 'adjustment',
-          amount: signedAmount,
-          balanceBefore: currentBalance,
-          balanceAfter: nextBalance,
-          cashLimit,
-          isBlockedAfter,
-          description,
-          metadata: {
-            source: 'admin',
-            operation,
-            rawAmount: normalizedAmount,
-          },
-        },
-      ],
-      { session },
-    );
-
-    await session.commitTransaction();
-    return { balance: Number(nextBalance.toFixed(2)) };
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
+  const driver = await Driver.findById(id);
+  if (!driver) {
+    throw new ApiError(404, 'Driver not found');
   }
+
+  const currentBalance = Number(driver.wallet?.balance || 0);
+  const cashLimit = Number(driver.wallet?.cashLimit ?? 500);
+
+  let nextBalance;
+  let signedAmount;
+  if (operation === 'set') {
+    nextBalance = normalizedAmount;
+    signedAmount = Math.round((nextBalance - currentBalance) * 100) / 100;
+  } else if (operation === 'credit') {
+    signedAmount = normalizedAmount;
+    nextBalance = Math.round((currentBalance + signedAmount) * 100) / 100;
+  } else {
+    signedAmount = -normalizedAmount;
+    nextBalance = Math.round((currentBalance + signedAmount) * 100) / 100;
+  }
+
+  const isBlockedAfter = nextBalance < -cashLimit;
+
+  driver.wallet = driver.wallet || {};
+  driver.wallet.balance = nextBalance;
+  driver.wallet.cashLimit = cashLimit;
+  driver.wallet.isBlocked = isBlockedAfter;
+  driver.wallet.updatedAt = new Date();
+  driver.markModified('wallet');
+  await driver.save();
+
+  await WalletTransaction.create({
+    driverId: id,
+    type: 'adjustment',
+    amount: signedAmount,
+    balanceBefore: currentBalance,
+    balanceAfter: nextBalance,
+    cashLimit,
+    isBlockedAfter,
+    description,
+    metadata: {
+      source: 'admin',
+      operation,
+      rawAmount: normalizedAmount,
+    },
+  });
+
+  return { balance: Number(nextBalance.toFixed(2)), driverId: String(driver._id) };
 };
 
 export const listDriverWalletHistory = async (id) => {
@@ -5351,6 +5374,17 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
 
   const driver = await Driver.findByIdAndUpdate(id, update, { returnDocument: 'after' });
   if (!driver) throw new ApiError(404, 'Driver not found');
+
+  // Approval is the trigger for the one-time joining bonus. Deliberately not
+  // awaited into the failure path of the approval itself: the driver is already
+  // approved by this point, so throwing here would tell the admin the approval
+  // failed when it did not. grantDriverJoiningBonus releases its claim on error,
+  // so the credit is retried the next time approval is saved.
+  if (update.approve === true) {
+    await grantDriverJoiningBonus({ driverId: driver._id, grantedBy: currentAdmin?._id || null })
+      .catch((error) => console.error('Driver joining bonus failed', driver._id, error.message));
+  }
+
   return serializeDriver(driver);
 };
 
@@ -7101,11 +7135,19 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
   const from = total === 0 ? 0 : (safePage - 1) * safeLimit + 1;
   const to = total === 0 ? 0 : Math.min((safePage - 1) * safeLimit + pagedRows.length, total);
 
+  // Apps compute the fare client-side from these numbers, so the hike is applied
+  // here — the one place every client reads pricing from. Admin callers are
+  // excluded on purpose: the price management screens must show and edit the
+  // base fare, or a hike would be baked in permanently on the next save.
+  const hikeMultiplier = currentAdmin ? 1 : await getActivePriceHikeMultiplier();
+  const withHike = (row) => applyPriceHikeToSetPrice(row, hikeMultiplier);
+
   return {
-    results: pagedRows.map((row) => row.result),
+    results: pagedRows.map((row) => withHike(row.result)),
+    price_hike_multiplier: hikeMultiplier,
     paginator: {
       ...paginated.paginator,
-      data: pagedRows.map((row) => row.paginatorItem),
+      data: pagedRows.map((row) => withHike(row.paginatorItem)),
       from,
       to,
     }
@@ -11032,6 +11074,98 @@ const businessSettingsCategoryMap = {
 const appSettingsCategoryMap = {
   wallet: 'wallet_setting',
   tip: 'tip_setting',
+  'ride-voice': 'ride_voice',
+};
+
+/// Voice config is read by the rider app on every trip, so it must answer with
+/// something usable even on an install whose settings document predates the
+/// feature (the stored section is then simply absent). Merging the shipped
+/// defaults underneath what the admin saved gives that guarantee, and also
+/// means an admin who edits only the Hindi wording does not silently blank the
+/// English and Kannada ones.
+const mergeRideVoiceSettings = (stored) => {
+  const defaults = createDefaultRideVoiceSettings();
+  const saved = stored && typeof stored === 'object' ? stored : {};
+
+  const mergeSection = (key) => ({
+    ...defaults[key],
+    ...(saved[key] || {}),
+    messages: {
+      ...defaults[key].messages,
+      ...((saved[key] || {}).messages || {}),
+    },
+  });
+
+  return {
+    ...defaults,
+    ...saved,
+    welcome: mergeSection('welcome'),
+    comfort: mergeSection('comfort'),
+    arrival: mergeSection('arrival'),
+    speech: { ...defaults.speech, ...(saved.speech || {}) },
+  };
+};
+
+/// Keeps a saved voice config inside sane bounds.
+///
+/// The templates are free text by design (they are localized sentences), but
+/// the numbers drive timers on the rider's phone, so an accidental `""` or a
+/// negative delay must not reach the app.
+const sanitizeRideVoiceSettings = (payload) => {
+  const defaults = createDefaultRideVoiceSettings();
+  const input = payload && typeof payload === 'object' ? payload : {};
+
+  const bool = (value, fallback) => {
+    if (value === undefined || value === null || value === '') return fallback;
+    if (typeof value === 'boolean') return value;
+    return !['0', 'false', 'no', 'off'].includes(String(value).trim().toLowerCase());
+  };
+
+  const number = (value, fallback, { min, max }) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, parsed));
+  };
+
+  /// Drops non-string entries rather than storing them: the app calls
+  /// `.replace()` on these and a number or object would throw there.
+  const messages = (value, fallback) => {
+    if (!value || typeof value !== 'object') return fallback;
+    const cleaned = {};
+    for (const [code, text] of Object.entries(value)) {
+      const key = String(code || '').trim().toLowerCase();
+      if (!key) continue;
+      if (typeof text !== 'string') continue;
+      if (!text.trim()) continue;
+      cleaned[key] = text.trim();
+    }
+    return Object.keys(cleaned).length ? cleaned : fallback;
+  };
+
+  const section = (key, triggerKey, bounds) => {
+    const saved = input[key] && typeof input[key] === 'object' ? input[key] : {};
+    return {
+      enabled: bool(saved.enabled, defaults[key].enabled),
+      [triggerKey]: number(saved[triggerKey], defaults[key][triggerKey], bounds),
+      messages: messages(saved.messages, defaults[key].messages),
+    };
+  };
+
+  const speech = input.speech && typeof input.speech === 'object' ? input.speech : {};
+
+  return {
+    enabled: bool(input.enabled, defaults.enabled),
+    fallback_language:
+      String(input.fallback_language || defaults.fallback_language).trim().toLowerCase() || 'en',
+    welcome: section('welcome', 'delay_minutes', { min: 0, max: 120 }),
+    comfort: section('comfort', 'delay_minutes', { min: 0, max: 120 }),
+    arrival: section('arrival', 'trigger_remaining_minutes', { min: 1, max: 120 }),
+    speech: {
+      rate: number(speech.rate, defaults.speech.rate, { min: 0.1, max: 1 }),
+      pitch: number(speech.pitch, defaults.speech.pitch, { min: 0.5, max: 2 }),
+      volume: number(speech.volume, defaults.speech.volume, { min: 0, max: 1 }),
+    },
+  };
 };
 
 const generalBusinessSettingsProjection = {
@@ -11086,6 +11220,14 @@ const getProjectedSettingsSection = async (Model, defaultFactory, key) => {
 
 export const getGeneralSettings = async (category) => {
   const appKey = appSettingsCategoryMap[category];
+  if (appKey === 'ride_voice') {
+    return {
+      settings: mergeRideVoiceSettings(
+        await getProjectedSettingsSection(AdminAppSetting, createDefaultAppSettings, 'ride_voice'),
+      ),
+    };
+  }
+
   if (appKey) {
     return {
       settings: await getProjectedSettingsSection(
@@ -11117,6 +11259,16 @@ export const updateGeneralSettings = async (category, payload) => {
   const appSettings = await ensureAppSettings();
 
   const newValues = payload.settings || payload;
+
+  if (appSettingsCategoryMap[category] === 'ride_voice') {
+    // Replaced wholesale rather than shallow-merged: the panel always posts the
+    // complete config, and a merge would make a deleted language impossible to
+    // remove.
+    appSettings.ride_voice = sanitizeRideVoiceSettings(newValues);
+    appSettings.markModified('ride_voice');
+    await appSettings.save();
+    return { settings: appSettings.ride_voice };
+  }
 
   if (appSettingsCategoryMap[category]) {
     const key = appSettingsCategoryMap[category];
@@ -11326,4 +11478,106 @@ export const seedTransportTypes = async () => {
     }
   }
   return results;
+};
+
+// ── Price hike (surge) ───────────────────────────────────────────────────────
+
+const serializePriceHike = (item) => ({
+  id: String(item._id),
+  label: item.label || '',
+  days: Array.isArray(item.days) ? item.days : [],
+  start_time: item.startTime || '00:00',
+  end_time: item.endTime || '00:00',
+  timezone: item.timezone || 'Asia/Kolkata',
+  multiplier: Number(item.multiplier ?? 1),
+  active: Boolean(item.active),
+  updatedAt: item.updatedAt,
+});
+
+const normalizePriceHikePayload = (payload = {}) => {
+  const time = (value, fallback) => {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
+    if (!match) return fallback;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour > 23 || minute > 59) return fallback;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  };
+
+  const multiplier = Number(payload.multiplier);
+
+  return {
+    label: String(payload.label || '').trim(),
+    days: Array.isArray(payload.days)
+      ? [...new Set(payload.days.map((day) => Number(day)).filter((day) => day >= 0 && day <= 6))]
+      : [],
+    startTime: time(payload.start_time ?? payload.startTime, '00:00'),
+    endTime: time(payload.end_time ?? payload.endTime, '00:00'),
+    timezone: String(payload.timezone || 'Asia/Kolkata').trim() || 'Asia/Kolkata',
+    multiplier: Number.isFinite(multiplier) && multiplier >= 1 ? multiplier : 1,
+    active: normalizeBoolean(payload.active ?? false),
+  };
+};
+
+export const listPriceHikes = async (currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'price hikes');
+  }
+
+  const items = await PriceHike.find({}).sort({ createdAt: -1 }).lean();
+
+  return {
+    results: items.map(serializePriceHike),
+    active_multiplier: await getActivePriceHikeMultiplier(),
+  };
+};
+
+export const createPriceHike = async (payload, currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'price hikes');
+  }
+
+  const data = normalizePriceHikePayload(payload);
+
+  if (data.startTime === data.endTime) {
+    throw new ApiError(400, 'Start and end time cannot be the same');
+  }
+
+  const item = await PriceHike.create(data);
+  return serializePriceHike(item.toObject());
+};
+
+export const updatePriceHike = async (id, payload, currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'price hikes');
+  }
+
+  const existing = await PriceHike.findById(id);
+  if (!existing) {
+    throw new ApiError(404, 'Price hike not found');
+  }
+
+  // A toggle sends only { active }, so merge onto the stored row rather than
+  // normalising a partial payload into defaults and wiping the schedule.
+  const data = normalizePriceHikePayload({ ...serializePriceHike(existing.toObject()), ...payload });
+
+  if (data.startTime === data.endTime) {
+    throw new ApiError(400, 'Start and end time cannot be the same');
+  }
+
+  const item = await PriceHike.findByIdAndUpdate(id, data, { returnDocument: 'after' }).lean();
+  return serializePriceHike(item);
+};
+
+export const deletePriceHike = async (id, currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'price hikes');
+  }
+
+  const item = await PriceHike.findByIdAndDelete(id);
+  if (!item) {
+    throw new ApiError(404, 'Price hike not found');
+  }
+
+  return { id: String(id) };
 };

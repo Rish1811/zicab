@@ -216,6 +216,14 @@ const driverSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Set the moment the joining bonus is credited, and never cleared. This is
+    // the idempotency key: a driver can be un-approved and re-approved, or two
+    // admins can approve at once across instances, and the bonus is still paid
+    // exactly once. Mirrors referralRewardGrantedAt above.
+    joiningBonusGrantedAt: {
+      type: Date,
+      default: null,
+    },
     approve: {
       type: Boolean,
       default: true,
