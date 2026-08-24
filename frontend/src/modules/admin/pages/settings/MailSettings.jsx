@@ -48,19 +48,28 @@ const MailSettings = () => {
       toast.success('Mail configuration updated successfully');
       fetchData();
     } catch (err) {
-      toast.error('Failed to save settings');
+      toast.error(err.response?.data?.message || 'Failed to save settings');
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Sends a real message through the saved SMTP settings. This used to just
+  // wait 1.2s and claim success, so a broken configuration still looked fine.
   const handleTestMail = async () => {
+    const to = settings.mail_from_address;
+
+    if (!to) {
+      toast.error('Set a "From Address" and save before sending a test mail.');
+      return;
+    }
+
     try {
       setTesting(true);
-      await new Promise(r => setTimeout(r, 1200));
-      toast.success('Test mail sent to ' + (settings.mail_from_address || 'administrator'));
+      const res = await adminService.sendTestMail(to);
+      toast.success(`Test mail sent to ${res.data?.to || to}`);
     } catch (err) {
-      toast.error('Failed to send test mail');
+      toast.error(err.response?.data?.message || 'Failed to send test mail');
     } finally {
       setTesting(false);
     }

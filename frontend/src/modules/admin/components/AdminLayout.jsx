@@ -1059,7 +1059,7 @@ const AdminLayout = () => {
               // { label: 'SMS Gateway Settings', path: '/admin/settings/third-party/sms', permission: 'settings.view' },
               // { label: 'Firebase Settings', path: '/admin/settings/third-party/firebase', permission: 'settings.view' },
               // { label: 'Map and Map APIs Settings', path: '/admin/settings/third-party/map-apis', permission: 'settings.view' },
-              // { label: 'Mail Configuration', path: '/admin/settings/third-party/mail', permission: 'settings.view' },
+              { label: 'SMTP Configuration', path: '/admin/settings/third-party/mail', permission: 'settings.view' },
               // { label: 'Notification Channel', path: '/admin/settings/third-party/notification-channel' },
             ],
           },

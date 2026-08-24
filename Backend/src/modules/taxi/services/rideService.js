@@ -10,6 +10,7 @@ import { Driver } from '../driver/models/Driver.js';
 import { WalletTransaction } from '../driver/models/WalletTransaction.js';
 import { incrementDriverTodaySummaryForCompletedRide } from '../driver/services/driverTodaySummaryService.js';
 import { applyDriverWalletAdjustment, ensureDriverWalletCanAcceptRide, settleCompletedRideWallet } from '../driver/services/walletService.js';
+import { sendRideInvoiceEmail } from './invoiceService.js';
 import { Delivery } from '../user/models/Delivery.js';
 import { RideBid } from '../user/models/RideBid.js';
 import { Ride } from '../user/models/Ride.js';
@@ -1744,6 +1745,15 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
 
     await processCompletedRideReferralReward(ride);
     await processCompletedDriverReferralReward(ride);
+
+    // Deliberately not awaited: the driver's "complete ride" tap should not wait
+    // on an SMTP round trip, and a mail failure must not fail the completion.
+    // sendRideInvoiceEmail resolves with {sent:false, reason} rather than throwing.
+    sendRideInvoiceEmail({ rideId: ride._id }).then((result) => {
+      if (!result.sent && result.reason !== 'no-customer-email') {
+        console.warn('[invoice] not sent for ride', String(ride._id), '-', result.reason);
+      }
+    });
   }
 
   const populatedRide = await populateRideRealtime(ride._id);

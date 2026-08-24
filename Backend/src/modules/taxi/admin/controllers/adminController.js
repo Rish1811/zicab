@@ -7,6 +7,10 @@ import { BusService } from '../models/BusService.js';
 import { BusSeatHold } from '../../user/models/BusSeatHold.js';
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
 import { getOrLoadCachedValue, invalidateCachedPrefix, invalidateCachedValue } from '../../../../utils/cache.js';
+import { getMailConfigStatus, sendEmail } from '../../services/mailService.js';
+// Used ~40 times below but never imported: those paths threw ReferenceError
+// instead of the intended 4xx.
+import { ApiError } from '../../../../utils/ApiError.js';
 
 const PUBLIC_BOOTSTRAP_CACHE_TTL_MS = 30_000;
 // These three public config caches all have a 30s TTL, and every one of them is
@@ -1584,6 +1588,42 @@ export const getMailSettings = asyncHandler(async (_req, res) =>
 export const updateMailSettings = asyncHandler(async (req, res) =>
   ok(res, { settings: await adminService.updateMailSettings(req.body) }),
 );
+
+/**
+ * Sends a real message using whatever SMTP is currently saved, so the panel can
+ * prove the credentials work. The previous "Send Test Mail" button only waited
+ * 1.2s in the browser and always reported success.
+ */
+export const sendTestMail = asyncHandler(async (req, res) => {
+  const status = await getMailConfigStatus();
+
+  if (!status.configured) {
+    throw new ApiError(400, `SMTP is not configured: missing ${status.missing.join(', ')}`);
+  }
+
+  const to = String(req.body?.to || '').trim() || req.auth?.email;
+
+  if (!to) {
+    throw new ApiError(400, 'A recipient address is required');
+  }
+
+  try {
+    await sendEmail({
+      to,
+      subject: 'ZI CAB SMTP test',
+      text: `This is a test message from the ZI CAB admin panel.
+
+SMTP host: ${status.host}:${status.port}
+If you received this, outgoing mail works.`,
+    });
+  } catch (error) {
+    // Surface the SMTP reason — this endpoint is admin-only and the whole point
+    // is to diagnose credentials.
+    throw new ApiError(502, `SMTP rejected the message: ${error.message}`);
+  }
+
+  ok(res, { sent: true, to, host: status.host, port: status.port });
+});
 
 export const getRechargeApiSettings = asyncHandler(async (_req, res) =>
   ok(res, await adminService.getRechargeApiSettings()),

@@ -204,6 +204,7 @@ import {
   updateGeneralSettingsCategory,
   updateLanguageStatus,
   updateMailSettings,
+  sendTestMail,
   updateMapSettings,
   updateRechargeApiSettings,
   updateOwner,
@@ -511,6 +512,7 @@ adminRouter.get('/admin/integration-settings/map', getMapSettings);
 adminRouter.patch('/admin/integration-settings/map', updateMapSettings);
 adminRouter.get('/admin/integration-settings/mail', getMailSettings);
 adminRouter.patch('/admin/integration-settings/mail', updateMailSettings);
+adminRouter.post('/admin/integration-settings/mail/test', sendTestMail);
 adminRouter.get('/admin/integration-settings/recharge-api', getRechargeApiSettings);
 adminRouter.patch('/admin/integration-settings/recharge-api', updateRechargeApiSettings);
 adminRouter.post('/admin/integration-settings/recharge-api/generate-token', generateRechargeApiToken);
