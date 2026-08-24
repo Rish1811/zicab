@@ -45,6 +45,9 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number.isInteger(Number(process.env.PORT)) ? Number(process.env.PORT) : 4000,
   mongoUri: process.env.MONGODB_URI,
+  // Used server-side for Directions. Present in .env all along, but never
+  // read, which is why routing fell to the public OSRM demo host.
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
   mongoDbName: process.env.MONGODB_DB_NAME || 'appzeto_taxi',
   jwtSecret: resolvedJwtSecret,
   jwtExpiresIn: resolvedJwtExpiresIn,
@@ -99,6 +102,9 @@ export const env = {
     },
   },
   driverWallet: {
+    joiningBonus: Number.isFinite(Number(process.env.DRIVER_JOINING_BONUS))
+      ? Number(process.env.DRIVER_JOINING_BONUS)
+      : 100,
     defaultCashLimit: Number.isFinite(Number(process.env.DRIVER_WALLET_DEFAULT_CASH_LIMIT))
       ? Number(process.env.DRIVER_WALLET_DEFAULT_CASH_LIMIT)
       : 500,

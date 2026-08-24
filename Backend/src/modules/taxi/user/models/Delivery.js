@@ -146,6 +146,31 @@ const deliverySchema = new mongoose.Schema(
         default: '',
         trim: true,
       },
+      /// Photos of the parcel taken by the sender when booking. The app caps
+      /// this at two; they are upload URLs rather than inline data so that ride
+      /// documents stay small.
+      photos: {
+        type: [String],
+        default: [],
+      },
+      /// Handling notes from the sender ('fragile', 'call before arriving').
+      /// Separate from `description`, which names what is inside.
+      instructions: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      /// Proof the driver collected the parcel. Without it the trip cannot
+      /// start - see `assertParcelProof` in rideService.
+      pickupProof: {
+        url: { type: String, default: '' },
+        at: { type: Date, default: null },
+      },
+      /// Proof the driver handed it over. Without it the trip cannot complete.
+      deliveryProof: {
+        url: { type: String, default: '' },
+        at: { type: Date, default: null },
+      },
     },
     acceptedAt: {
       type: Date,

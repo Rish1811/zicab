@@ -117,6 +117,7 @@ import {
   AdminSupportTicketTitle,
   AdminSurgePricing,
   AdminTipSettings,
+  AdminRideVoiceSettings,
   AdminTransportRideSettings,
   AdminTrips,
   AdminUserBulkUpload,
@@ -392,6 +393,7 @@ const adminRoutes = (
 
       <Route path="settings/app/wallet" element={<AdminWalletSettings />} />
       <Route path="settings/app/tip" element={<AdminTipSettings />} />
+      <Route path="settings/app/ride-voice" element={<AdminRideVoiceSettings />} />
       <Route path="settings/app/country" element={<AdminCountryManagement />} />
       <Route path="settings/app/onboard" element={<AdminOnboardingScreens />} />
 

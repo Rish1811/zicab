@@ -69,7 +69,9 @@ import {
   createPoolingBooking,
   getMyPoolingBookings
 } from '../controllers/poolingController.js';
+import { getVehicleMapIcons, getVehicleMapIconImage } from '../controllers/vehicleMapIconController.js';
 import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog, getPublicLandingContent } from '../../admin/controllers/adminController.js';
+import { getPublicCancellationReasons } from '../../admin/controllers/cancellationReasonController.js';
 import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
 
 export const userRouter = Router();
@@ -77,9 +79,15 @@ export const userRouter = Router();
 userRouter.get('/bootstrap', asyncHandler(getAppBootstrap));
 userRouter.get('/app-modules', asyncHandler(getAppModules));
 userRouter.get('/settings/:category', asyncHandler(getGeneralSettingsCategory));
+// Admin-managed reasons the rider picks from when cancelling a trip.
+userRouter.get('/cancellation-reasons', getPublicCancellationReasons);
 userRouter.get('/intercity-packages', asyncHandler(getIntercityPackageCatalog));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
+// Marker art per vehicle type. Listed as URLs; the heavy data-URL entries are
+// served lazily from the second route rather than inlined.
+userRouter.get('/vehicle-map-icons', asyncHandler(getVehicleMapIcons));
+userRouter.get('/vehicle-map-icons/:vehicleId/image', asyncHandler(getVehicleMapIconImage));
 userRouter.get('/landing-content', asyncHandler(getPublicLandingContent));
 userRouter.get('/set-prices', asyncHandler(getSetPrices));
 userRouter.get('/zones', asyncHandler(getZones));

@@ -21,13 +21,19 @@ const bootstrap = async () => {
   const app = createApp();
   const httpServer = createServer(app);
 
-  configureTaxiSocketServer(httpServer);
+  await configureTaxiSocketServer(httpServer);
   await restoreScheduledDispatches();
   startDispatchRecoveryLoop();
 
-  httpServer.listen(env.port, () => {
+  // Loopback by default: nginx is the only thing that should reach these
+  // processes, and with several instances on 5000-5003 a public bind would let
+  // a client pin one instance and skip the load balancer entirely. Set HOST to
+  // override where the proxy lives elsewhere (containers, another box).
+  const host = process.env.HOST || '127.0.0.1';
+
+  httpServer.listen(env.port, host, () => {
     const redisStatus = getRedisStatus();
-    console.log(`Taxi backend listening on port ${env.port}`);
+    console.log(`Taxi backend listening on ${host}:${env.port}`);
     console.log('[redis] status', redisStatus);
   });
 };

@@ -142,6 +142,39 @@ const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoo
   };
 };
 
+/// Prices a parcel without booking it.
+///
+/// Runs the same `computeDeliveryFareBreakdown` the booking uses, so the quote
+/// and the charge cannot drift apart.
+export const quoteDeliveryFare = async ({ vehicleTypeId, pickup, drop }) => {
+  const pickupCoords = normalizePoint(pickup, 'pickup');
+  const dropCoords = normalizePoint(drop, 'drop');
+
+  const vehicle = vehicleTypeId
+    ? await Vehicle.findById(vehicleTypeId)
+      .select('name delivery_distance_pricing service_tax')
+      .lean()
+    : null;
+
+  if (!vehicle) {
+    throw new ApiError(404, 'Vehicle type not found');
+  }
+
+  const breakdown = computeDeliveryFareBreakdown({ vehicle, pickupCoords, dropCoords });
+  const pricing = vehicle.delivery_distance_pricing || {};
+
+  return {
+    vehicleTypeId: String(vehicle._id),
+    vehicleName: vehicle.name || '',
+    distanceKm: roundCurrency(calculateDistanceKm(pickupCoords, dropCoords)),
+    baseDistanceKm: Number(pricing.base_distance ?? pricing.free_distance ?? 0),
+    subtotal: breakdown.subtotal,
+    serviceTaxPercentage: breakdown.serviceTaxPercentage,
+    serviceTaxAmount: breakdown.serviceTaxAmount,
+    total: breakdown.total,
+  };
+};
+
 export const serializeDeliveryRealtime = (ride) => {
   const serializedRide = serializeRideRealtime(ride);
 
