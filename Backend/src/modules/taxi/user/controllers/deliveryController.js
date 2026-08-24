@@ -1,4 +1,12 @@
-import { createDeliveryRecord, getActiveDeliveryForIdentity, getDeliveryById, listDeliveriesForIdentity } from '../services/deliveryService.js';
+import { createDeliveryRecord, getActiveDeliveryForIdentity, getDeliveryById, listDeliveriesForIdentity, quoteDeliveryFare } from '../services/deliveryService.js';
+
+/// Fare for a parcel before it is booked, so the address screen can show the
+/// rider a price to agree to instead of failing to calculate one.
+export const quoteDelivery = async (req, res) => {
+  const { vehicleTypeId, pickup, drop } = req.body;
+  const quote = await quoteDeliveryFare({ vehicleTypeId, pickup, drop });
+  res.json({ success: true, data: quote });
+};
 
 export const createDelivery = async (req, res) => {
   const { pickup, drop, pickupAddress, dropAddress, fare, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, parcel } = req.body;

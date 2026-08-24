@@ -179,6 +179,19 @@ const vehicleSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    /// Which app modules this vehicle is offered under (Zi Airport, Zi City
+    /// Ride, Zi Parcel ...).
+    ///
+    /// An empty list means "every module", which is what keeps existing
+    /// vehicles visible the moment this field ships — modules are then assigned
+    /// one vehicle at a time instead of the whole catalog disappearing until
+    /// every row has been tagged.
+    app_modules: [
+      {
+        type: ObjectId,
+        ref: 'TaxiAppModule',
+      },
+    ],
     supported_other_vehicle_types: {
       type: [ObjectId],
       ref: 'TaxiVehicle',

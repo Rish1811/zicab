@@ -123,6 +123,7 @@ const sendPushToTargets = async ({
   body,
   image = '',
   data = {},
+  dataOnly = false,
 }) => {
   const messaging = getFirebaseMessaging();
 
@@ -160,29 +161,62 @@ const sendPushToTargets = async ({
   );
 
   for (const batch of chunk(dedupedTargets, 500)) {
-    const response = await messaging.sendEachForMulticast({
-      tokens: batch.map((target) => target.token),
-      notification: {
-        title,
-        body,
-        ...(image ? { imageUrl: image } : {}),
-      },
-      data: {
-        ...safeData,
-        click_action: 'FLUTTER_NOTIFICATION_CLICK',
-      },
-      android: {
-        priority: 'high',
-        notification: image ? { imageUrl: image } : undefined,
-      },
-      webpush: {
-        notification: {
-          title,
-          body,
-          ...(image ? { image } : {}),
-        },
-      },
-    });
+    // Data-only when the app must handle the push itself.
+    //
+    // On Android a message carrying a `notification` block is drawn straight
+    // into the system tray by the Firebase SDK whenever the app is backgrounded
+    // or killed, and `onMessageReceived` is never called. For an ordinary
+    // notification that is exactly what we want. For a ride offer it is fatal:
+    // the driver sees a dead tray line, the native full-screen card never
+    // posts, and Dart never learns an offer exists.
+    //
+    // Stripping the block puts the message back on the data path, which always
+    // wakes the app. The title and body ride along inside `data` so whatever
+    // renders the alert still has them.
+    const payload = dataOnly
+      ? {
+          tokens: batch.map((target) => target.token),
+          data: {
+            ...safeData,
+            title: String(title ?? ''),
+            body: String(body ?? ''),
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+          android: {
+            priority: 'high',
+          },
+          apns: {
+            // iOS drops a data-only push unless it is flagged as a silent
+            // content update.
+            payload: { aps: { 'content-available': 1 } },
+            headers: { 'apns-priority': '5', 'apns-push-type': 'background' },
+          },
+        }
+      : {
+          tokens: batch.map((target) => target.token),
+          notification: {
+            title,
+            body,
+            ...(image ? { imageUrl: image } : {}),
+          },
+          data: {
+            ...safeData,
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+          android: {
+            priority: 'high',
+            notification: image ? { imageUrl: image } : undefined,
+          },
+          webpush: {
+            notification: {
+              title,
+              body,
+              ...(image ? { image } : {}),
+            },
+          },
+        };
+
+    const response = await messaging.sendEachForMulticast(payload);
 
     response.responses.forEach((item, index) => {
       if (item.success) {
@@ -347,6 +381,9 @@ export const sendPushNotificationToEntities = async ({
   body,
   image = '',
   data = {},
+  /// Set for pushes the app has to act on rather than merely display — see the
+  /// note in `sendPushToTargets`.
+  dataOnly = false,
 }) => {
   const targets = await collectDirectTargets({ userIds, driverIds });
   return sendPushToTargets({
@@ -355,5 +392,6 @@ export const sendPushNotificationToEntities = async ({
     body,
     image,
     data,
+    dataOnly,
   });
 };

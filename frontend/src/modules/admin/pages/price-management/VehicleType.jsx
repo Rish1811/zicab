@@ -185,6 +185,9 @@ const buildVehicleFormData = (selectedVehicle = {}) => ({
   admin_commission_for_owner: String(selectedVehicle.admin_commission_for_owner ?? 0),
   status: Number(selectedVehicle.status ?? (selectedVehicle.active !== false ? 1 : 0)),
   active: selectedVehicle.active !== false && Number(selectedVehicle.status ?? 1) !== 0,
+  app_modules: Array.isArray(selectedVehicle.app_modules)
+    ? selectedVehicle.app_modules.map((item) => String(item?._id || item))
+    : [],
   supported_other_vehicle_types: Array.isArray(selectedVehicle.supported_other_vehicle_types)
     ? selectedVehicle.supported_other_vehicle_types.map((item) => String(item?._id || item))
     : typeof selectedVehicle.supported_vehicles === 'string' && selectedVehicle.supported_vehicles
@@ -234,6 +237,7 @@ const defaultFormData = {
   admin_commission_for_owner: '0',
   status: 1,
   active: true,
+  app_modules: [],
   supported_other_vehicle_types: [],
   vehicle_preference: [],
 };
@@ -395,6 +399,10 @@ const VehicleType = ({ mode: propMode }) => {
   const [pagination, setPagination] = useState({ total: 0, current_page: 1 });
   const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState({ ...defaultFormData, transport_type: '' });
+  // Which app modules a vehicle can be offered under. Only active ones are
+  // offered: assigning a vehicle to a module the rider cannot see would hide it
+  // with no way to tell why.
+  const [moduleOptions, setModuleOptions] = useState([]);
   const { transportTypes } = useTaxiTransportTypes({ enabled: isEditor });
   const transportTypeOptions = useMemo(() => {
     const normalized = new Map();
@@ -430,11 +438,35 @@ const VehicleType = ({ mode: propMode }) => {
       try {
         const vehicleCatalogPromise = api.get(isEditor ? '/admin/types/vehicle-types' : '/admin/types/vehicle-types/list');
         const preferencePromise = isEditor ? api.get('/admin/vehicle_preference') : Promise.resolve(null);
+        const modulesPromise = isEditor
+          ? api.get('/admin/common/app-modules', { params: { limit: 100 } })
+          : Promise.resolve(null);
         const detailPromise = isEditor && id ? api.get(`/admin/types/vehicle-types/${id}`) : Promise.resolve(null);
 
         if (!id && propMode === 'create') {
           setFormData(defaultFormData);
         }
+
+        modulesPromise
+          .then((response) => {
+            if (!mounted || !response) return;
+            const payload = unwrap(response);
+            const rows = Array.isArray(payload?.results)
+              ? payload.results
+              : Array.isArray(payload)
+                ? payload
+                : [];
+            setModuleOptions(
+              rows
+                .filter((row) => Number(row?.active ?? 1) === 1)
+                .map((row) => ({
+                  id: String(row?._id || row?.id || ''),
+                  name: row?.name || 'Module',
+                }))
+                .filter((row) => row.id),
+            );
+          })
+          .catch(() => {});
 
         detailPromise
           .then((response) => {
@@ -619,6 +651,7 @@ const VehicleType = ({ mode: propMode }) => {
         admin_commission_for_owner: Number(formData.admin_commission_for_owner || 0),
         status: formData.active ? 1 : 0,
         active: formData.active,
+        app_modules: sanitizeObjectIdList(formData.app_modules),
         supported_other_vehicle_types: sanitizeObjectIdList(formData.supported_other_vehicle_types),
         vehicle_preference: sanitizeObjectIdList(formData.vehicle_preference),
       };
@@ -1263,6 +1296,20 @@ const VehicleType = ({ mode: propMode }) => {
               className={inputClass}
               placeholder="Parcel Delivery"
             />
+          </div>
+
+          <div className="lg:col-span-2">
+            <VehicleMultiSelect
+              label="App Modules"
+              options={moduleOptions}
+              value={formData.app_modules}
+              onChange={(next) => updateForm('app_modules', next)}
+              placeholder="Shown under every module"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Riders only see this vehicle when they book through a selected module.
+              Leave empty to offer it under every module.
+            </p>
           </div>
 
           <div className="lg:col-span-2">

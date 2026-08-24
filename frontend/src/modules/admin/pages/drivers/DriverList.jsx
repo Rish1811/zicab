@@ -15,7 +15,8 @@ import {
   ChevronRight,
   Filter,
   List,
-  LayoutGrid
+  LayoutGrid,
+  Wallet
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -321,17 +322,18 @@ const DriverList = ({ mode = 'approved' }) => {
                 <th className="px-3 py-2 text-center">Status</th>
                 <th className="px-3 py-2">Rating</th>
                 <th className="px-3 py-2">Registered</th>
+                <th className="px-3 py-2 text-right">Wallet</th>
                 <th className="px-3 py-2 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan="11" className="px-3 py-6 text-center text-gray-400">Loading drivers...</td>
+                  <td colSpan="12" className="px-3 py-6 text-center text-gray-400">Loading drivers...</td>
                 </tr>
               ) : drivers.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="px-3 py-6 text-center text-gray-400">No drivers found.</td>
+                  <td colSpan="12" className="px-3 py-6 text-center text-gray-400">No drivers found.</td>
                 </tr>
               ) : (
                 drivers.map((driver) => (
@@ -380,6 +382,16 @@ const DriverList = ({ mode = 'approved' }) => {
                       </div>
                     </td>
                     <td className="px-3 py-1.5 text-[10px] text-gray-500 whitespace-nowrap">{formatDate(driver.registeredAt)}</td>
+                    <td className="px-3 py-1.5 text-right">
+                      <button
+                        onClick={() => navigate(`/admin/drivers/${driver.id}?tab=Payment History`)}
+                        className="inline-flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded text-[11px] transition-colors"
+                        title="Manage Driver Wallet"
+                      >
+                        <Wallet size={11} className="text-emerald-600" />
+                        ₹{Number(driver.wallet_balance ?? driver.wallet?.balance ?? 0).toFixed(2)}
+                      </button>
+                    </td>
                     <td className="px-3 py-1.5 text-right">
                       <div className="relative inline-block">
                         <button 
@@ -433,6 +445,15 @@ const DriverList = ({ mode = 'approved' }) => {
               ...menuPosition,
             }}
           >
+            <button
+              onClick={() => {
+                closeMenu();
+                navigate(`/admin/drivers/${activeMenu}?tab=Payment History`);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-emerald-50 hover:text-emerald-700 text-gray-700 rounded-lg transition-colors text-sm font-medium"
+            >
+              <Wallet size={15} className="text-emerald-600" /> Manage Wallet
+            </button>
             <button
               onClick={() => {
                 closeMenu();
