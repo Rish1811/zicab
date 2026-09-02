@@ -60,7 +60,12 @@ export const getRedisClient = () => {
       disableOfflineQueue: true,
       socket: {
         connectTimeout: env.redis.connectTimeoutMs,
-        reconnectStrategy: () => false,
+        // Reconnect with capped backoff. `() => false` left the Socket.IO
+        // adapter's pub/sub pair permanently dead after any Redis restart
+        // (unattended-upgrades does this), silently breaking every emit that
+        // crossed instances. node-redis restores subscriptions on reconnect,
+        // so the adapter recovers by itself once the socket is back.
+        reconnectStrategy: (retries) => Math.min(250 * 2 ** Math.min(retries, 5), 5000),
         keepAlive: 5000, // Sends TCP keep-alive probes to prevent idle connection termination
       },
     });
