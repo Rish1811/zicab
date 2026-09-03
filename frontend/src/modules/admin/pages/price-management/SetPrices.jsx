@@ -358,6 +358,12 @@ const SetPrices = ({ mode }) => {
         return;
       }
 
+      // Start the detail fetch alongside zones/vehicle-types rather than after
+      // them; awaiting it separately made edit mode a two-trip waterfall.
+      const detailPromise = mode === 'edit' && editingId
+        ? adminService.getSetPriceById(editingId)
+        : null;
+
       const requests = [
         fetch(`${baseUrl}/zones`, { headers: auth }),
         fetch(`${baseUrl}/types/vehicle-types`, { headers: auth }),
@@ -373,8 +379,8 @@ const SetPrices = ({ mode }) => {
       const vItems = vehiclesData.results || vehiclesData.data?.vehicle_types || JSON.parse(JSON.stringify(vehiclesData.data?.results || []));
       setVehicleTypes(Array.isArray(vItems) ? vItems : []);
 
-      if (mode === 'edit' && editingId) {
-        const detailResponse = await adminService.getSetPriceById(editingId);
+      if (detailPromise) {
+        const detailResponse = await detailPromise;
         const pData = detailResponse?.data?.data || detailResponse?.data || {};
 
         setFormData({
@@ -804,13 +810,6 @@ const SetPrices = ({ mode }) => {
             </div>
 
             <div className="bg-white rounded-md border border-gray-100 shadow-sm p-2 relative">
-               {loading && mode === 'edit' && (
-                  <div className="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center gap-4">
-                     <Loader2 className="animate-spin text-indigo-600" size={40} />
-                     <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Hydrating Form State...</p>
-                  </div>
-               )}
-               
                <div className="flex justify-end mb-2">
                   <button type="button" onClick={() => setShowHowItWorks(true)} className="text-[10px] font-bold text-[#00BFA5] underline decoration-dotted underline-offset-4">How It Works</button>
                </div>
