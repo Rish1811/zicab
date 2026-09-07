@@ -1,5 +1,6 @@
 import { useLanding } from '../landingContentContext';
 import { LANDING_ICONS } from '../useLandingContent';
+import useAppModules from '../useAppModules';
 import React, { useRef } from 'react';
 import {
   Car, Plane, Compass, Briefcase, Building2, ShoppingBag,
@@ -13,11 +14,44 @@ const Services = ({ openBookingModal }) => {
 
 
   const { servicesPage } = useLanding();
-  // Icons are stored as names in the CMS; resolve to components here.
-  const allServices = (servicesPage.items || []).map((item) => ({
-    ...item,
-    icon: LANDING_ICONS[item.icon] || Car,
-  }));
+  const appModules = useAppModules();
+
+  // The module list decides which services exist — it is what the app actually
+  // sells. The CMS entries then supply the richer presentation (photo, badge,
+  // feature bullets) for whichever ones have been written up, matched on name.
+  // A module with no CMS entry still renders, using its own icon and blurb.
+  const normalise = (value) =>
+    String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/^zi/, '');
+
+  const cmsItems = servicesPage.items || [];
+  // Prefix matching, not equality: the module is "Zi City Ride" while the
+  // write-up is titled "City Ride (Local Cabs)", and neither name is going to be
+  // edited to suit the other.
+  const findCmsMatch = (title) => {
+    const key = normalise(title);
+    if (!key) return undefined;
+    const related = (a, b) => a && b && (a.startsWith(b) || b.startsWith(a));
+    return (
+      cmsItems.find((item) => normalise(item.title) === key || normalise(item.id) === key) ||
+      cmsItems.find((item) => related(normalise(item.title), key) || related(normalise(item.id), key))
+    );
+  };
+
+  const allServices = appModules.length
+    ? appModules.map((module) => {
+        const match = findCmsMatch(module.title) || {};
+        return {
+          ...match,
+          id: module.id,
+          title: module.title,
+          description: match.description || module.desc,
+          tag: match.tag || module.desc,
+          image: match.image || module.image,
+          features: match.features || [],
+          icon: LANDING_ICONS[match.icon] || Car,
+        };
+      })
+    : cmsItems.map((item) => ({ ...item, icon: LANDING_ICONS[item.icon] || Car }));
 
 
   return (
@@ -52,14 +86,18 @@ const Services = ({ openBookingModal }) => {
 
                     <p className="s-desc">{s.description}</p>
 
-                    <div className="s-features-list">
-                      {s.features.map((feat, i) => (
-                        <div key={i} className="sf-item">
-                          <CheckCircle size={15} color="#00BBA9" />
-                          <span>{feat}</span>
-                        </div>
-                      ))}
-                    </div>
+                    {/* omitted entirely for a module with no write-up yet,
+                        rather than leaving an empty gap under the description */}
+                    {s.features?.length > 0 && (
+                      <div className="s-features-list">
+                        {s.features.map((feat, i) => (
+                          <div key={i} className="sf-item">
+                            <CheckCircle size={15} color="#00BBA9" />
+                            <span>{feat}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     <button className="btn btn-teal w-full mt-4" onClick={openBookingModal}>
                       {servicesPage.ctaLabel} <ArrowRight size={16} />
