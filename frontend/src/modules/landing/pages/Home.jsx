@@ -365,14 +365,20 @@ const fallbackVehicles = [
                 <div className="vehicle-card-body">
                   <h3 className="vehicle-name">{v.name}</h3>
                   <div className="vehicle-specs">
-                    <span><Users size={14} /> {v.seats}</span>
-                    <span><Briefcase size={14} /> {v.bags}</span>
+                    {v.seats && <span><Users size={14} /> {v.seats}</span>}
+                    {v.bags && <span><Briefcase size={14} /> {v.bags}</span>}
                   </div>
 
                   <div className="vehicle-price-row">
+                    {/* No price row at all when the vehicle has no configured
+                        rate — better than showing an empty or invented one. */}
                     <div className="price-tag">
-                      <span className="price-num">{v.price}</span>
-                      <span className="price-unit">{v.unit}</span>
+                      {v.price ? (
+                        <>
+                          <span className="price-num">{v.price}</span>
+                          <span className="price-unit">{v.unit}</span>
+                        </>
+                      ) : null}
                     </div>
                     <button 
                       className="btn btn-outline-teal btn-sm"
