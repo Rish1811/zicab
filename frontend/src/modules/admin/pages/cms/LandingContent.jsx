@@ -94,6 +94,25 @@ const CONTACT_FIELDS = [
   { name: 'mapsUrl', label: 'Google Maps URL', placeholder: 'https://www.google.com/maps/search/?api=1&query=...', wide: true },
 ];
 
+const HERO_FIELDS = [
+  { name: 'titleLine1', label: 'Headline line 1', placeholder: 'Your Ride.' },
+  { name: 'titleLine2', label: 'Headline line 2', placeholder: 'Our Priority.', help: 'Shown in the accent colour.' },
+  { name: 'subtitle', label: 'Subtitle', placeholder: 'Premium rides, verified drivers...', wide: true },
+  { name: 'primaryCta', label: 'Primary button', placeholder: 'Book a Ride' },
+  { name: 'secondaryCta', label: 'Secondary button', placeholder: 'Download App' },
+];
+
+const SEO_FIELDS = [
+  { name: 'title', label: 'Browser tab title', placeholder: 'ZI CAB - Your Ride. Our Priority.', wide: true },
+  { name: 'description', label: 'Search description', placeholder: 'ZI CAB - city, outstation and airport cabs...', wide: true },
+];
+
+const FOOTER_FIELDS = [
+  { name: 'description', label: 'About blurb', placeholder: 'ZI CAB is a premium cab booking platform...', wide: true },
+  { name: 'servicesHeading', label: 'Services column heading', placeholder: 'Cab Services' },
+  { name: 'copyright', label: 'Copyright line', placeholder: '© 2026 ZI CAB Technologies Pvt Ltd. All Rights Reserved.', wide: true },
+];
+
 const BRAND_FIELDS = [
   { name: 'logo', label: 'Logo', type: 'image', wide: true, help: 'Shown in the header, footer and intro screen.' },
   { name: 'wordmarkPrimary', label: 'Wordmark (first part)', placeholder: 'ZI' },
@@ -104,6 +123,16 @@ const BRAND_FIELDS = [
   { name: 'appStoreUrl', label: 'App Store URL', placeholder: 'https://apps.apple.com/app/...', wide: true },
   { name: 'playStoreQr', label: 'Play Store QR', type: 'image' },
   { name: 'appStoreQr', label: 'App Store QR', type: 'image' },
+];
+
+// Repeatable lists nested inside the hero and footer objects.
+const NESTED_LISTS = [
+  { section: 'hero', key: 'badges', title: 'Hero trust badges', itemLabel: 'badge',
+    fields: [{ name: 'label', label: 'Label', placeholder: 'Verified Drivers' }, { name: 'icon', label: 'Icon', type: 'icon' }] },
+  { section: 'footer', key: 'cabServices', title: 'Footer services list', itemLabel: 'service',
+    fields: [{ name: 'label', label: 'Label', placeholder: 'Airport Pickup & Drop', wide: true }] },
+  { section: 'footer', key: 'trustPills', title: 'Footer trust pills', itemLabel: 'pill',
+    fields: [{ name: 'label', label: 'Label', placeholder: 'Verified Drivers', wide: true }] },
 ];
 
 const LEGAL_DOCS = [
@@ -318,6 +347,9 @@ export default function LandingContent() {
         contact: data.contact || {},
         legal: data.legal || {},
         brand: data.brand || {},
+        seo: data.seo || {},
+        footer: data.footer || {},
+        hero: data.hero || {},
       });
       setDirty(false);
     } catch (error) {
@@ -418,6 +450,46 @@ export default function LandingContent() {
           onChange={(value) => setSection(section.key, value)}
         />
       ))}
+
+      <SectionCard title="Hero" help="The headline block at the top of the home page.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {HERO_FIELDS.map((field) => (
+            <Field key={field.name} field={field} value={content.hero?.[field.name]}
+              onChange={(value) => setSection('hero', { ...content.hero, [field.name]: value })} />
+          ))}
+        </div>
+      </SectionCard>
+
+      {NESTED_LISTS.map((list) => {
+        const items = content[list.section]?.[list.key] || [];
+        const onChange = (next) => setSection(list.section, { ...content[list.section], [list.key]: next });
+        return (
+          <RepeatableSection
+            key={`${list.section}.${list.key}`}
+            section={{ title: list.title, itemLabel: list.itemLabel, fields: list.fields }}
+            items={items}
+            onChange={onChange}
+          />
+        );
+      })}
+
+      <SectionCard title="Footer" help="Wording in the site footer.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {FOOTER_FIELDS.map((field) => (
+            <Field key={field.name} field={field} value={content.footer?.[field.name]}
+              onChange={(value) => setSection('footer', { ...content.footer, [field.name]: value })} />
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Search & Browser Tab" help="Applied when the page loads. Crawlers that do not run JavaScript still see the build-time copy.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {SEO_FIELDS.map((field) => (
+            <Field key={field.name} field={field} value={content.seo?.[field.name]}
+              onChange={(value) => setSection('seo', { ...content.seo, [field.name]: value })} />
+          ))}
+        </div>
+      </SectionCard>
 
       <SectionCard title="Brand & App" help="Logo, wordmark and the app-store links behind the download badges.">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

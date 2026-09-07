@@ -99,7 +99,10 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
   // Photos live in Frontend/public/vehicles/ — see that folder's README + ATTRIBUTION
   // before swapping any of them out.
-  const fallbackVehicles = [
+  // Hero badges store an icon name; components cannot be serialised.
+const HERO_BADGE_ICONS = { ShieldCheck, Navigation, Headphones, Wallet };
+
+const fallbackVehicles = [
     {
       name: 'Auto Rickshaw',
       type: 'Auto',
@@ -149,7 +152,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
   // All page content comes from the CMS, falling back to the bundled copy so the
   // page is never blank while the request is in flight or if it fails.
-  const { services, valueProps, drivers, partners, launchCities, contact, brand } = useLanding();
+  const { services, valueProps, drivers, partners, launchCities, contact, brand, hero } = useLanding();
   const { vehicles } = useVehicleTypes(fallbackVehicles);
 
 
@@ -163,47 +166,42 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           {/* Left Content */}
           <div className="hero-left" data-hero-exit>
             {/* each word gets a clipping mask so it can rise into view */}
+            {/* Split per word so each keeps its own clipping mask and rise-in
+                animation; the copy itself comes from the CMS. */}
             <h1 className="hero-title">
-              <span className="hero-line">
-                <span className="hero-word">Your</span>{' '}
-                <span className="hero-word">Ride.</span>
-              </span>
-              <span className="hero-line">
-                <span className="hero-word teal-text">Our</span>{' '}
-                <span className="hero-word teal-text">Priority.</span>
-              </span>
+              {[hero.titleLine1, hero.titleLine2].map((line, lineIndex) => (
+                <span className="hero-line" key={lineIndex}>
+                  {String(line || '').split(/\s+/).filter(Boolean).map((word, wordIndex, words) => (
+                    <span key={wordIndex}>
+                      <span className={lineIndex === 1 ? 'hero-word teal-text' : 'hero-word'}>{word}</span>
+                      {wordIndex < words.length - 1 ? ' ' : null}
+                    </span>
+                  ))}
+                </span>
+              ))}
             </h1>
-            <p className="hero-subtitle">
-              Premium rides, verified drivers and 24x7 support with our dedicated ride coordinators.
-            </p>
+            <p className="hero-subtitle">{hero.subtitle}</p>
 
             <div className="hero-cta-group">
               <button className="btn btn-teal hero-btn-main" data-magnetic onClick={openBookingModal}>
-                Book a Ride <ArrowRight size={18} />
+                {hero.primaryCta} <ArrowRight size={18} />
               </button>
               <button className="btn btn-outline-light hero-btn-app" onClick={() => setActiveTab('contact')}>
-                <Smartphone size={18} /> Download App
+                <Smartphone size={18} /> {hero.secondaryCta}
               </button>
             </div>
 
             {/* Trust Badges */}
             <div className="hero-trust-badges">
-              <div className="badge-item">
-                <ShieldCheck size={16} color="#00BBA9" />
-                <span>Verified Drivers</span>
-              </div>
-              <div className="badge-item">
-                <Navigation size={16} color="#00BBA9" />
-                <span>Live Tracking</span>
-              </div>
-              <div className="badge-item">
-                <Headphones size={16} color="#00BBA9" />
-                <span>24x7 Support</span>
-              </div>
-              <div className="badge-item">
-                <Wallet size={16} color="#00BBA9" />
-                <span>Secure Payments</span>
-              </div>
+              {(hero.badges || []).map((badge, index) => {
+                const BadgeIcon = HERO_BADGE_ICONS[badge.icon] || ShieldCheck;
+                return (
+                  <div className="badge-item" key={index}>
+                    <BadgeIcon size={16} color="#00BBA9" />
+                    <span>{badge.label}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

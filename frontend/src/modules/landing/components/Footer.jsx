@@ -4,7 +4,7 @@ import { scrollToTop } from '../hooks/useSmoothScroll';
 import { useLanding } from '../landingContentContext';
 
 const Footer = ({ setActiveTab }) => {
-  const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink, brand } = useLanding();
+  const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink, brand, footer } = useLanding();
   const handleNavClick = (id) => {
     setActiveTab(id);
     scrollToTop();
@@ -26,9 +26,7 @@ const Footer = ({ setActiveTab }) => {
                 <p className="footer-tagline">{brand.tagline}</p>
               </div>
             </div>
-            <p className="footer-desc">
-              ZI CAB is a premium cab booking platform providing safe, transparent, and 24x7 verified rides — now live in Bengaluru, Mangaluru and Hubballi.
-            </p>
+            <p className="footer-desc">{footer.description}</p>
 
             <div className="footer-contacts">
               <div className="contact-item">
@@ -79,15 +77,13 @@ const Footer = ({ setActiveTab }) => {
 
           {/* Our Services */}
           <div className="footer-col">
-            <h4 className="footer-heading">Cab Services</h4>
+            <h4 className="footer-heading">{footer.servicesHeading}</h4>
             <ul className="footer-links">
-              <li><button onClick={() => handleNavClick('services')}>Auto Ride</button></li>
-              <li><button onClick={() => handleNavClick('services')}>City Ride (Local Cabs)</button></li>
-              <li><button onClick={() => handleNavClick('services')}>Airport Pickup & Drop</button></li>
-              <li><button onClick={() => handleNavClick('services')}>Outstation One-Way & Roundtrip</button></li>
-              <li><button onClick={() => handleNavClick('services')}>Premium Executive Sedans</button></li>
-              <li><button onClick={() => handleNavClick('services')}>SUV & Innova Crysta</button></li>
-              <li><button onClick={() => handleNavClick('services')}>Hotel & Mall Pickup</button></li>
+              {(footer.cabServices || []).map((item, index) => (
+                <li key={index}>
+                  <button onClick={() => handleNavClick('services')}>{item.label}</button>
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -114,14 +110,15 @@ const Footer = ({ setActiveTab }) => {
             </div>
 
             <div className="footer-trust-mini">
-              <div className="trust-pill">
-                <ShieldCheck size={14} color="#00BBA9" />
-                <span>Verified Drivers</span>
-              </div>
-              <div className="trust-pill">
-                <Clock size={14} color="#00BBA9" />
-                <span>24x7 Live SOS</span>
-              </div>
+              {(footer.trustPills || []).map((pill, index) => {
+                const PillIcon = index === 0 ? ShieldCheck : Clock;
+                return (
+                  <div className="trust-pill" key={index}>
+                    <PillIcon size={14} color="#00BBA9" />
+                    <span>{pill.label}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -136,13 +133,15 @@ const Footer = ({ setActiveTab }) => {
         </div>
 
         <div className="footer-bottom">
-          <p>© 2026 ZI CAB Technologies Pvt Ltd. All Rights Reserved.</p>
+          <p>{footer.copyright}</p>
           <div className="footer-bottom-links">
-            <a href="#privacy">Privacy Policy</a>
+            {/* These were #privacy / #terms / #refund, which scrolled nowhere.
+                The real routes have existed all along. */}
+            <a href="/privacy">Privacy Policy</a>
             <span>•</span>
-            <a href="#terms">Terms of Service</a>
+            <a href="/terms">Terms of Service</a>
             <span>•</span>
-            <a href="#refund">Refund & Cancellation</a>
+            <a href="/refund">Refund & Cancellation</a>
             <span>•</span>
             {/* Required credit for the Creative Commons vehicle photos.
                 Safe to delete once they are replaced with ZI CAB's own fleet photos. */}

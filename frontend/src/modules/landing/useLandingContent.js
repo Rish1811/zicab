@@ -46,6 +46,9 @@ export default function useLandingContent() {
           launchCities: data.launchCities?.length ? data.launchCities : LANDING_FALLBACK.launchCities,
           contact: { ...LANDING_FALLBACK.contact, ...(data.contact || {}) },
           brand: { ...LANDING_FALLBACK.brand, ...(data.brand || {}) },
+          hero: { ...LANDING_FALLBACK.hero, ...(data.hero || {}) },
+          footer: { ...LANDING_FALLBACK.footer, ...(data.footer || {}) },
+          seo: { ...LANDING_FALLBACK.seo, ...(data.seo || {}) },
         });
         setSource('api');
       })

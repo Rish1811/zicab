@@ -10,7 +10,7 @@ import { defaultLandingContent } from '../data/defaultLandingContent.js';
  */
 
 // Sections that ride along with the marketing site payload on every visit.
-const SECTIONS = ['services', 'valueProps', 'drivers', 'partners', 'launchCities', 'contact', 'brand'];
+const SECTIONS = ['services', 'valueProps', 'drivers', 'partners', 'launchCities', 'contact', 'brand', 'hero', 'footer', 'seo'];
 // Legal documents are editable in the same admin screen but are far too large to
 // ship with the landing payload, so they get their own endpoint and cache.
 const LEGAL_SECTION = 'legal';

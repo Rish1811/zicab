@@ -94,4 +94,43 @@ export const defaultLandingContent = {
     playStoreQr: '',
     appStoreQr: '',
   },
+
+  hero: {
+    titleLine1: 'Your Ride.',
+    titleLine2: 'Our Priority.',
+    subtitle: 'Premium rides, verified drivers and 24x7 support with our dedicated ride coordinators.',
+    primaryCta: 'Book a Ride',
+    secondaryCta: 'Download App',
+    badges: [
+      { icon: 'ShieldCheck', label: 'Verified Drivers' },
+      { icon: 'Navigation', label: 'Live Tracking' },
+      { icon: 'Headphones', label: '24x7 Support' },
+      { icon: 'Wallet', label: 'Secure Payments' },
+    ],
+  },
+
+  footer: {
+    description:
+      'ZI CAB is a premium cab booking platform providing safe, transparent, and 24x7 verified rides — now live in Bengaluru, Mangaluru and Hubballi.',
+    servicesHeading: 'Cab Services',
+    cabServices: [
+      { label: 'City Ride (Local Cabs)' },
+      { label: 'Airport Pickup & Drop' },
+      { label: 'Outstation One-Way & Roundtrip' },
+      { label: 'Premium Executive Sedans' },
+      { label: 'SUV & Innova Crysta' },
+      { label: 'Hotel & Mall Pickup' },
+    ],
+    trustPills: [
+      { label: 'Verified Drivers' },
+      { label: '24x7 Live SOS' },
+    ],
+    copyright: '© 2026 ZI CAB Technologies Pvt Ltd. All Rights Reserved.',
+  },
+
+  seo: {
+    title: 'ZI CAB - Your Ride. Our Priority.',
+    description:
+      'ZI CAB - city, outstation and airport cabs with verified drivers and 24x7 support. Now live in Bengaluru, Mangaluru and Hubballi.',
+  },
 };
