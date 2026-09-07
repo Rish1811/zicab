@@ -30,7 +30,7 @@ const SECTIONS = [
   {
     key: 'services',
     title: 'Our Services',
-    help: 'Cards in the "Our Services" grid on the home page.',
+    help: 'Fallback only — the home page shows the active App Modules instead, so these appear only if that list cannot be loaded.',
     itemLabel: 'service',
     fields: [
       { name: 'title', label: 'Title', placeholder: 'Airport Ride' },

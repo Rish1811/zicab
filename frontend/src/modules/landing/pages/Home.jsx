@@ -15,6 +15,7 @@ import {
   Star, BadgeCheck, Megaphone, Bike
 } from 'lucide-react';
 import { useLanding } from '../landingContentContext';
+import useAppModules from '../useAppModules';
 import useVehicleTypes from '../useVehicleTypes';
 
 const initials = (name) =>
@@ -151,6 +152,10 @@ const fallbackVehicles = [
   // All page content comes from the CMS, falling back to the bundled copy so the
   // page is never blank while the request is in flight or if it fails.
   const { services, valueProps, drivers, partners, launchCities, contact, brand, hero } = useLanding();
+  // The app's own module list is the source of truth for what ZI CAB sells;
+  // the CMS list is only a fallback for when it cannot be reached.
+  const appModules = useAppModules();
+  const serviceCards = appModules.length ? appModules : services;
   const { vehicles } = useVehicleTypes(fallbackVehicles);
 
 
@@ -297,18 +302,25 @@ const fallbackVehicles = [
           </div>
 
           <div className="services-grid" data-reveal-stagger>
-            {services.map((s) => {
-              const IconComp = s.icon;
+            {serviceCards.map((s) => {
+              // Modules carry a real icon image; the CMS fallback carries a
+              // lucide component instead.
+              const IconComp = typeof s.icon === 'function' ? s.icon : null;
               return (
-                <div 
-                  key={s.id} 
+                <div
+                  key={s.id}
                   className="service-card"
                   onClick={() => setActiveTab('services')}
                 >
                   <div className="service-icon-wrapper">
-                    <IconComp size={22} color="#0B1F3A" />
+                    {s.image ? (
+                      <img src={s.image} alt="" className="service-icon-img" loading="lazy" />
+                    ) : IconComp ? (
+                      <IconComp size={22} color="#0B1F3A" />
+                    ) : null}
                   </div>
                   <h3 className="service-card-title">{s.title}</h3>
+                  {s.desc && <p className="service-card-desc">{s.desc}</p>}
                 </div>
               );
             })}
@@ -783,6 +795,20 @@ const fallbackVehicles = [
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
             gap: 12px;
+          }
+
+          .service-icon-img {
+            width: 26px;
+            height: 26px;
+            object-fit: contain;
+          }
+
+          .service-card-desc {
+            margin-top: 4px;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #64748B;
+            text-align: center;
           }
 
           .service-card {
