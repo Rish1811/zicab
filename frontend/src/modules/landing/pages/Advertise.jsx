@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
 import { useLanding } from '../landingContentContext';
+import useEnquiryForm from '../useEnquiryForm';
 import { LANDING_ICONS } from '../useLandingContent';
 
 const Advertise = () => {
@@ -13,7 +14,7 @@ const Advertise = () => {
   const pageRef = useRef(null);
   useReveal(pageRef);
 
-  const [submitted, setSubmitted] = useState(false);
+  const { submitted, sending, error, submit } = useEnquiryForm('advertise');
   const [company, setCompany] = useState('');
   const [contactName, setContactName] = useState('');
   const [phone, setPhone] = useState('');
@@ -22,8 +23,14 @@ const Advertise = () => {
   const [brief, setBrief] = useState('');
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    setSubmitted(true);
+    submit(e, {
+      name: contactName,
+      phone,
+      email,
+      company,
+      placement: interest,
+      message: brief,
+    });
   };
 
   const { advertisePage } = useLanding();
@@ -233,8 +240,11 @@ const Advertise = () => {
                   />
                 </div>
 
-                <button type="submit" className="btn btn-teal w-full">
-                  Send Enquiry <Send size={16} />
+                {error && (
+                  <p style={{ color: '#e11d48', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{error}</p>
+                )}
+                <button type="submit" className="btn btn-teal w-full" disabled={sending}>
+                  {sending ? 'Sending\u2026' : 'Send Enquiry'} <Send size={16} />
                 </button>
               </form>
             )}

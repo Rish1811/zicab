@@ -1,4 +1,5 @@
 import { useLanding } from '../landingContentContext';
+import useEnquiryForm from '../useEnquiryForm';
 import { LANDING_ICONS } from '../useLandingContent';
 import React, { useRef, useState } from 'react';
 import { Car, DollarSign, Award, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
@@ -14,15 +15,19 @@ const Partner = () => {
   const pageRef = useRef(null);
   useReveal(pageRef);
 
-  const [submitted, setSubmitted] = useState(false);
+  const { submitted, sending, error, submit } = useEnquiryForm('partner');
   const [vehicleType, setVehicleType] = useState('Sedan (Dzire/Etios)');
   const [city, setCity] = useState('Bengaluru');
   const [ownerName, setOwnerName] = useState('');
   const [mobile, setMobile] = useState('');
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    setSubmitted(true);
+    submit(e, {
+      name: ownerName,
+      phone: mobile,
+      city,
+      vehicleCategory: vehicleType,
+    });
   };
 
   return (
@@ -128,8 +133,11 @@ const Partner = () => {
                   </select>
                 </div>
 
-                <button type="submit" className="btn btn-teal w-full mt-4">
-                  Submit Attachment Form <ArrowRight size={16} />
+                {error && (
+                  <p style={{ color: '#e11d48', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{error}</p>
+                )}
+                <button type="submit" className="btn btn-teal w-full mt-4" disabled={sending}>
+                  {sending ? 'Sending\u2026' : 'Submit Attachment Form'} <ArrowRight size={16} />
                 </button>
               </form>
             )}

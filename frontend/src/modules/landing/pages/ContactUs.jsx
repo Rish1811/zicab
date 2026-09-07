@@ -2,13 +2,14 @@ import React, { useRef, useState } from 'react';
 import { Phone, Mail, MapPin, MessageSquare, ChevronDown, CheckCircle2, Send, Navigation } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
 import { useLanding } from '../landingContentContext';
+import useEnquiryForm from '../useEnquiryForm';
 
 const ContactUs = () => {
   const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink, faqs } = useLanding();
   const pageRef = useRef(null);
   useReveal(pageRef);
 
-  const [submitted, setSubmitted] = useState(false);
+  const { submitted, sending, error, submit } = useEnquiryForm('contact');
   const [openFaq, setOpenFaq] = useState(0);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -16,8 +17,12 @@ const ContactUs = () => {
   const [message, setMessage] = useState('');
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    setSubmitted(true);
+    submit(e, {
+      name,
+      email,
+      subject,
+      message,
+    });
   };
 
 
@@ -139,7 +144,7 @@ const ContactUs = () => {
                   <CheckCircle2 size={50} color="#00BBA9" className="mx-auto mb-3" />
                   <h3 className="text-xl font-bold text-gray-900 mb-1">Message Sent Successfully!</h3>
                   <p className="text-gray-600 text-sm">
-                    Thank you, <strong>{name}</strong>. We have received your query and sent a confirmation to <strong>{email}</strong>.
+                    Thank you, <strong>{name}</strong>. We have your message and will reply to <strong>{email}</strong>.
                   </p>
                 </div>
               ) : (
@@ -189,8 +194,11 @@ const ContactUs = () => {
                     />
                   </div>
 
-                  <button type="submit" className="btn btn-teal">
-                    Send Message <Send size={16} />
+                  {error && (
+                    <p style={{ color: '#e11d48', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{error}</p>
+                  )}
+                  <button type="submit" className="btn btn-teal" disabled={sending}>
+                    {sending ? 'Sending\u2026' : 'Send Message'} <Send size={16} />
                   </button>
                 </form>
               )}

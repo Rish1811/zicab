@@ -1,4 +1,5 @@
 import { useLanding } from '../landingContentContext';
+import useEnquiryForm from '../useEnquiryForm';
 import { LANDING_ICONS } from '../useLandingContent';
 import React, { useRef, useState } from 'react';
 import { Briefcase, Building, FileText, UserCheck, ShieldCheck, CheckCircle2, Send, PhoneCall } from 'lucide-react';
@@ -8,7 +9,7 @@ const Corporate = () => {
   const pageRef = useRef(null);
   useReveal(pageRef);
 
-  const [submitted, setSubmitted] = useState(false);
+  const { submitted, sending, error, submit } = useEnquiryForm('corporate');
   const [companyName, setCompanyName] = useState('');
   const [contactPerson, setContactPerson] = useState('');
   const [email, setEmail] = useState('');
@@ -16,8 +17,13 @@ const Corporate = () => {
   const [monthlyRides, setMonthlyRides] = useState('50-200 Rides');
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    setSubmitted(true);
+    submit(e, {
+      name: contactPerson,
+      email,
+      phone,
+      company: companyName,
+      monthlyRides,
+    });
   };
 
   const { corporatePage } = useLanding();
@@ -132,8 +138,11 @@ const Corporate = () => {
                   </select>
                 </div>
 
-                <button type="submit" className="btn btn-teal w-full mt-4">
-                  Submit Corporate Inquiry <Send size={16} />
+                {error && (
+                  <p style={{ color: '#e11d48', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{error}</p>
+                )}
+                <button type="submit" className="btn btn-teal w-full mt-4" disabled={sending}>
+                  {sending ? 'Sending\u2026' : 'Submit Corporate Inquiry'} <Send size={16} />
                 </button>
               </form>
             )}

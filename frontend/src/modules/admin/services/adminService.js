@@ -288,6 +288,9 @@ export const adminService = {
    * Public marketing site content (CMS).
    * PUT accepts a partial - only the sections present are written.
    */
+  getWebsiteEnquiries: (params) => api.get('/admin/enquiries', { params }),
+  updateWebsiteEnquiry: (id, payload) => api.patch(`/admin/enquiries/${id}`, payload),
+
   getLandingContent: () => api.get('/admin/landing-content'),
   updateLandingContent: (payload) => api.put('/admin/landing-content', payload),
 

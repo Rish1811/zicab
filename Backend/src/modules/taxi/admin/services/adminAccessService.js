@@ -30,6 +30,7 @@ export const ADMIN_PERMISSIONS = [
   'ongoing.view',
   'settings.view',
   'landing_content.view',
+  'enquiries.view',
 ];
 
 export const normalizeAdminType = (value = '') =>

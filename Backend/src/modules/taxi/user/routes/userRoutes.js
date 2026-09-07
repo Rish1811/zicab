@@ -69,7 +69,7 @@ import {
   createPoolingBooking,
   getMyPoolingBookings
 } from '../controllers/poolingController.js';
-import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog, getPublicLandingContent, getPublicLegalContent } from '../../admin/controllers/adminController.js';
+import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog, getPublicLandingContent, getPublicLegalContent, submitWebsiteEnquiry } from '../../admin/controllers/adminController.js';
 import { getPublicCancellationReasons } from '../../admin/controllers/cancellationReasonController.js';
 import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
 
@@ -108,6 +108,9 @@ userRouter.post('/fcm-token', authenticate(['user']), asyncHandler(saveUserFcmTo
 // Public: booking enquiry from the marketing site. Rate limited because it
 // is unauthenticated and writes a record.
 userRouter.post('/booking-request', loginRateLimit, asyncHandler(submitWebsiteBooking));
+// Public marketing forms. Same rate limit as the booking form - both are
+// unauthenticated and equally worth spamming.
+userRouter.post('/enquiry', loginRateLimit, asyncHandler(submitWebsiteEnquiry));
 userRouter.get('/me', authenticate(['user']), asyncHandler(getCurrentUser));
 userRouter.patch('/me', authenticate(['user']), asyncHandler(updateCurrentUser));
 userRouter.get('/subscriptions/plans', authenticate(['user']), asyncHandler(getAvailableSubscriptionPlans));

@@ -230,6 +230,7 @@ export const AdminFareConfig = lazy(() => import('../modules/admin/pages/finance
 export const AdminSafetyCenter = lazy(() => import('../modules/admin/pages/safety/SafetyCenter'));
 export const AdminCMSBuilder = lazy(() => import('../modules/admin/pages/cms/CMSBuilder'));
 export const AdminLandingContent = lazy(() => import('../modules/admin/pages/cms/LandingContent'));
+export const AdminWebsiteEnquiries = lazy(() => import('../modules/admin/pages/cms/WebsiteEnquiries'));
 export const AdminHeaderFooter = lazy(() => import('../modules/admin/pages/cms/HeaderFooter'));
 export const AdminGlobalSettings = lazy(() => import('../modules/admin/pages/settings/GlobalSettings'));
 export const AdminGeneralSettings = lazy(() => import('../modules/admin/pages/settings/GeneralSettings'));
