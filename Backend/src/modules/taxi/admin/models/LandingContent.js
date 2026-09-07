@@ -30,6 +30,12 @@ const landingContentSchema = new mongoose.Schema(
     launchCities: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // { email, whatsapp, whatsappDisplay, tollFree, tollFreeLive, address, addressShort, mapsUrl }
     contact: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { terms: { intro, body }, privacy: {...}, refund: {...} }
+    //
+    // Served by its own endpoint rather than with the rest of the content: the
+    // documents run to six figures of characters and the landing payload is
+    // fetched on every visit to the marketing site.
+    legal: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   {
     timestamps: true,

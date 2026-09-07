@@ -94,6 +94,12 @@ const CONTACT_FIELDS = [
   { name: 'mapsUrl', label: 'Google Maps URL', placeholder: 'https://www.google.com/maps/search/?api=1&query=...', wide: true },
 ];
 
+const LEGAL_DOCS = [
+  { key: 'terms', title: 'Terms & Conditions', path: '/terms' },
+  { key: 'privacy', title: 'Privacy Policy', path: '/privacy' },
+  { key: 'refund', title: 'Refund & Cancellation', path: '/refund' },
+];
+
 const inputClass =
   'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 outline-none transition-colors shadow-sm';
 const labelClass = 'block text-sm font-medium text-gray-700 mb-1.5';
@@ -298,6 +304,7 @@ export default function LandingContent() {
         partners: data.partners || [],
         launchCities: data.launchCities || [],
         contact: data.contact || {},
+        legal: data.legal || {},
       });
       setDirty(false);
     } catch (error) {
@@ -398,6 +405,68 @@ export default function LandingContent() {
           onChange={(value) => setSection(section.key, value)}
         />
       ))}
+
+      <SectionCard
+        title="Legal Documents"
+        help="Terms, Privacy and Refund pages. Leave a field blank to keep the copy currently built into the site."
+      >
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs text-amber-800">
+            These are the documents your customers are held to. Have them reviewed before saving — whatever
+            you put here replaces what the site shows today.
+          </p>
+        </div>
+        <div className="space-y-6">
+          {LEGAL_DOCS.map((doc) => {
+            const value = content.legal?.[doc.key] || {};
+            const update = (field, next) =>
+              setSection('legal', { ...content.legal, [doc.key]: { ...value, [field]: next } });
+
+            return (
+              <div key={doc.key} className="border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-gray-900">{doc.title}</h4>
+                  <a
+                    href={doc.path}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-gray-500 hover:text-gray-900 underline"
+                  >
+                    View page
+                  </a>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className={labelClass}>Intro</label>
+                    <textarea
+                      rows={2}
+                      value={value.intro || ''}
+                      onChange={(event) => update('intro', event.target.value)}
+                      placeholder="Short line shown under the heading"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Document text</label>
+                    <textarea
+                      rows={12}
+                      value={value.body || ''}
+                      onChange={(event) => update('body', event.target.value)}
+                      placeholder="Paste the full document. Separate paragraphs with a blank line."
+                      className={`${inputClass} font-mono text-xs leading-relaxed`}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {value.body
+                        ? `${value.body.length.toLocaleString()} characters — this replaces the built-in text.`
+                        : 'Empty — the site is showing its built-in copy for this page.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SectionCard>
 
       <SectionCard title="Contact Details" help="Used across the website — footer, contact page and the WhatsApp button.">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

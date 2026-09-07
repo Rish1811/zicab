@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowLeft, FileText, IndianRupee, Mail, Phone, ReceiptText, Scale, ScrollText, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSupportInfo } from '../content/supportInfo';
+import useLegalContent from '../content/useLegalContent';
 import termsRawText from '../content/terms-content.txt?raw';
 import privacyRawText from '../content/privacy-content.txt?raw';
 
@@ -155,7 +156,16 @@ const LegalPage = () => {
   const ownerContact = { phone, email, phoneHref };
   const navigate = useNavigate();
   const location = useLocation();
-  const content = legalContent[getDocumentType(location.pathname)];
+  const documentType = getDocumentType(location.pathname);
+  const managed = useLegalContent()[documentType] || {};
+  const bundled = legalContent[documentType];
+  // Whatever the admin has saved wins; anything left blank keeps the bundled
+  // copy, so a half-filled document still renders a complete page.
+  const content = {
+    ...bundled,
+    intro: managed.intro || bundled.intro,
+    rawText: managed.body || bundled.rawText,
+  };
   const Icon = content.icon || FileText;
   const rawParagraphs = content.rawText
     ? content.rawText

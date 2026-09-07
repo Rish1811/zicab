@@ -1763,6 +1763,11 @@ export const getAppBootstrap = asyncHandler(async (_req, res) => {
 export const getPublicLandingContent = asyncHandler(async (_req, res) =>
   ok(res, await landingContentService.getLandingContent()),
 );
+// Separate from the landing payload on purpose - these documents are large and
+// only the legal routes need them.
+export const getPublicLegalContent = asyncHandler(async (_req, res) =>
+  ok(res, await landingContentService.getLegalContent()),
+);
 // The router-level authenticate(['admin']) gate lets any admin through, so the
 // per-permission check happens here - matching how the rest of admin does it.
 const assertLandingContentAccess = (admin) => {
@@ -1772,7 +1777,7 @@ const assertLandingContentAccess = (admin) => {
 };
 export const getAdminLandingContent = asyncHandler(async (req, res) => {
   assertLandingContentAccess(req.auth?.admin);
-  ok(res, await landingContentService.getLandingContent({ fresh: true }));
+  ok(res, await landingContentService.getLandingContent({ fresh: true, includeLegal: true }));
 });
 export const saveAdminLandingContent = asyncHandler(async (req, res) => {
   assertLandingContentAccess(req.auth?.admin);
