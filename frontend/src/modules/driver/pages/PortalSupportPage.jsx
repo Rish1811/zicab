@@ -1,9 +1,10 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building2, Clock3, Mail, MapPin, Phone, ShieldCheck } from 'lucide-react';
-import { SUPPORT_INFO } from '../../shared/content/supportInfo';
+import { useSupportInfo } from '../../shared/content/supportInfo';
 
 const PortalSupportPage = () => {
+  const SUPPORT_INFO = useSupportInfo();
   const navigate = useNavigate();
   const location = useLocation();
   const isOwnerPortal = location.pathname.startsWith('/taxi/owner');
@@ -28,12 +29,6 @@ const PortalSupportPage = () => {
   ];
 
   const detailCards = [
-    {
-      title: 'Owner name',
-      value: SUPPORT_INFO.ownerName,
-      helper: `Primary contact for ${SUPPORT_INFO.companyName}`,
-      Icon: Building2,
-    },
     {
       title: `${portalLabel} help scope`,
       value: SUPPORT_INFO.companyName,

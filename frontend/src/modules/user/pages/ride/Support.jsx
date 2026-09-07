@@ -3,9 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, MessageCircle, Phone, HelpCircle, AlertCircle, XCircle, ShieldCheck, ChevronRight, Siren } from 'lucide-react';
 // ... removed BottomNavbar import ...
-import { SUPPORT_INFO } from '../../../shared/content/supportInfo';
+import { useSupportInfo } from '../../../shared/content/supportInfo';
 
 const Support = () => {
+  const SUPPORT_INFO = useSupportInfo();
   const navigate = useNavigate();
   const location = useLocation();
   const routePrefix = location.pathname.startsWith('/taxi/user') ? '/taxi/user' : '';
