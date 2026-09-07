@@ -1,3 +1,5 @@
+import { useLanding } from '../landingContentContext';
+import { LANDING_ICONS } from '../useLandingContent';
 import React, { useRef, useState } from 'react';
 import { UserCheck, Shield, Clock, Award, CheckCircle2, FileText, Smartphone } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
@@ -17,20 +19,20 @@ const Driver = () => {
     setSubmitted(true);
   };
 
-  const requiredDocs = [
-    'Commercial Driving License (Yellow Badge / DL)',
-    'Aadhaar Card & PAN Card',
-    'Current Police Verification Certificate',
-    'Vehicle RC Book & Active Fitness Certificate',
-    'Commercial Vehicle Insurance & All-India Permit'
-  ];
+  const { driverPage } = useLanding();
+  const requiredDocs = driverPage.requiredDocs || [];
+  const driverPerks = (driverPage.perks || []).map((item) => ({
+    ...item,
+    icon: LANDING_ICONS[item.icon] || Award,
+  }));
+
 
   return (
     <div className="driver-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
-          <span className="page-tag">Join ZI CAB Captains</span>
-          <h1 className="page-title">Drive With Dignity, Security & Higher Income</h1>
+          <span className="page-tag">{driverPage.tag}</span>
+          <h1 className="page-title">{driverPage.title}</h1>
           <p className="page-subtitle">
             Become a ZI CAB Driver Partner. Enjoy daily/weekly settlements, zero arbitrary account blocks, and dedicated support for captains.
           </p>
@@ -41,32 +43,21 @@ const Driver = () => {
         <div className="container driver-grid">
           {/* Left Details */}
           <div className="driver-info">
-            <h2 className="section-title">Captain Benefits at ZI CAB</h2>
+            <h2 className="section-title">{driverPage.perksHeading}</h2>
             
             <div className="driver-perks" data-reveal-stagger>
-              <div className="d-perk">
-                <Clock size={24} color="#00BBA9" />
-                <div>
-                  <h4>Flexible Shift Timings</h4>
-                  <p>Choose your own operating hours. Drive outstation long trips or local airport runs whenever you wish.</p>
-                </div>
-              </div>
-
-              <div className="d-perk">
-                <Shield size={24} color="#00BBA9" />
-                <div>
-                  <h4>₹5 Lakh Insurance Cover</h4>
-                  <p>Free accidental insurance and medical assistance for every active ZI CAB driver partner.</p>
-                </div>
-              </div>
-
-              <div className="d-perk">
-                <Award size={24} color="#00BBA9" />
-                <div>
-                  <h4>Zero Dry-Run Guarantee</h4>
-                  <p>Outstation trips are optimized with return bookings to save fuel and maximize profit per trip.</p>
-                </div>
-              </div>
+              {driverPerks.map((perk, index) => {
+                const PerkIcon = perk.icon;
+                return (
+                  <div className="d-perk" key={index}>
+                    <PerkIcon size={24} color="#00BBA9" />
+                    <div>
+                      <h4>{perk.title}</h4>
+                      <p>{perk.desc}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="docs-box mt-8">
@@ -84,8 +75,8 @@ const Driver = () => {
 
           {/* Right Driver Onboarding Form */}
           <div className="driver-form-card" data-reveal>
-            <h3 className="form-card-title">Driver Onboarding Form</h3>
-            <p className="form-card-sub">Start driving with ZI CAB within 24 hours.</p>
+            <h3 className="form-card-title">{driverPage.formTitle}</h3>
+            <p className="form-card-sub">{driverPage.formSubtitle}</p>
 
             {submitted ? (
               <div className="form-success text-center py-6">

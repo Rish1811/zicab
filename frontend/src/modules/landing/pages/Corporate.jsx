@@ -1,3 +1,5 @@
+import { useLanding } from '../landingContentContext';
+import { LANDING_ICONS } from '../useLandingContent';
 import React, { useRef, useState } from 'react';
 import { Briefcase, Building, FileText, UserCheck, ShieldCheck, CheckCircle2, Send, PhoneCall } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
@@ -18,38 +20,20 @@ const Corporate = () => {
     setSubmitted(true);
   };
 
-  const corporateBenefits = [
-    {
-      icon: FileText,
-      title: 'GST Compliant Central Invoicing',
-      desc: 'Consolidated monthly bills with detailed trip breakdowns, route logs, and automated GST claim reports.'
-    },
-    {
-      icon: UserCheck,
-      title: 'Dedicated Account Manager',
-      desc: 'Single point of contact for priority bookings, custom routing, and emergency fleet dispatch 24x7.'
-    },
-    {
-      icon: ShieldCheck,
-      title: 'Zero Cancellation Guarantee',
-      desc: 'Guaranteed cab arrival for your VIP guests, executives, and flight connections with SLA backup cabs.'
-    },
-    {
-      icon: Building,
-      title: 'Employee Commute Management',
-      desc: 'Roster-based cab automation for night shift employees with live GPS tracking and female safety protocols.'
-    }
-  ];
+  const { corporatePage } = useLanding();
+  const corporateBenefits = (corporatePage.benefits || []).map((item) => ({
+    ...item,
+    icon: LANDING_ICONS[item.icon] || FileText,
+  }));
+
 
   return (
     <div className="corporate-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
-          <span className="page-tag">ZI CAB Business</span>
-          <h1 className="page-title">Enterprise Mobility & Corporate Cab Solutions</h1>
-          <p className="page-subtitle">
-            Streamline business travel, airport transfers, and employee commuting with India's most dependable corporate cab network.
-          </p>
+          <span className="page-tag">{corporatePage.tag}</span>
+          <h1 className="page-title">{corporatePage.title}</h1>
+          <p className="page-subtitle">{corporatePage.subtitle}</p>
         </div>
       </div>
 
@@ -57,7 +41,7 @@ const Corporate = () => {
         <div className="container corp-grid">
           {/* Left Info */}
           <div className="corp-info">
-            <h2 className="section-title">Why 200+ Enterprises Choose ZI CAB</h2>
+            <h2 className="section-title">{corporatePage.benefitsHeading}</h2>
             <p className="body-text">
               Managing corporate travel expenses and ensuring employee safety can be challenging. ZI CAB simplifies B2B travel with automated booking tools, zero surge pricing, and customized billing contracts.
             </p>
@@ -82,8 +66,8 @@ const Corporate = () => {
 
           {/* Right Form Card */}
           <div className="corp-form-card" data-reveal>
-            <h3 className="form-card-title">Request a Corporate Demo</h3>
-            <p className="form-card-sub">Get custom pricing rates for your company in 2 hours.</p>
+            <h3 className="form-card-title">{corporatePage.formTitle}</h3>
+            <p className="form-card-sub">{corporatePage.formSubtitle}</p>
 
             {submitted ? (
               <div className="form-success text-center py-6">

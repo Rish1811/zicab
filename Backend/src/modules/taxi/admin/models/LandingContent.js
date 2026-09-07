@@ -32,6 +32,11 @@ const landingContentSchema = new mongoose.Schema(
     contact: { type: mongoose.Schema.Types.Mixed, default: {} },
     // { tag, title, subtitle, stats[], founders[], pillars[], headings }
     about: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // the four remaining marketing pages
+    corporatePage: { type: mongoose.Schema.Types.Mixed, default: {} },
+    partnerPage: { type: mongoose.Schema.Types.Mixed, default: {} },
+    driverPage: { type: mongoose.Schema.Types.Mixed, default: {} },
+    advertisePage: { type: mongoose.Schema.Types.Mixed, default: {} },
     // { tag, title, subtitle, ctaLabel, items[] } - the /services page
     servicesPage: { type: mongoose.Schema.Types.Mixed, default: {} },
     // [{ q, a }] - contact page accordion

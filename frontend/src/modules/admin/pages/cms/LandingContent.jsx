@@ -18,9 +18,12 @@ import { uploadService } from '../../../../shared/services/uploadService';
 // Must stay in step with the ICONS map in modules/landing/useLandingContent.js —
 // a name that is not in that map silently renders as a generic sparkle.
 const ICON_OPTIONS = [
-  'Award', 'Bike', 'Briefcase', 'Building2', 'Car', 'Compass', 'Headphones',
-  'HeartHandshake', 'Navigation', 'PhoneCall', 'Plane', 'ShieldCheck',
-  'ShoppingBag', 'Users', 'Wallet',
+  'Award', 'BellRing', 'Bike', 'Briefcase', 'Building', 'Building2', 'Car',
+  'CheckCircle2', 'Clock', 'Compass', 'DollarSign', 'FileText', 'Gift', 'Globe',
+  'GraduationCap', 'HardHat', 'Headphones', 'HeartHandshake', 'Image', 'MapPin',
+  'Navigation', 'PhoneCall', 'Plane', 'Shield', 'ShieldCheck', 'ShoppingBag',
+  'Smartphone', 'Stethoscope', 'TrendingUp', 'UserCheck', 'Users',
+  'UtensilsCrossed', 'Wallet',
 ];
 
 const SECTIONS = [
@@ -184,6 +187,60 @@ const PAGE_LISTS = [
       { name: 'description', label: 'Description', wide: true },
       { name: 'features', label: 'Features (one per line)', type: 'lines', wide: true, placeholder: 'Flight delay tracking' },
     ] },
+];
+
+const MARKETING_PAGES = [
+  { key: 'corporatePage', title: 'Corporate Page', help: 'Headings and form copy on /corporate.',
+    fields: [
+      { name: 'tag', label: 'Page tag' }, { name: 'title', label: 'Page title' },
+      { name: 'subtitle', label: 'Page subtitle', wide: true },
+      { name: 'benefitsHeading', label: 'Benefits heading', wide: true },
+      { name: 'formTitle', label: 'Form title' }, { name: 'formSubtitle', label: 'Form subtitle' },
+    ] },
+  { key: 'partnerPage', title: 'Partner Page', help: 'Headings and form copy on /partner.',
+    fields: [
+      { name: 'tag', label: 'Page tag' }, { name: 'title', label: 'Page title' },
+      { name: 'perksHeading', label: 'Perks heading', wide: true },
+      { name: 'earningsHeading', label: 'Earnings heading', wide: true },
+      { name: 'formTitle', label: 'Form title' }, { name: 'formSubtitle', label: 'Form subtitle' },
+    ] },
+  { key: 'driverPage', title: 'Driver Page', help: 'Headings and form copy on /drive-with-us.',
+    fields: [
+      { name: 'tag', label: 'Page tag' }, { name: 'title', label: 'Page title' },
+      { name: 'perksHeading', label: 'Perks heading' }, { name: 'docsHeading', label: 'Documents heading' },
+      { name: 'formTitle', label: 'Form title' }, { name: 'formSubtitle', label: 'Form subtitle' },
+    ] },
+  { key: 'advertisePage', title: 'Advertise Page', help: 'Headings and form copy on /advertise.',
+    fields: [
+      { name: 'tag', label: 'Page tag' }, { name: 'title', label: 'Page title' },
+      { name: 'inventoryHeading', label: 'Inventory heading' },
+      { name: 'industriesHeading', label: 'Industries heading' },
+      { name: 'mediaKitHeading', label: 'Media kit heading' }, { name: 'formTitle', label: 'Form title' },
+    ] },
+];
+
+const MARKETING_LISTS = [
+  { section: 'corporatePage', key: 'benefits', title: 'Corporate benefits', itemLabel: 'benefit',
+    fields: [{ name: 'title', label: 'Title' }, { name: 'icon', label: 'Icon', type: 'icon' },
+             { name: 'desc', label: 'Description', wide: true }] },
+  { section: 'partnerPage', key: 'perks', title: 'Partner perks', itemLabel: 'perk',
+    fields: [{ name: 'title', label: 'Title' }, { name: 'icon', label: 'Icon', type: 'icon' },
+             { name: 'desc', label: 'Description', wide: true }] },
+  { section: 'partnerPage', key: 'earnings', title: 'Partner earnings table', itemLabel: 'row',
+    fields: [{ name: 'label', label: 'Vehicle' }, { name: 'value', label: 'Monthly range' }] },
+  { section: 'driverPage', key: 'perks', title: 'Driver perks', itemLabel: 'perk',
+    fields: [{ name: 'title', label: 'Title' }, { name: 'icon', label: 'Icon', type: 'icon' },
+             { name: 'desc', label: 'Description', wide: true }] },
+  { section: 'advertisePage', key: 'placements', title: 'Ad placements', itemLabel: 'placement',
+    fields: [{ name: 'title', label: 'Title' }, { name: 'icon', label: 'Icon', type: 'icon' },
+             { name: 'desc', label: 'Description', wide: true },
+             { name: 'formats', label: 'Formats (one per line)', type: 'lines', wide: true }] },
+  { section: 'advertisePage', key: 'industries', title: 'Advertiser industries', itemLabel: 'industry',
+    fields: [{ name: 'label', label: 'Label' }, { name: 'icon', label: 'Icon', type: 'icon' }] },
+  { section: 'advertisePage', key: 'whyUs', title: 'Why advertise with us', itemLabel: 'point',
+    fields: [{ name: 'title', label: 'Title' }, { name: 'icon', label: 'Icon', type: 'icon' },
+             { name: 'desc', label: 'Description', wide: true,
+               help: 'Use {cities} to insert the launch city names automatically.' }] },
 ];
 
 const LEGAL_DOCS = [
@@ -408,6 +465,10 @@ export default function LandingContent() {
         brand: data.brand || {},
         about: data.about || {},
         servicesPage: data.servicesPage || {},
+        corporatePage: data.corporatePage || {},
+        partnerPage: data.partnerPage || {},
+        driverPage: data.driverPage || {},
+        advertisePage: data.advertisePage || {},
         faqs: data.faqs || [],
         seo: data.seo || {},
         footer: data.footer || {},
@@ -553,6 +614,34 @@ export default function LandingContent() {
         items={content.faqs || []}
         onChange={(next) => setSection('faqs', next)}
       />
+
+      {MARKETING_PAGES.map((page) => (
+        <SectionCard key={page.key} title={page.title} help={page.help}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {page.fields.map((field) => (
+              <Field key={field.name} field={field} value={content[page.key]?.[field.name]}
+                onChange={(value) => setSection(page.key, { ...content[page.key], [field.name]: value })} />
+            ))}
+          </div>
+        </SectionCard>
+      ))}
+
+      <SectionCard title="Driver documents required" help="One document per line, shown on /drive-with-us.">
+        <Field
+          field={{ name: 'requiredDocs', label: 'Documents', type: 'lines', placeholder: 'Aadhaar Card & PAN Card' }}
+          value={content.driverPage?.requiredDocs}
+          onChange={(value) => setSection('driverPage', { ...content.driverPage, requiredDocs: value })}
+        />
+      </SectionCard>
+
+      {MARKETING_LISTS.map((list) => (
+        <RepeatableSection
+          key={`${list.section}.${list.key}`}
+          section={{ title: list.title, itemLabel: list.itemLabel, fields: list.fields }}
+          items={content[list.section]?.[list.key] || []}
+          onChange={(next) => setSection(list.section, { ...content[list.section], [list.key]: next })}
+        />
+      ))}
 
       <SectionCard title="Hero" help="The headline block at the top of the home page.">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

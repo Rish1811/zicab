@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
 import { useLanding } from '../landingContentContext';
+import { LANDING_ICONS } from '../useLandingContent';
 
 const Advertise = () => {
   const { contact: CONTACT, launchCities: LAUNCH_CITIES } = useLanding();
@@ -25,84 +26,24 @@ const Advertise = () => {
     setSubmitted(true);
   };
 
-  const placements = [
-    {
-      icon: Smartphone,
-      title: 'Mobile App',
-      desc: 'In-app placements across the rider journey — from app open to ride completion.',
-      formats: ['Splash / app-open ad', 'In-feed native card', 'Ride-summary banner'],
-    },
-    {
-      icon: Globe,
-      title: 'Website',
-      desc: 'Placements on zicab.in pages, seen by riders comparing fares and booking online.',
-      formats: ['Leaderboard banner', 'Sidebar tile', 'Sponsored service block'],
-    },
-    {
-      icon: Car,
-      title: 'Driver App',
-      desc: 'Reach our driver-partner network — ideal for fuel, tyres, insurance, EMI and F&B brands.',
-      formats: ['Driver home banner', 'Duty start/end card', 'Partner offer wall'],
-    },
-    {
-      icon: Image,
-      title: 'Home Screen Banners',
-      desc: 'The highest-visibility slot on the app — every rider sees it before booking.',
-      formats: ['Hero carousel slide', 'Static top banner', 'City-targeted banner'],
-    },
-    {
-      icon: CheckCircle2,
-      title: 'Booking Confirmation Screen',
-      desc: 'Shown at peak attention, right after a booking is confirmed and while the rider waits.',
-      formats: ['Confirmation card ad', '"While you wait" tile', 'Nearby-brand suggestion'],
-    },
-    {
-      icon: Gift,
-      title: 'Offers & Promotions',
-      desc: 'Co-branded coupons and cashback that ride along with a ZI CAB trip.',
-      formats: ['Coupon in offers tab', 'Co-branded promo code', 'Ride-and-win campaign'],
-    },
-    {
-      icon: BellRing,
-      title: 'Push Notifications',
-      desc: 'Opt-in, frequency-capped pushes segmented by city, ride type and rider behaviour.',
-      formats: ['Sponsored push', 'Geo-fenced alert', 'Weekend campaign blast'],
-    },
-  ];
+  const { advertisePage } = useLanding();
+  const resolve = (items = [], fallbackIcon) =>
+    items.map((item) => ({ ...item, icon: LANDING_ICONS[item.icon] || fallbackIcon }));
+  const placements = resolve(advertisePage.placements, Smartphone);
+  const industries = resolve(advertisePage.industries, Building2);
+  // {cities} keeps the targeting line correct when a launch city changes.
+  const whyUs = resolve(advertisePage.whyUs, Users).map((item) => ({
+    ...item,
+    desc: String(item.desc || '').replace('{cities}', LAUNCH_CITIES.map((c) => c.name).join(', ')),
+  }));
 
-  const industries = [
-    { icon: Building2, label: 'Hotels & Resorts' },
-    { icon: ShoppingBag, label: 'Malls & Retail' },
-    { icon: UtensilsCrossed, label: 'Restaurants & Cafés' },
-    { icon: HardHat, label: 'Builders & Real Estate' },
-    { icon: Stethoscope, label: 'Hospitals & Clinics' },
-    { icon: GraduationCap, label: 'Education & Coaching' },
-  ];
-
-  const whyUs = [
-    {
-      icon: Users,
-      title: 'A captive, high-intent audience',
-      desc: 'Riders spend 15–45 minutes with the app open per trip — attention no billboard can match.',
-    },
-    {
-      icon: MapPin,
-      title: 'Precise city & route targeting',
-      desc: `Target by city (${LAUNCH_CITIES.map((c) => c.name).join(', ')}), pickup zone, airport routes or ride type.`,
-    },
-    {
-      icon: TrendingUp,
-      title: 'Measurable, reported campaigns',
-      desc: 'Impressions, taps, coupon redemptions and footfall attribution shared in a monthly report.',
-    },
-  ];
 
   return (
     <div className="advertise-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
-          <span className="page-tag">Advertise with ZI CAB</span>
-          <h1 className="page-title">Reach Riders Where Their Attention Already Is</h1>
+          <span className="page-tag">{advertisePage.tag}</span>
+          <h1 className="page-title">{advertisePage.title}</h1>
           <p className="page-subtitle">
             Every ZI CAB trip is a captive screen moment. Put your brand in front of riders and
             driver-partners across our app, website and driver network in Bengaluru, Mangaluru and Hubballi.
@@ -133,7 +74,7 @@ const Advertise = () => {
         <div className="container">
           <div className="text-center mb-12">
             <span className="page-tag">Inventory</span>
-            <h2 className="section-title">Where Your Brand Can Appear</h2>
+            <h2 className="section-title">{advertisePage.inventoryHeading}</h2>
           </div>
 
           <div className="placements-grid" data-reveal-stagger>
@@ -161,7 +102,7 @@ const Advertise = () => {
         <div className="container">
           <div className="text-center mb-12">
             <span className="page-tag">Who Advertises With Us</span>
-            <h2 className="section-title light">Built for Local & Regional Brands</h2>
+            <h2 className="section-title light">{advertisePage.industriesHeading}</h2>
           </div>
 
           <div className="industries-grid" data-reveal-stagger>
@@ -182,7 +123,7 @@ const Advertise = () => {
       <section className="section-padding ad-form-section">
         <div className="container ad-form-grid">
           <div>
-            <h2 className="section-title">Request a Media Kit</h2>
+            <h2 className="section-title">{advertisePage.mediaKitHeading}</h2>
             <p className="ad-form-lead">
               Tell us your business and target city — we'll send placement options, available slots
               and pricing within one working day.
@@ -216,7 +157,7 @@ const Advertise = () => {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="ad-form">
-                <h3 className="ad-form-title">Advertising Enquiry</h3>
+                <h3 className="ad-form-title">{advertisePage.formTitle}</h3>
 
                 <div className="ad-field">
                   <label htmlFor="ad-company">Business / Brand Name</label>

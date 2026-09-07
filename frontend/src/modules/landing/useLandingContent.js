@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-  Award, Bike, Briefcase, Building2, Car, Compass, Headphones, HeartHandshake,
-  Navigation, PhoneCall, Plane, ShieldCheck, ShoppingBag, Sparkles, Users, Wallet,
+  Award, BellRing, Bike, Briefcase, Building, Building2, Car, CheckCircle2, Clock,
+  Compass, DollarSign, FileText, Gift, Globe, GraduationCap, HardHat, Headphones,
+  HeartHandshake, Image, MapPin, Navigation, PhoneCall, Plane, ShieldCheck, Shield,
+  ShoppingBag, Smartphone, Sparkles, Stethoscope, TrendingUp, UserCheck, Users,
+  UtensilsCrossed, Wallet,
 } from 'lucide-react';
 import api from '../../shared/api/axiosInstance';
 import { LANDING_FALLBACK } from './landingFallback';
@@ -17,8 +20,11 @@ import { LANDING_FALLBACK } from './landingFallback';
 
 // The API stores an icon name; components cannot be serialised.
 const ICONS = {
-  Award, Bike, Briefcase, Building2, Car, Compass, Headphones, HeartHandshake,
-  Navigation, PhoneCall, Plane, ShieldCheck, ShoppingBag, Users, Wallet,
+  Award, BellRing, Bike, Briefcase, Building, Building2, Car, CheckCircle2, Clock,
+  Compass, DollarSign, FileText, Gift, Globe, GraduationCap, HardHat, Headphones,
+  HeartHandshake, Image, MapPin, Navigation, PhoneCall, Plane, Shield, ShieldCheck,
+  ShoppingBag, Smartphone, Stethoscope, TrendingUp, UserCheck, Users,
+  UtensilsCrossed, Wallet,
 };
 
 const withIcons = (items = []) =>
@@ -54,6 +60,10 @@ export default function useLandingContent() {
           about: { ...LANDING_FALLBACK.about, ...(data.about || {}) },
           faqs: data.faqs?.length ? data.faqs : LANDING_FALLBACK.faqs,
           servicesPage: { ...LANDING_FALLBACK.servicesPage, ...(data.servicesPage || {}) },
+          corporatePage: { ...LANDING_FALLBACK.corporatePage, ...(data.corporatePage || {}) },
+          partnerPage: { ...LANDING_FALLBACK.partnerPage, ...(data.partnerPage || {}) },
+          driverPage: { ...LANDING_FALLBACK.driverPage, ...(data.driverPage || {}) },
+          advertisePage: { ...LANDING_FALLBACK.advertisePage, ...(data.advertisePage || {}) },
         });
         setSource('api');
       })
