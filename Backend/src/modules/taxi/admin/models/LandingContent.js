@@ -30,6 +30,9 @@ const landingContentSchema = new mongoose.Schema(
     launchCities: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // { email, whatsapp, whatsappDisplay, tollFree, tollFreeLive, address, addressShort, mapsUrl }
     contact: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { logo, wordmarkPrimary, wordmarkSecondary, tagline, appBlurb,
+    //   playStoreUrl, appStoreUrl, playStoreQr, appStoreQr }
+    brand: { type: mongoose.Schema.Types.Mixed, default: {} },
     // { terms: { intro, body }, privacy: {...}, refund: {...} }
     //
     // Served by its own endpoint rather than with the rest of the content: the

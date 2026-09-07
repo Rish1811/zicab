@@ -79,4 +79,19 @@ export const defaultLandingContent = {
     mapsUrl:
       'https://www.google.com/maps/search/?api=1&query=Grand+Majestic+Mall+Gandhinagar+Bengaluru',
   },
+
+  // Logo, wordmark and app-store links. The store badges were non-clickable
+  // placeholders and the QR code was an icon, so these start empty and the
+  // client fills them in.
+  brand: {
+    logo: '/zicab-logo.jpg',
+    wordmarkPrimary: 'ZI',
+    wordmarkSecondary: 'CAB',
+    tagline: 'Your Ride. Our Priority.',
+    appBlurb: 'Book rides in seconds, track drivers live, and manage invoices with the ZI CAB app.',
+    playStoreUrl: '',
+    appStoreUrl: '',
+    playStoreQr: '',
+    appStoreQr: '',
+  },
 };

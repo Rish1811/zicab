@@ -45,6 +45,7 @@ export default function useLandingContent() {
           partners: data.partners?.length ? data.partners : LANDING_FALLBACK.partners,
           launchCities: data.launchCities?.length ? data.launchCities : LANDING_FALLBACK.launchCities,
           contact: { ...LANDING_FALLBACK.contact, ...(data.contact || {}) },
+          brand: { ...LANDING_FALLBACK.brand, ...(data.brand || {}) },
         });
         setSource('api');
       })

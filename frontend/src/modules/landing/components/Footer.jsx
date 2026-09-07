@@ -4,7 +4,7 @@ import { scrollToTop } from '../hooks/useSmoothScroll';
 import { useLanding } from '../landingContentContext';
 
 const Footer = ({ setActiveTab }) => {
-  const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink } = useLanding();
+  const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink, brand } = useLanding();
   const handleNavClick = (id) => {
     setActiveTab(id);
     scrollToTop();
@@ -17,13 +17,13 @@ const Footer = ({ setActiveTab }) => {
           {/* Brand Info */}
           <div className="footer-brand">
             <div className="footer-logo">
-              <img src="/zicab-logo.jpg" alt="ZI CAB" className="footer-logo-img" />
+              <img src={brand.logo} alt={`${brand.wordmarkPrimary} ${brand.wordmarkSecondary}`} className="footer-logo-img" />
               <div>
                 <div className="footer-logo-text">
-                  <span className="logo-zi">ZI</span>
-                  <span className="logo-cab">CAB</span>
+                  <span className="logo-zi">{brand.wordmarkPrimary}</span>
+                  <span className="logo-cab">{brand.wordmarkSecondary}</span>
                 </div>
-                <p className="footer-tagline">Your Ride. Our Priority.</p>
+                <p className="footer-tagline">{brand.tagline}</p>
               </div>
             </div>
             <p className="footer-desc">
@@ -94,18 +94,23 @@ const Footer = ({ setActiveTab }) => {
           {/* Mobile App & Safety */}
           <div className="footer-col">
             <h4 className="footer-heading">Download App</h4>
-            <p className="footer-text-sm">
-              Book rides in seconds, track drivers live, and manage invoices with the ZI CAB app.
-            </p>
+            <p className="footer-text-sm">{brand.appBlurb}</p>
             <div className="footer-app-badges">
-              <div className="app-badge">
-                <span className="app-badge-title">GET IT ON</span>
-                <span className="app-badge-store">Google Play</span>
-              </div>
-              <div className="app-badge">
-                <span className="app-badge-title">Download on the</span>
-                <span className="app-badge-store">App Store</span>
-              </div>
+              {/* Anchors only when a store URL is set — otherwise these stay the
+                  inert badges they have always been, rather than dead links. */}
+              {[
+                { url: brand.playStoreUrl, title: 'GET IT ON', store: 'Google Play' },
+                { url: brand.appStoreUrl, title: 'Download on the', store: 'App Store' },
+              ].map((badge) => {
+                const Tag = badge.url ? 'a' : 'div';
+                const props = badge.url ? { href: badge.url, target: '_blank', rel: 'noreferrer' } : {};
+                return (
+                  <Tag key={badge.store} className="app-badge" {...props}>
+                    <span className="app-badge-title">{badge.title}</span>
+                    <span className="app-badge-store">{badge.store}</span>
+                  </Tag>
+                );
+              })}
             </div>
 
             <div className="footer-trust-mini">

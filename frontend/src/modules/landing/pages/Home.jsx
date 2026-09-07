@@ -149,7 +149,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
   // All page content comes from the CMS, falling back to the bundled copy so the
   // page is never blank while the request is in flight or if it fails.
-  const { services, valueProps, drivers, partners, launchCities, contact } = useLanding();
+  const { services, valueProps, drivers, partners, launchCities, contact, brand } = useLanding();
   const { vehicles } = useVehicleTypes(fallbackVehicles);
 
 
@@ -513,18 +513,32 @@ const Home = ({ openBookingModal, setActiveTab }) => {
               <p className="app-banner-desc">Book rides on the go, anytime, anywhere.</p>
 
               <div className="app-store-btns flex gap-4 mt-6">
+                {/* Falls back to the placeholder icon until a QR image is uploaded. */}
                 <div className="qr-box">
-                  <QrCode size={40} color="#0B1F3A" />
+                  {brand.playStoreQr || brand.appStoreQr ? (
+                    <img
+                      src={brand.playStoreQr || brand.appStoreQr}
+                      alt="Scan to download the app"
+                      style={{ width: 64, height: 64, objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <QrCode size={40} color="#0B1F3A" />
+                  )}
                 </div>
                 <div className="store-btns-column">
-                  <div className="store-btn">
-                    <span className="st-sub">GET IT ON</span>
-                    <span className="st-name">Google Play</span>
-                  </div>
-                  <div className="store-btn">
-                    <span className="st-sub">Download on the</span>
-                    <span className="st-name">App Store</span>
-                  </div>
+                  {[
+                    { url: brand.playStoreUrl, sub: 'GET IT ON', name: 'Google Play' },
+                    { url: brand.appStoreUrl, sub: 'Download on the', name: 'App Store' },
+                  ].map((badge) => {
+                    const Tag = badge.url ? 'a' : 'div';
+                    const props = badge.url ? { href: badge.url, target: '_blank', rel: 'noreferrer' } : {};
+                    return (
+                      <Tag key={badge.name} className="store-btn" {...props}>
+                        <span className="st-sub">{badge.sub}</span>
+                        <span className="st-name">{badge.name}</span>
+                      </Tag>
+                    );
+                  })}
                 </div>
               </div>
             </div>

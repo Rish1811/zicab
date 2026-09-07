@@ -94,6 +94,18 @@ const CONTACT_FIELDS = [
   { name: 'mapsUrl', label: 'Google Maps URL', placeholder: 'https://www.google.com/maps/search/?api=1&query=...', wide: true },
 ];
 
+const BRAND_FIELDS = [
+  { name: 'logo', label: 'Logo', type: 'image', wide: true, help: 'Shown in the header, footer and intro screen.' },
+  { name: 'wordmarkPrimary', label: 'Wordmark (first part)', placeholder: 'ZI' },
+  { name: 'wordmarkSecondary', label: 'Wordmark (second part)', placeholder: 'CAB' },
+  { name: 'tagline', label: 'Tagline', placeholder: 'Your Ride. Our Priority.', wide: true },
+  { name: 'appBlurb', label: 'App blurb', placeholder: 'Book rides in seconds...', wide: true },
+  { name: 'playStoreUrl', label: 'Google Play URL', placeholder: 'https://play.google.com/store/apps/details?id=...', wide: true, help: 'Leave blank and the badge stays unclickable.' },
+  { name: 'appStoreUrl', label: 'App Store URL', placeholder: 'https://apps.apple.com/app/...', wide: true },
+  { name: 'playStoreQr', label: 'Play Store QR', type: 'image' },
+  { name: 'appStoreQr', label: 'App Store QR', type: 'image' },
+];
+
 const LEGAL_DOCS = [
   { key: 'terms', title: 'Terms & Conditions', path: '/terms' },
   { key: 'privacy', title: 'Privacy Policy', path: '/privacy' },
@@ -305,6 +317,7 @@ export default function LandingContent() {
         launchCities: data.launchCities || [],
         contact: data.contact || {},
         legal: data.legal || {},
+        brand: data.brand || {},
       });
       setDirty(false);
     } catch (error) {
@@ -405,6 +418,19 @@ export default function LandingContent() {
           onChange={(value) => setSection(section.key, value)}
         />
       ))}
+
+      <SectionCard title="Brand & App" help="Logo, wordmark and the app-store links behind the download badges.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {BRAND_FIELDS.map((field) => (
+            <Field
+              key={field.name}
+              field={field}
+              value={content.brand?.[field.name]}
+              onChange={(value) => setSection('brand', { ...content.brand, [field.name]: value })}
+            />
+          ))}
+        </div>
+      </SectionCard>
 
       <SectionCard
         title="Legal Documents"

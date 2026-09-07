@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Menu, X, PhoneCall, Car, ChevronRight } from 'lucide-react';
 import { scrollToTop } from '../hooks/useSmoothScroll';
+import { useLanding } from '../landingContentContext';
 
 const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
+  const { brand } = useLanding();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -31,13 +33,13 @@ const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
           onClick={() => handleNavClick('home')}
           style={{ cursor: 'pointer' }}
         >
-          <img src="/zicab-logo.jpg" alt="ZI CAB" className="brand-logo-img" />
+          <img src={brand.logo} alt={`${brand.wordmarkPrimary} ${brand.wordmarkSecondary}`} className="brand-logo-img" />
           <div className="brand-logo-text">
             <div className="logo-text-wrapper">
-              <span className="logo-zi">ZI</span>
-              <span className="logo-cab">CAB</span>
+              <span className="logo-zi">{brand.wordmarkPrimary}</span>
+              <span className="logo-cab">{brand.wordmarkSecondary}</span>
             </div>
-            <span className="logo-tagline">Your Ride. Our Priority.</span>
+            <span className="logo-tagline">{brand.tagline}</span>
           </div>
         </div>
 
