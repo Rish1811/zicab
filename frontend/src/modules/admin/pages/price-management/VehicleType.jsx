@@ -193,6 +193,9 @@ const buildVehicleFormData = (selectedVehicle = {}) => ({
   vehicle_preference: Array.isArray(selectedVehicle.vehicle_preference)
     ? selectedVehicle.vehicle_preference.map((item) => String(item?._id || item))
     : [],
+  app_modules: Array.isArray(selectedVehicle.app_modules)
+    ? selectedVehicle.app_modules.map((item) => String(item?._id || item))
+    : [],
 });
 
 const sanitizeObjectIdList = (items = []) =>
@@ -236,6 +239,7 @@ const defaultFormData = {
   active: true,
   supported_other_vehicle_types: [],
   vehicle_preference: [],
+  app_modules: [],
 };
 
 const DELIVERY_CATEGORY_OPTIONS = [
@@ -392,6 +396,9 @@ const VehicleType = ({ mode: propMode }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isTransportTypeMenuOpen, setIsTransportTypeMenuOpen] = useState(false);
   const [vehiclePreferences, setVehiclePreferences] = useState([]);
+  // The modules a rider can pick on the home screen. A vehicle assigned to
+  // none of them stays available everywhere.
+  const [appModules, setAppModules] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, current_page: 1 });
   const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState({ ...defaultFormData, transport_type: '' });
@@ -430,6 +437,18 @@ const VehicleType = ({ mode: propMode }) => {
       try {
         const vehicleCatalogPromise = api.get(isEditor ? '/admin/types/vehicle-types' : '/admin/types/vehicle-types/list');
         const preferencePromise = isEditor ? api.get('/admin/vehicle_preference') : Promise.resolve(null);
+        // Public route: the module list is the same one the rider app reads, so
+        // the admin cannot assign a module the app will not offer.
+        if (isEditor) {
+          api.get('/users/app-modules')
+            .then((response) => {
+              if (!mounted) return;
+              const payload = unwrap(response);
+              const rows = Array.isArray(payload?.results) ? payload.results : [];
+              setAppModules(rows.filter((row) => row && (row.active ?? 1)));
+            })
+            .catch(() => {});
+        }
         const detailPromise = isEditor && id ? api.get(`/admin/types/vehicle-types/${id}`) : Promise.resolve(null);
 
         if (!id && propMode === 'create') {
@@ -621,6 +640,7 @@ const VehicleType = ({ mode: propMode }) => {
         active: formData.active,
         supported_other_vehicle_types: sanitizeObjectIdList(formData.supported_other_vehicle_types),
         vehicle_preference: sanitizeObjectIdList(formData.vehicle_preference),
+        app_modules: sanitizeObjectIdList(formData.app_modules),
       };
 
       if (id) {
@@ -914,6 +934,72 @@ const VehicleType = ({ mode: propMode }) => {
                 <option key={option.id || 'empty'} value={option.id}>{option.label}</option>
               ))}
             </select>
+          </div>
+
+          <div className="lg:col-span-2">
+            <label className={labelClass}>App Modules</label>
+            <p className="mb-3 text-xs font-medium text-slate-500">
+              Pick which home-screen modules offer this vehicle. Leave every box clear to
+              offer it under all of them.
+            </p>
+            {appModules.length === 0 ? (
+              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500">
+                No app modules configured yet. Add them under Settings &rarr; App Modules.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {appModules.map((module) => {
+                  const moduleId = String(module._id || module.id || '');
+                  const selected = (formData.app_modules || []).includes(moduleId);
+
+                  return (
+                    <button
+                      key={moduleId}
+                      type="button"
+                      onClick={() => {
+                        const current = Array.isArray(formData.app_modules) ? formData.app_modules : [];
+                        updateForm(
+                          'app_modules',
+                          selected
+                            ? current.filter((item) => item !== moduleId)
+                            : [...current, moduleId],
+                        );
+                      }}
+                      className={`flex items-center gap-3 rounded-[20px] border p-3 text-left transition-all ${
+                        selected
+                          ? 'border-[#0047AB] bg-[#EEF4FF] shadow-md'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                      }`}
+                    >
+                      {module.mobile_menu_icon ? (
+                        <img
+                          src={module.mobile_menu_icon}
+                          alt={module.name || 'Module'}
+                          className="h-10 w-10 shrink-0 rounded-xl object-contain"
+                        />
+                      ) : (
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100">
+                          <Car size={16} className="text-slate-400" />
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-black text-slate-900">
+                          {module.name || 'Module'}
+                        </span>
+                        <span className="block truncate text-xs font-medium text-slate-500">
+                          {module.short_description || module.transport_type || ''}
+                        </span>
+                      </span>
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                        selected ? 'border-[#0047AB] bg-[#0047AB] text-white' : 'border-slate-300 bg-white'
+                      }`}>
+                        {selected ? <CheckCircle2 size={12} /> : null}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {showsDeliveryCategorySelector ? (

@@ -114,6 +114,11 @@ const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoo
     Number(pricing?.base_price || 0) > 0 ||
     Number(pricing?.distance_price || 0) > 0
   );
+  // Computed ahead of the enabled check so both branches — priced and
+  // unpriced — can report the actual pickup/drop distance to the caller;
+  // the quote screen shows this even when the vehicle has no fare configured.
+  const distanceKm = Math.max(0, calculateDistanceKm(pickupCoords, dropCoords));
+  const baseDistance = Math.max(0, Number(pricing?.base_distance ?? pricing?.free_distance ?? 0));
 
   if (!enabled) {
     return {
@@ -121,12 +126,12 @@ const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoo
       subtotal: 0,
       serviceTaxPercentage: Math.max(0, Number(vehicle?.service_tax || 0)),
       serviceTaxAmount: 0,
+      distanceKm: roundCurrency(distanceKm),
+      baseDistanceKm: roundCurrency(baseDistance),
     };
   }
 
-  const distanceKm = Math.max(0, calculateDistanceKm(pickupCoords, dropCoords));
   const basePrice = Math.max(0, Number(pricing?.base_price || 0));
-  const baseDistance = Math.max(0, Number(pricing?.base_distance ?? pricing?.free_distance ?? 0));
   const distancePrice = Math.max(0, Number(pricing?.distance_price || 0));
   const extraDistanceKm = Math.max(distanceKm - baseDistance, 0);
   const distanceCharge = extraDistanceKm * distancePrice;
@@ -139,6 +144,8 @@ const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoo
     subtotal: roundCurrency(subtotal),
     serviceTaxPercentage: roundCurrency(serviceTaxPercentage),
     serviceTaxAmount: roundCurrency(serviceTaxAmount),
+    distanceKm: roundCurrency(distanceKm),
+    baseDistanceKm: roundCurrency(baseDistance),
   };
 };
 
@@ -199,6 +206,38 @@ export const createDeliveryRecord = async ({
 
   const detailedRide = await getRideDetails(ride._id);
   return serializeDeliveryRealtime(ensureParcelRide(detailedRide));
+};
+
+/// The fare the app shows on the address/details screen before booking.
+///
+/// Runs the exact same `computeDeliveryFareBreakdown` that `createDeliveryRecord`
+/// uses to set the charged fare, so what the rider is quoted here is always
+/// what the booking actually charges — nothing here is recomputed differently
+/// between the two call sites.
+export const getDeliveryQuote = async ({ vehicleTypeId, pickup, drop, parcel }) => {
+  if (!vehicleTypeId) {
+    throw new ApiError(400, 'vehicleTypeId is required');
+  }
+
+  await ensureDeliveryVehicleAllowed({ vehicleTypeId, parcel });
+
+  const pickupCoords = normalizePoint(pickup, 'pickup');
+  const dropCoords = normalizePoint(drop, 'drop');
+  const vehicle = await Vehicle.findById(vehicleTypeId)
+    .select('name delivery_distance_pricing service_tax')
+    .lean();
+
+  if (!vehicle) {
+    throw new ApiError(404, 'Vehicle type not found');
+  }
+
+  const fareBreakdown = computeDeliveryFareBreakdown({ vehicle, pickupCoords, dropCoords });
+
+  return {
+    vehicleTypeId: String(vehicleTypeId),
+    vehicleName: vehicle.name || '',
+    ...fareBreakdown,
+  };
 };
 
 export const getActiveDeliveryForIdentity = async ({ role, entityId }) => {

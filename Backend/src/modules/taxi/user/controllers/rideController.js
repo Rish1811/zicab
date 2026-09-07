@@ -1084,11 +1084,15 @@ export const listAvailableDrivers = async (req, res) => {
   const longitude = Number(lng);
   const distance = Number(maxDistance);
 
-  if (!vehicleTypeId) {
-    throw new ApiError(400, 'vehicleTypeId is required');
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
+  // Optional on purpose: a specific vehicle type narrows the search (the
+  // fare/ETA screen asks "how far is the closest Sedan"), but the map's
+  // ambient nearby-driver markers ask a different question — "who's online
+  // near here at all" — and have no vehicle type to offer yet. `matchDrivers`
+  // already treats an absent vehicleTypeId as "any type"; this used to block
+  // that case before it ever reached there, which is why the map never had
+  // a driver on it to click failed with "vehicleTypeId is required" and the
+  // client silently rendered zero markers.
+  if (vehicleTypeId && !mongoose.Types.ObjectId.isValid(vehicleTypeId)) {
     throw new ApiError(400, 'vehicleTypeId is invalid');
   }
 
@@ -1104,7 +1108,7 @@ export const listAvailableDrivers = async (req, res) => {
   const matchOptions = {
     maxDistance: Number.isFinite(distance) && distance > 0 ? Math.min(distance, 25000) : 25000,
     limit: Math.min(Number(limit) || 30, 50),
-    vehicleTypeId,
+    ...(vehicleTypeId ? { vehicleTypeId } : {}),
   };
 
   let matchResult = await matchDrivers([longitude, latitude], {

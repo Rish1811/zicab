@@ -843,7 +843,7 @@ const AdminLayout = () => {
             subItems: [
               { label: 'Promo Code', path: '/admin/promotions/promo-codes', permission: 'promotions.view' },
               { label: 'Push Notifications', path: '/admin/promotions/send-notification', permission: 'promotions.view' },
-              //{ label: 'Banner Image', path: '/admin/promotions/banner-image', permission: 'promotions.view' },
+              { label: 'Banner Image', path: '/admin/promotions/banner-image', permission: 'promotions.view' },
             ],
           },
           {
@@ -1068,20 +1068,18 @@ const AdminLayout = () => {
           //   label: 'Addons',
           //   subItems: [{ label: 'Dispatcher Addons', path: '/admin/settings/addons/dispatcher' }],
           // },
-          // {
-          //   icon: Monitor,
-          //   label: 'CMS-Landing Website',
-          //   permission: 'settings.view',
-          //   subItems: [
-          //     { label: 'Header-Footer', path: '/admin/settings/cms/header-footer', permission: 'settings.view' },
-          //     { label: 'Home', path: '/admin/settings/cms/home', permission: 'settings.view' },
-          //     { label: 'About Us', path: '/admin/settings/cms/about', permission: 'settings.view' },
-          //     { label: 'Driver', path: '/admin/settings/cms/driver', permission: 'settings.view' },
-          //     { label: 'User', path: '/admin/settings/cms/user', permission: 'settings.view' },
-          //     { label: 'Contact', path: '/admin/settings/cms/contact', permission: 'settings.view' },
-          //     { label: 'Privacy Policy, T&C and DMV', path: '/admin/settings/cms/legal', permission: 'settings.view' },
-          //   ],
-          // },
+          // Only the sections that are actually editable are listed. The rest of
+          // the marketing site is still hardcoded in modules/landing; add entries
+          // here as those sections move into the CMS.
+          {
+            icon: Monitor,
+            label: 'Website Content',
+            permission: 'landing_content.view',
+            subItems: [
+              { label: 'Landing Page', path: '/admin/settings/cms/landing', permission: 'landing_content.view' },
+              { label: 'Enquiries', path: '/admin/settings/cms/enquiries', permission: 'enquiries.view' },
+            ],
+          },
         ],
       },
     ],
