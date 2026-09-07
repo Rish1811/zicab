@@ -22,14 +22,12 @@ const initials = (name) =>
 
 const Home = ({ openBookingModal, setActiveTab }) => {
   const pageRef = useRef(null);
-  const vehicleRail = useRef(null);
   const driverRail = useRef(null);
 
   useReveal(pageRef);
   useScrollFx(pageRef);
   useMagnetic(pageRef);
   useTilt(pageRef);
-  useAutoScroll(vehicleRail);
   useAutoScroll(driverRail, { interval: 3800 });
 
   /**
@@ -355,7 +353,12 @@ const fallbackVehicles = [
             </div>
           </div>
 
-          <div className="vehicles-grid snap-row" data-reveal-stagger ref={vehicleRail}>
+          {/* Two identical tracks: the first slides left by exactly its own
+              width plus one gap, at which point the second sits where the
+              first began, so the loop has no visible seam and no end. */}
+          <div className="vehicles-marquee">
+            {[0, 1].map((pass) => (
+            <div className="vehicles-track" key={pass} aria-hidden={pass === 1}>
             {vehicles.map((v, i) => (
               <div key={i} className="vehicle-card" data-tilt>
                 <div className="vehicle-img-container" data-img-parallax>
@@ -389,6 +392,8 @@ const fallbackVehicles = [
                   </div>
                 </div>
               </div>
+            ))}
+            </div>
             ))}
           </div>
         </div>
@@ -891,10 +896,79 @@ const fallbackVehicles = [
               var(--bg-light);
           }
 
-          .vehicles-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 20px;
+          /* Continuous, endless marquee — same approach as the partner strip.
+             The catalog outgrew a single screen (eighteen vehicles five-across
+             stacked into four rows), and a scroll-snap rail only stepped a card
+             at a time and stopped at the end. */
+          .vehicles-marquee {
+            display: flex;
+            --marquee-gap: 20px;
+            gap: var(--marquee-gap);
+            overflow: hidden;
+            mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+            -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+          }
+
+          .vehicles-track {
+            display: flex;
+            gap: var(--marquee-gap);
+            flex-shrink: 0;
+            animation: zc-marqueeScroll 42s linear infinite;
+          }
+
+          .vehicles-marquee:hover .vehicles-track {
+            animation-play-state: paused;
+          }
+
+          .vehicles-track > .vehicle-card {
+            flex: 0 0 246px;
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .vehicles-track {
+              animation: none;
+            }
+            .vehicles-marquee {
+              overflow-x: auto;
+            }
+          }
+
+          /* On a touch screen a moving row is the wrong trade: you cannot swipe
+             an overflow:hidden marquee, and Book Now becomes a target that
+             slides out from under your thumb. Touch devices get a swipeable
+             snap rail instead, and the duplicate track is dropped since there is
+             nothing to loop. Pointer devices keep the continuous marquee. */
+          @media (hover: none), (max-width: 768px) {
+            .vehicles-marquee {
+              overflow-x: auto;
+              scroll-snap-type: x mandatory;
+              -webkit-overflow-scrolling: touch;
+              scrollbar-width: none;
+              mask-image: none;
+              -webkit-mask-image: none;
+              /* bleed to the gutter so the next card peeks in and the row reads
+                 as swipeable without a hint label */
+              margin: 0 -16px;
+              padding: 2px 16px 12px;
+            }
+
+            .vehicles-marquee::-webkit-scrollbar {
+              display: none;
+            }
+
+            .vehicles-track {
+              animation: none;
+            }
+
+            .vehicles-track[aria-hidden='true'] {
+              display: none;
+            }
+
+            .vehicles-track > .vehicle-card {
+              scroll-snap-align: start;
+              flex-basis: 72vw;
+              max-width: 260px;
+            }
           }
 
           .vehicle-card {
@@ -1239,7 +1313,10 @@ const fallbackVehicles = [
              track width, so the second lands where the first started — seamless. */
           .partners-marquee {
             display: flex;
-            gap: 20px;
+            /* the keyframe shifts by one track width plus this gap, so the two
+               must always agree — keep them tied through the variable */
+            --marquee-gap: 20px;
+            gap: var(--marquee-gap);
             overflow: hidden;
             mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
             -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
@@ -1247,13 +1324,18 @@ const fallbackVehicles = [
 
           .partners-track {
             display: flex;
-            gap: 20px;
+            gap: var(--marquee-gap);
             flex-shrink: 0;
-            animation: zc-zc-partnerScroll 32s linear infinite;
+            animation: zc-marqueeScroll 32s linear infinite;
           }
 
           .partners-marquee:hover .partners-track {
             animation-play-state: paused;
+          }
+
+          /* decorative only: never intercept a swipe */
+          .partners-marquee {
+            pointer-events: none;
           }
 
           
@@ -1389,8 +1471,8 @@ const fallbackVehicles = [
 
           /* RESPONSIVE MEDIA QUERIES */
           @media (max-width: 1200px) {
-            .vehicles-grid {
-              grid-template-columns: repeat(3, 1fr);
+            .vehicles-track > .vehicle-card {
+              flex-basis: 210px;
             }
           }
 
@@ -1404,7 +1486,7 @@ const fallbackVehicles = [
             .services-grid {
               grid-template-columns: repeat(4, 1fr);
             }
-            .vehicles-grid, .why-us-grid, .drivers-grid {
+            .why-us-grid, .drivers-grid {
               grid-template-columns: repeat(2, 1fr);
             }
             .advertise-teaser-inner {
@@ -1467,11 +1549,11 @@ const fallbackVehicles = [
             .services-grid {
               grid-template-columns: repeat(2, 1fr);
             }
-            .vehicles-grid, .why-us-grid, .drivers-grid, .cities-grid {
+            .why-us-grid, .drivers-grid, .cities-grid {
               grid-template-columns: 1fr;
             }
-            .partners-marquee, .partners-track {
-              gap: 12px;
+            .partners-marquee, .vehicles-marquee {
+              --marquee-gap: 12px;
             }
             
             .partner-logo-item {
@@ -1524,6 +1606,11 @@ const fallbackVehicles = [
               padding: 34px 0 38px;
             }
             .why-us-grid {
+              gap: 18px;
+            }
+            /* the icon shrinks on mobile, so the row gap has to grow to stop the
+               heading sitting right against it */
+            .why-us-card {
               gap: 14px;
             }
             .why-icon-box {
@@ -1573,12 +1660,14 @@ const fallbackVehicles = [
       
         }
 
-        @keyframes zc-partnerScroll {
-        to { transform: translateX(calc(-100% - 20px)); }
-        }
-
-        @keyframes zc-partnerScroll {
-        to { transform: translateX(calc(-100% - 12px)); }
+        /* One track width plus the gap, so track two lands exactly where
+           track one started. */
+        /* One track width plus one gap, so the duplicate track lands exactly
+           where the first began. There were previously two blocks with the same
+           name and different offsets, and the partner strip referenced a third
+           name that did not exist — so it never moved at all. */
+        @keyframes zc-marqueeScroll {
+        to { transform: translateX(calc(-100% - var(--marquee-gap))); }
         }
       `}</style>
     </div>
