@@ -4,7 +4,7 @@ import useReveal from '../hooks/useReveal';
 import { useLanding } from '../landingContentContext';
 
 const ContactUs = () => {
-  const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink } = useLanding();
+  const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink, faqs } = useLanding();
   const pageRef = useRef(null);
   useReveal(pageRef);
 
@@ -20,28 +20,6 @@ const ContactUs = () => {
     setSubmitted(true);
   };
 
-  const faqs = [
-    {
-      q: 'Does ZI CAB charge any surge pricing during peak hours?',
-      a: 'No! ZI CAB follows a strict zero-surge pricing policy. The fare displayed during booking is your final price regardless of weather, traffic, or late night hours.'
-    },
-    {
-      q: 'What is the cancellation policy for cab bookings?',
-      a: 'Riders can cancel any booking free of charge up to 1 hour before pickup time. Zero cancellation fees are charged.'
-    },
-    {
-      q: 'How does airport pickup work?',
-      a: 'Your dedicated ride coordinator tracks your flight status live. Driver waits at the arrivals pick-up point with a name sign, offering 60 minutes free waiting time.'
-    },
-    {
-      q: 'Which payment methods are accepted?',
-      a: 'We accept Cash to Driver, Google Pay, PhonePe, Paytm, Credit/Debit Cards, and Net Banking.'
-    },
-    {
-      q: 'How are ZI CAB drivers verified?',
-      a: 'All driver partners undergo strict background checks, commercial license validation, and police character verification before onboarding.'
-    }
-  ];
 
   return (
     <div className="contact-page animate-fade-in" ref={pageRef}>

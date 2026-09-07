@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  Bike, Briefcase, Building2, Car, Compass, Headphones, Navigation,
-  PhoneCall, Plane, ShieldCheck, ShoppingBag, Sparkles, Wallet,
+  Award, Bike, Briefcase, Building2, Car, Compass, Headphones, HeartHandshake,
+  Navigation, PhoneCall, Plane, ShieldCheck, ShoppingBag, Sparkles, Users, Wallet,
 } from 'lucide-react';
 import api from '../../shared/api/axiosInstance';
 import { LANDING_FALLBACK } from './landingFallback';
@@ -17,12 +17,14 @@ import { LANDING_FALLBACK } from './landingFallback';
 
 // The API stores an icon name; components cannot be serialised.
 const ICONS = {
-  Bike, Briefcase, Building2, Car, Compass, Headphones,
-  Navigation, PhoneCall, Plane, ShieldCheck, ShoppingBag, Wallet,
+  Award, Bike, Briefcase, Building2, Car, Compass, Headphones, HeartHandshake,
+  Navigation, PhoneCall, Plane, ShieldCheck, ShoppingBag, Users, Wallet,
 };
 
 const withIcons = (items = []) =>
   items.map((item) => ({ ...item, icon: ICONS[item.icon] || Sparkles }));
+
+export { ICONS as LANDING_ICONS };
 
 export default function useLandingContent() {
   const [content, setContent] = useState(LANDING_FALLBACK);
@@ -49,6 +51,9 @@ export default function useLandingContent() {
           hero: { ...LANDING_FALLBACK.hero, ...(data.hero || {}) },
           footer: { ...LANDING_FALLBACK.footer, ...(data.footer || {}) },
           seo: { ...LANDING_FALLBACK.seo, ...(data.seo || {}) },
+          about: { ...LANDING_FALLBACK.about, ...(data.about || {}) },
+          faqs: data.faqs?.length ? data.faqs : LANDING_FALLBACK.faqs,
+          servicesPage: { ...LANDING_FALLBACK.servicesPage, ...(data.servicesPage || {}) },
         });
         setSource('api');
       })

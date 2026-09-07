@@ -1,3 +1,5 @@
+import { useLanding } from '../landingContentContext';
+import { LANDING_ICONS } from '../useLandingContent';
 import React, { useRef } from 'react';
 import {
   Car, Plane, Compass, Briefcase, Building2, ShoppingBag,
@@ -10,99 +12,21 @@ const Services = ({ openBookingModal }) => {
   useReveal(pageRef);
 
 
-  const allServices = [
-    {
-      id: 'auto',
-      title: 'Auto Ride',
-      tag: 'Short Distance & Metered',
-      icon: Bike,
-      image: '/vehicles/auto.jpg',
-      description: 'The quickest way across town for short hops — metered auto rickshaws with verified drivers and no haggling over fare.',
-      features: ['Lowest fare per km', 'Ideal for 1-5 km trips', 'Beats peak-hour traffic', '3 passenger seating']
-    },
-    {
-      id: 'city',
-      title: 'City Ride (Local Cabs)',
-      tag: 'Point-to-Point & Hourly',
-      icon: Car,
-      image: '/vehicles/dzire.jpg',
-      description: 'Hassle-free daily city travel with instant driver allocation, clean sedans, and transparent fixed fare per km.',
-      features: ['Zero surge pricing', '4hr, 8hr, 12hr package rentals', 'Instant driver tracking', 'AC always enabled']
-    },
-    {
-      id: 'airport',
-      title: 'Airport Transfer',
-      tag: 'Pickup & Drop Guarantee',
-      icon: Plane,
-      image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=700&q=80',
-      description: 'Never miss a flight again. Punctual 24x7 pickups from your doorstep directly to airport terminals with flight tracking.',
-      features: ['60 mins free waiting time at airport', 'Flight delay tracking', 'Luggage assistance', 'Toll taxes included']
-    },
-    {
-      id: 'outstation',
-      title: 'Outstation Travel',
-      tag: 'One-Way & Round Trips',
-      icon: Compass,
-      image: '/vehicles/ertiga.jpg',
-      description: 'Comfortable long-distance travel between cities. Pay only for one-way drop or book a round trip for weekend getaways.',
-      features: ['Experienced highway drivers', 'No hidden driver allowance fees', 'Night charge free', 'All India Tourist Permit']
-    },
-    {
-      id: 'sedan',
-      title: 'Premium Sedan',
-      tag: 'Comfort & Style',
-      icon: Car,
-      image: '/vehicles/dzire.jpg',
-      description: 'Elegant Dzire, Etios, and Honda Amaze sedans featuring spacious legroom and premium upholstery.',
-      features: ['4 Passenger seating', '2 Large Suitcase capacity', 'Water bottles & chargers', 'Smooth quiet ride']
-    },
-    {
-      id: 'suv',
-      title: 'SUV & Innova Crysta',
-      tag: 'Group & Family Travel',
-      icon: Car,
-      image: '/vehicles/innova-crysta.jpg',
-      description: 'Luxury MUVs and SUVs designed for family vacations, wedding delegates, and heavy luggage travel.',
-      features: ['6 to 7 Seats capacity', 'Rear AC vents', 'Ample luggage space', 'Reclining leather seats']
-    },
-    {
-      id: 'corporate',
-      title: 'Corporate Travel',
-      tag: 'B2B Mobility Solutions',
-      icon: Briefcase,
-      image: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=700&q=80',
-      description: 'Tailored executive travel for business travelers, client hospitality, and monthly corporate employee commutes.',
-      features: ['Centralized monthly invoicing', 'GST compliant bills', 'Dedicated Account Manager', 'Priority cab dispatch']
-    },
-    {
-      id: 'hotel',
-      title: 'Hotel Pickup & Transfers',
-      tag: 'Hospitality Partner Cabs',
-      icon: Building2,
-      image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=700&q=80',
-      description: 'Seamless transfers between luxury hotels, convention centers, and tourist landmarks with chauffeur protocol.',
-      features: ['Chauffeur uniform protocol', 'Punctual lobby pickup', 'Multi-stop city tours', 'VIP guest welcome']
-    },
-    {
-      id: 'mall',
-      title: 'Mall Pickup & Shopping Rides',
-      tag: 'Convenient & Easy',
-      icon: ShoppingBag,
-      image: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&w=700&q=80',
-      description: 'Avoid parking hassles at busy shopping centers. Call a cab right to the mall exit gate after your shopping trip.',
-      features: ['Dedicated pickup bay guidance', 'Luggage loading assistance', 'Quick response time', 'Clean trunk space']
-    }
-  ];
+  const { servicesPage } = useLanding();
+  // Icons are stored as names in the CMS; resolve to components here.
+  const allServices = (servicesPage.items || []).map((item) => ({
+    ...item,
+    icon: LANDING_ICONS[item.icon] || Car,
+  }));
+
 
   return (
     <div className="services-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
-          <span className="page-tag">ZI CAB Offerings</span>
-          <h1 className="page-title">Comprehensive Mobility Services</h1>
-          <p className="page-subtitle">
-            Whether for daily city commute, airport runs, or outstation family road trips, we have the ideal vehicle and service for you.
-          </p>
+          <span className="page-tag">{servicesPage.tag}</span>
+          <h1 className="page-title">{servicesPage.title}</h1>
+          <p className="page-subtitle">{servicesPage.subtitle}</p>
         </div>
       </div>
 
@@ -138,7 +62,7 @@ const Services = ({ openBookingModal }) => {
                     </div>
 
                     <button className="btn btn-teal w-full mt-4" onClick={openBookingModal}>
-                      Book This Service <ArrowRight size={16} />
+                      {servicesPage.ctaLabel} <ArrowRight size={16} />
                     </button>
                   </div>
                 </div>

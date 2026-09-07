@@ -2,74 +2,29 @@ import React, { useRef } from 'react';
 import { ShieldCheck, Award, Users, MapPin, HeartHandshake, CheckCircle2, ArrowRight, ExternalLink, Navigation } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
 import { useLanding } from '../landingContentContext';
+import { LANDING_ICONS } from '../useLandingContent';
 
 const AboutUs = ({ openBookingModal }) => {
-  const { contact: CONTACT, launchCities: LAUNCH_CITIES } = useLanding();
+  const { contact: CONTACT, launchCities: LAUNCH_CITIES, about } = useLanding();
   const pageRef = useRef(null);
   useReveal(pageRef);
 
-  // `count` drives the scroll-triggered count-up in useReveal; `suffix` is the
-  // static bit that sits after the number.
-  const stats = [
-    { label: 'Successful Rides', count: 100000, suffix: '+' },
-    { label: 'Customer Rating', value: '4.9 ★' },
-    { label: 'Launch Cities', count: 3 },
-    { label: 'Verified Drivers', count: 500, suffix: '+' },
-  ];
-
-  // TODO(client): replace each placeholder with the real founder details.
-  // Photos go in Frontend/public/founders/ (square crop, 600x600 or larger).
-  const founders = [
-    {
-      name: 'Founder Name',
-      role: 'Founder & CEO',
-      photo: '/founders/founder-1.jpg',
-      bio: 'Two to three lines on background, years of experience and what they own at ZI CAB.',
-      linkedin: '',
-    },
-    {
-      name: 'Co-Founder Name',
-      role: 'Co-Founder & COO',
-      photo: '/founders/founder-2.jpg',
-      bio: 'Two to three lines on background, years of experience and what they own at ZI CAB.',
-      linkedin: '',
-    },
-  ];
-
-  const pillars = [
-    {
-      icon: ShieldCheck,
-      title: 'Safety First',
-      desc: 'All vehicles are equipped with real-time GPS tracking, dual dash cams, and SOS emergency buttons monitored 24x7 by our command center.'
-    },
-    {
-      icon: Award,
-      title: 'Transparent Pricing',
-      desc: 'Zero surge pricing surprises. What you see during booking is exact fare you pay—inclusive of fuel, toll, and taxes.'
-    },
-    {
-      icon: HeartHandshake,
-      title: 'Dedicated Ride Coordinator',
-      desc: 'Every ride is actively monitored by a personal ride coordinator to handle unexpected delays, rerouting, or flight changes.'
-    },
-    {
-      icon: Users,
-      title: 'Professional Fleet',
-      desc: 'Strict driver background verification, police verification, and quarterly vehicle maintenance checks guarantee a smooth journey.'
-    }
-  ];
+  const stats = about.stats || [];
+  const founders = about.founders || [];
+  // Icons are stored as names; resolve them the same way the home page does.
+  const pillars = (about.pillars || []).map((pillar) => ({
+    ...pillar,
+    icon: LANDING_ICONS[pillar.icon] || ShieldCheck,
+  }));
 
   return (
     <div className="about-page animate-fade-in" ref={pageRef}>
       {/* Page Header */}
       <div className="page-hero">
         <div className="container">
-          <span className="page-tag">About ZI CAB</span>
-          <h1 className="page-title">Redefining Premium Cab Services Across Karnataka</h1>
-          <p className="page-subtitle">
-            Built on trust, safety, and reliability. Seamless city, outstation and airport rides —
-            now live in Bengaluru, Mangaluru and Hubballi.
-          </p>
+          <span className="page-tag">{about.tag}</span>
+          <h1 className="page-title">{about.title}</h1>
+          <p className="page-subtitle">{about.subtitle}</p>
         </div>
       </div>
 
@@ -148,8 +103,8 @@ const AboutUs = ({ openBookingModal }) => {
       <section className="section-padding founders-section">
         <div className="container">
           <div className="text-center mb-12">
-            <span className="page-tag dark-tag">Leadership</span>
-            <h2 className="section-title">Meet the Founders</h2>
+            <span className="page-tag dark-tag">{about.foundersTag}</span>
+            <h2 className="section-title">{about.foundersHeading}</h2>
           </div>
 
           <div className="founders-grid" data-reveal-stagger>
@@ -213,7 +168,7 @@ const AboutUs = ({ openBookingModal }) => {
       {/* Pillars Section */}
       <section className="section-padding pillars-section">
         <div className="container">
-          <h2 className="section-title text-center mb-12">The Pillars of ZI CAB</h2>
+          <h2 className="section-title text-center mb-12">{about.pillarsHeading}</h2>
           
           <div className="pillars-grid" data-reveal-stagger>
             {pillars.map((p, idx) => {

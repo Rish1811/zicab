@@ -30,6 +30,12 @@ const landingContentSchema = new mongoose.Schema(
     launchCities: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // { email, whatsapp, whatsappDisplay, tollFree, tollFreeLive, address, addressShort, mapsUrl }
     contact: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { tag, title, subtitle, stats[], founders[], pillars[], headings }
+    about: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { tag, title, subtitle, ctaLabel, items[] } - the /services page
+    servicesPage: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // [{ q, a }] - contact page accordion
+    faqs: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // { titleLine1, titleLine2, subtitle, primaryCta, secondaryCta, badges[] }
     hero: { type: mongoose.Schema.Types.Mixed, default: {} },
     // { description, servicesHeading, cabServices[], trustPills[], copyright }

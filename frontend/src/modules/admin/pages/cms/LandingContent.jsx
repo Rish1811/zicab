@@ -18,8 +18,9 @@ import { uploadService } from '../../../../shared/services/uploadService';
 // Must stay in step with the ICONS map in modules/landing/useLandingContent.js —
 // a name that is not in that map silently renders as a generic sparkle.
 const ICON_OPTIONS = [
-  'Bike', 'Briefcase', 'Building2', 'Car', 'Compass', 'Headphones',
-  'Navigation', 'PhoneCall', 'Plane', 'ShieldCheck', 'ShoppingBag', 'Wallet',
+  'Award', 'Bike', 'Briefcase', 'Building2', 'Car', 'Compass', 'Headphones',
+  'HeartHandshake', 'Navigation', 'PhoneCall', 'Plane', 'ShieldCheck',
+  'ShoppingBag', 'Users', 'Wallet',
 ];
 
 const SECTIONS = [
@@ -94,6 +95,22 @@ const CONTACT_FIELDS = [
   { name: 'mapsUrl', label: 'Google Maps URL', placeholder: 'https://www.google.com/maps/search/?api=1&query=...', wide: true },
 ];
 
+const ABOUT_FIELDS = [
+  { name: 'tag', label: 'Page tag', placeholder: 'About ZI CAB' },
+  { name: 'title', label: 'Page title', placeholder: 'Redefining Premium Cab Services...' },
+  { name: 'subtitle', label: 'Page subtitle', wide: true },
+  { name: 'foundersTag', label: 'Founders tag', placeholder: 'Leadership' },
+  { name: 'foundersHeading', label: 'Founders heading', placeholder: 'Meet the Founders' },
+  { name: 'pillarsHeading', label: 'Pillars heading', placeholder: 'The Pillars of ZI CAB', wide: true },
+];
+
+const SERVICES_PAGE_FIELDS = [
+  { name: 'tag', label: 'Page tag', placeholder: 'ZI CAB Offerings' },
+  { name: 'title', label: 'Page title', placeholder: 'Comprehensive Mobility Services' },
+  { name: 'subtitle', label: 'Page subtitle', wide: true },
+  { name: 'ctaLabel', label: 'Card button label', placeholder: 'Book This Service' },
+];
+
 const HERO_FIELDS = [
   { name: 'titleLine1', label: 'Headline line 1', placeholder: 'Your Ride.' },
   { name: 'titleLine2', label: 'Headline line 2', placeholder: 'Our Priority.', help: 'Shown in the accent colour.' },
@@ -133,6 +150,40 @@ const NESTED_LISTS = [
     fields: [{ name: 'label', label: 'Label', placeholder: 'Airport Pickup & Drop', wide: true }] },
   { section: 'footer', key: 'trustPills', title: 'Footer trust pills', itemLabel: 'pill',
     fields: [{ name: 'label', label: 'Label', placeholder: 'Verified Drivers', wide: true }] },
+];
+
+const PAGE_LISTS = [
+  { section: 'about', key: 'founders', title: 'Founders', itemLabel: 'founder',
+    fields: [
+      { name: 'name', label: 'Name', placeholder: 'Full name' },
+      { name: 'role', label: 'Role', placeholder: 'Co-Founder & COO' },
+      { name: 'photo', label: 'Photo', type: 'image', wide: true, help: 'Square crop. Without one the card shows initials.' },
+      { name: 'bio', label: 'Bio', placeholder: 'Two to three lines.', wide: true },
+      { name: 'linkedin', label: 'LinkedIn URL', placeholder: 'https://linkedin.com/in/...', wide: true },
+    ] },
+  { section: 'about', key: 'stats', title: 'About page stats', itemLabel: 'stat',
+    fields: [
+      { name: 'label', label: 'Label', placeholder: 'Successful Rides' },
+      { name: 'count', label: 'Number', placeholder: '100000', help: 'Counts up on scroll. Leave blank and use Value instead.' },
+      { name: 'suffix', label: 'Suffix', placeholder: '+' },
+      { name: 'value', label: 'Value (text)', placeholder: '4.9 \u2605', help: 'Used when Number is blank.' },
+    ] },
+  { section: 'about', key: 'pillars', title: 'About page pillars', itemLabel: 'pillar',
+    fields: [
+      { name: 'title', label: 'Title', placeholder: 'Safety First' },
+      { name: 'icon', label: 'Icon', type: 'icon' },
+      { name: 'desc', label: 'Description', wide: true },
+    ] },
+  { section: 'servicesPage', key: 'items', title: 'Services page cards', itemLabel: 'service',
+    fields: [
+      { name: 'title', label: 'Title', placeholder: 'Airport Transfer' },
+      { name: 'tag', label: 'Badge', placeholder: 'Pickup & Drop Guarantee' },
+      { name: 'icon', label: 'Icon', type: 'icon' },
+      { name: 'id', label: 'Slug', placeholder: 'airport' },
+      { name: 'image', label: 'Image', type: 'image', wide: true },
+      { name: 'description', label: 'Description', wide: true },
+      { name: 'features', label: 'Features (one per line)', type: 'lines', wide: true, placeholder: 'Flight delay tracking' },
+    ] },
 ];
 
 const LEGAL_DOCS = [
@@ -236,6 +287,14 @@ const Field = ({ field, value, onChange }) => (
           <option key={name} value={name}>{name}</option>
         ))}
       </select>
+    ) : field.type === 'lines' ? (
+      <textarea
+        rows={4}
+        value={Array.isArray(value) ? value.join('\n') : (value || '')}
+        onChange={(event) => onChange(event.target.value.split('\n').map((line) => line.trim()).filter(Boolean))}
+        placeholder={field.placeholder}
+        className={inputClass}
+      />
     ) : field.type === 'image' ? (
       <ImageField value={value} onChange={onChange} />
     ) : (
@@ -347,6 +406,9 @@ export default function LandingContent() {
         contact: data.contact || {},
         legal: data.legal || {},
         brand: data.brand || {},
+        about: data.about || {},
+        servicesPage: data.servicesPage || {},
+        faqs: data.faqs || [],
         seo: data.seo || {},
         footer: data.footer || {},
         hero: data.hero || {},
@@ -450,6 +512,47 @@ export default function LandingContent() {
           onChange={(value) => setSection(section.key, value)}
         />
       ))}
+
+      <SectionCard title="About Page" help="Headings on /about.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {ABOUT_FIELDS.map((field) => (
+            <Field key={field.name} field={field} value={content.about?.[field.name]}
+              onChange={(value) => setSection('about', { ...content.about, [field.name]: value })} />
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Services Page" help="Headings on /services.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {SERVICES_PAGE_FIELDS.map((field) => (
+            <Field key={field.name} field={field} value={content.servicesPage?.[field.name]}
+              onChange={(value) => setSection('servicesPage', { ...content.servicesPage, [field.name]: value })} />
+          ))}
+        </div>
+      </SectionCard>
+
+      {PAGE_LISTS.map((list) => (
+        <RepeatableSection
+          key={`${list.section}.${list.key}`}
+          section={{ title: list.title, itemLabel: list.itemLabel, fields: list.fields }}
+          items={content[list.section]?.[list.key] || []}
+          onChange={(next) => setSection(list.section, { ...content[list.section], [list.key]: next })}
+        />
+      ))}
+
+      <RepeatableSection
+        section={{
+          title: 'FAQs',
+          help: 'The accordion on the contact page.',
+          itemLabel: 'question',
+          fields: [
+            { name: 'q', label: 'Question', wide: true },
+            { name: 'a', label: 'Answer', wide: true },
+          ],
+        }}
+        items={content.faqs || []}
+        onChange={(next) => setSection('faqs', next)}
+      />
 
       <SectionCard title="Hero" help="The headline block at the top of the home page.">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
