@@ -26,6 +26,13 @@ export const ADMIN_PERMISSION_GROUPS = [
     ],
   },
   {
+    title: 'Website & Settings',
+    items: [
+      { key: 'landing_content.view', label: 'Website Content (CMS)' },
+      { key: 'settings.view', label: 'Settings' },
+    ],
+  },
+  {
     title: 'Pricing Scope',
     items: [
       { key: 'service_locations.view', label: 'Service Locations' },
