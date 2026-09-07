@@ -1,9 +1,10 @@
 import React from 'react';
 import { Phone, Mail, MapPin, ShieldCheck, Clock, MessageCircle } from 'lucide-react';
 import { scrollToTop } from '../hooks/useSmoothScroll';
-import { CONTACT, LAUNCH_CITIES, waLink } from '../siteConfig';
+import { useLanding } from '../landingContentContext';
 
 const Footer = ({ setActiveTab }) => {
+  const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink } = useLanding();
   const handleNavClick = (id) => {
     setActiveTab(id);
     scrollToTop();

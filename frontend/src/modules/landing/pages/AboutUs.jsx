@@ -1,9 +1,10 @@
 import React, { useRef } from 'react';
 import { ShieldCheck, Award, Users, MapPin, HeartHandshake, CheckCircle2, ArrowRight, ExternalLink, Navigation } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
-import { CONTACT, LAUNCH_CITIES } from '../siteConfig';
+import { useLanding } from '../landingContentContext';
 
 const AboutUs = ({ openBookingModal }) => {
+  const { contact: CONTACT, launchCities: LAUNCH_CITIES } = useLanding();
   const pageRef = useRef(null);
   useReveal(pageRef);
 

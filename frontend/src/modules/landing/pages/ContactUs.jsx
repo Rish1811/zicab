@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { Phone, Mail, MapPin, MessageSquare, ChevronDown, CheckCircle2, Send, Navigation } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
-import { CONTACT, LAUNCH_CITIES, waLink } from '../siteConfig';
+import { useLanding } from '../landingContentContext';
 
 const ContactUs = () => {
+  const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink } = useLanding();
   const pageRef = useRef(null);
   useReveal(pageRef);
 

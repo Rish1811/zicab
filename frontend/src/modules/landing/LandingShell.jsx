@@ -6,7 +6,7 @@ import BookingModal from './components/BookingModal';
 import Preloader from './components/Preloader';
 import useSmoothScroll from './hooks/useSmoothScroll';
 import { pathForTab, tabForPath } from './landingTabs';
-import { waLink } from './siteConfig';
+import { LandingContentProvider, useLanding } from './landingContentContext';
 import './landing.css';
 
 /**
@@ -23,7 +23,8 @@ import './landing.css';
  * would apply to the taxi app too.
  */
 
-export default function LandingShell() {
+function LandingShellBody() {
+  const { waLink } = useLanding();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -77,5 +78,18 @@ export default function LandingShell() {
         selectedVehicle={selectedVehicle}
       />
     </div>
+  );
+}
+
+/**
+ * The provider wraps the body rather than living inside it, so the shell's own
+ * chrome (the WhatsApp button) reads the same CMS content as the pages, and the
+ * content is fetched once for all eight routes instead of per page.
+ */
+export default function LandingShell() {
+  return (
+    <LandingContentProvider>
+      <LandingShellBody />
+    </LandingContentProvider>
   );
 }

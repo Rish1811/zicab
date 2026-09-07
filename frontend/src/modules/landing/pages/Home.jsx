@@ -14,7 +14,7 @@ import {
   Briefcase, Building2, ShoppingBag, Smartphone, QrCode, ChevronRight,
   Star, BadgeCheck, Megaphone, Bike
 } from 'lucide-react';
-import useLandingContent from '../useLandingContent';
+import { useLanding } from '../landingContentContext';
 import useVehicleTypes from '../useVehicleTypes';
 
 const initials = (name) =>
@@ -149,7 +149,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
   // All page content comes from the CMS, falling back to the bundled copy so the
   // page is never blank while the request is in flight or if it fails.
-  const { services, valueProps, drivers, partners, launchCities, contact } = useLandingContent();
+  const { services, valueProps, drivers, partners, launchCities, contact } = useLanding();
   const { vehicles } = useVehicleTypes(fallbackVehicles);
 
 

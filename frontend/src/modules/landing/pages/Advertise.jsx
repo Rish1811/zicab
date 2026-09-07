@@ -5,9 +5,10 @@ import {
   Send, TrendingUp, Users, MapPin
 } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
-import { CONTACT, LAUNCH_CITIES } from '../siteConfig';
+import { useLanding } from '../landingContentContext';
 
 const Advertise = () => {
+  const { contact: CONTACT, launchCities: LAUNCH_CITIES } = useLanding();
   const pageRef = useRef(null);
   useReveal(pageRef);
 
