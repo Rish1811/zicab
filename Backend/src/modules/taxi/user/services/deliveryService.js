@@ -3,6 +3,7 @@ import { normalizePoint } from '../../../../utils/geo.js';
 import { GoodsType } from '../../admin/models/GoodsType.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { startDispatchFlow } from '../../services/dispatchService.js';
+import { findZoneByPickup } from '../../services/matchingService.js';
 import { Delivery } from '../models/Delivery.js';
 import {
   createRideRecord,
@@ -107,6 +108,58 @@ const calculateDistanceKm = (fromCoords = [], toCoords = []) => {
   return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
+/// Parcels are an intracity service, so a booking that crosses between cities is
+/// refused.
+///
+/// The unambiguous case is both ends resolving to *different* operating zones —
+/// that is intercity by definition. A drop with no zone at all is not: zone
+/// polygons are drawn tight, and Kempegowda airport sits 23.5km from the centre
+/// of a 23.3km Bangalore circle, so a strict same-zone rule would refuse airport
+/// deliveries, which are a normal intracity job. Those fall back to a distance
+/// limit instead, taken from the pickup zone's own configured maximum where one
+/// is set.
+const DEFAULT_INTRACITY_MAX_KM = 60;
+
+const assertIntracityDelivery = async (pickupCoords, dropCoords) => {
+  const [pickupZone, dropZone] = await Promise.all([
+    findZoneByPickup(pickupCoords),
+    findZoneByPickup(dropCoords),
+  ]);
+
+  if (!pickupZone) {
+    throw new ApiError(400, 'We do not deliver from this pickup location yet.');
+  }
+
+  // Both ends inside known, different cities: unambiguously intercity.
+  if (dropZone && String(pickupZone._id) !== String(dropZone._id)) {
+    throw new ApiError(
+      400,
+      `Parcels are available within one city only. This pickup is in ${pickupZone.name} and the drop is in ${dropZone.name}.`,
+    );
+  }
+
+  if (dropZone) {
+    return pickupZone;
+  }
+
+  // Drop is outside every polygon — allow it only if it is still close enough to
+  // be a city job, so somewhere like the airport works but a long-distance hop
+  // does not slip through at intracity rates.
+  const limitKm = Number(pickupZone.maximum_distance_for_regular_rides) > 0
+    ? Number(pickupZone.maximum_distance_for_regular_rides)
+    : DEFAULT_INTRACITY_MAX_KM;
+  const distanceKm = calculateDistanceKm(pickupCoords, dropCoords);
+
+  if (distanceKm > limitKm) {
+    throw new ApiError(
+      400,
+      `This drop is too far for a parcel delivery. Parcels are available within ${pickupZone.name} and up to ${limitKm}km.`,
+    );
+  }
+
+  return pickupZone;
+};
+
 const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoords = [] }) => {
   const pricing = vehicle?.delivery_distance_pricing || {};
   const enabled = Boolean(
@@ -179,6 +232,7 @@ export const createDeliveryRecord = async ({
   await ensureDeliveryVehicleAllowed({ vehicleTypeId, parcel });
   const pickupCoords = normalizePoint(pickup, 'pickup');
   const dropCoords = normalizePoint(drop, 'drop');
+  await assertIntracityDelivery(pickupCoords, dropCoords);
   const vehicle = vehicleTypeId
     ? await Vehicle.findById(vehicleTypeId).select('delivery_distance_pricing service_tax').lean()
     : null;
@@ -223,6 +277,9 @@ export const getDeliveryQuote = async ({ vehicleTypeId, pickup, drop, parcel }) 
 
   const pickupCoords = normalizePoint(pickup, 'pickup');
   const dropCoords = normalizePoint(drop, 'drop');
+  // Checked here as well as at booking: a quote that a booking then refuses is
+  // worse than refusing up front.
+  await assertIntracityDelivery(pickupCoords, dropCoords);
   const vehicle = await Vehicle.findById(vehicleTypeId)
     .select('name delivery_distance_pricing service_tax')
     .lean();
