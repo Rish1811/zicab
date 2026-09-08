@@ -172,6 +172,16 @@ const deliverySchema = new mongoose.Schema(
         at: { type: Date, default: null },
       },
     },
+    waitingMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    waitingCharge: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     acceptedAt: {
       type: Date,
       default: null,

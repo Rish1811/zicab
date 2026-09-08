@@ -273,6 +273,19 @@ const rideSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    // Parcel waiting at pickup: minutes the driver waited beyond the free
+    // window, and what that added to the fare. Stored so a receipt can show the
+    // charge rather than an unexplained jump in the total.
+    waitingMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    waitingCharge: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     baseFare: {
       type: Number,
       default: 0,

@@ -861,6 +861,51 @@ const buildDriverVehicleAcceptFilter = async (ride) => {
   return { vehicleTypeId: { $in: vehicleTypeIds } };
 };
 
+/// Waiting charge for a parcel, applied once when the trip completes.
+///
+/// `arrivedAt` is stamped when the driver reaches the pickup and `startedAt`
+/// when the parcel is collected, so the gap between them is the time the driver
+/// spent waiting for the sender. The free window and per-minute rate come from
+/// the vehicle's delivery pricing, the same place the distance rate lives.
+///
+/// Only whole elapsed minutes are charged, so a part-minute is never rounded up
+/// against the customer. The cap is a safety net: if a driver marks the pickup
+/// and forgets to start the trip, this bounds the damage rather than billing
+/// them for the rest of the day.
+const PARCEL_WAITING_CHARGE_CAP_MINUTES = 60;
+
+const applyParcelWaitingCharge = async (ride) => {
+  if (!ride || (ride.serviceType || 'ride') !== 'parcel') return;
+  if (!ride.arrivedAt || !ride.startedAt) return;
+  if (Number(ride.waitingCharge) > 0) return; // already applied
+
+  const elapsedMs = new Date(ride.startedAt).getTime() - new Date(ride.arrivedAt).getTime();
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return;
+
+  const vehicle = ride.vehicleTypeId
+    ? await Vehicle.findById(ride.vehicleTypeId).select('delivery_distance_pricing').lean()
+    : null;
+  const pricing = vehicle?.delivery_distance_pricing || {};
+  const perMinute = Math.max(0, Number(pricing.time_price) || 0);
+  if (perMinute <= 0) return;
+
+  const freeMinutes = Math.max(0, Number(pricing.free_time) || 0);
+  const waitedMinutes = Math.floor(elapsedMs / 60000);
+  const chargeableMinutes = Math.min(
+    Math.max(0, waitedMinutes - freeMinutes),
+    PARCEL_WAITING_CHARGE_CAP_MINUTES,
+  );
+  if (chargeableMinutes <= 0) return;
+
+  const charge = Math.round(chargeableMinutes * perMinute * 100) / 100;
+
+  ride.waitingMinutes = chargeableMinutes;
+  ride.waitingCharge = charge;
+  // Added before the ride is saved, because the wallet settlement that follows
+  // completion reads ride.fare.
+  ride.fare = Math.round((Number(ride.fare || 0) + charge) * 100) / 100;
+};
+
 const syncDeliveryWithRide = async (ride) => {
   if (!ride || (ride.serviceType || 'ride') !== 'parcel') {
     return null;
@@ -880,6 +925,8 @@ const syncDeliveryWithRide = async (ride) => {
     dropLocation: ride.dropLocation,
     dropAddress: normalizeAddress(ride.dropAddress),
     fare: ride.fare,
+    waitingMinutes: ride.waitingMinutes || 0,
+    waitingCharge: ride.waitingCharge || 0,
     paymentMethod: ride.paymentMethod,
     parcel: {
       ...normalizeParcelPayload(ride.parcel),
@@ -1848,6 +1895,7 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
 
   if (nextStatus === RIDE_LIVE_STATUS.COMPLETED) {
     ride.completedAt = new Date();
+    await applyParcelWaitingCharge(ride);
   }
 
   await ride.save();
