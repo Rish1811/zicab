@@ -65,6 +65,30 @@ const btnClass = "flex items-center justify-center gap-2 px-4 py-2 text-sm font-
 const btnPrimary = `${btnClass} bg-yellow-400 text-black border-yellow-500 hover:bg-yellow-500`;
 const btnSecondary = `${btnClass} bg-white text-slate-800 border-slate-200 hover:bg-slate-50`;
 
+
+/// A driver's heading as a compass point, e.g. 44 -> "NE". Null when the driver
+/// has not moved since coming online, so nothing is shown rather than a
+/// misleading "N".
+const COMPASS_POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+const compassFromHeading = (heading) => {
+  const degrees = Number(heading);
+  if (!Number.isFinite(degrees)) return null;
+  return COMPASS_POINTS[Math.round(((degrees % 360) + 360) % 360 / 45) % 8];
+};
+
+/// Google Maps cannot rotate an image marker, so the heading is drawn as a
+/// separate arrow symbol layered over the vehicle icon.
+const headingArrow = (heading) => ({
+  path: 'M 0,-9 L 3.2,3 L 0,0.9 L -3.2,3 Z',
+  fillColor: '#0F172A',
+  fillOpacity: 0.9,
+  strokeColor: '#FFFFFF',
+  strokeWeight: 1.2,
+  scale: 1,
+  rotation: Number(heading) || 0,
+  anchor: new window.google.maps.Point(0, 0),
+});
+
 const GodsEye = () => {
   const navigate = useNavigate();
   const { isLoaded, loadError } = useBaseGoogleMapsLoader();
@@ -448,17 +472,26 @@ const GodsEye = () => {
                            {(clusterer) => (
                               <>
                                  {filteredDrivers.map(driver => (
-                                    <MarkerF 
-                                       key={driver._id || driver.id} 
-                                       position={{ lat: Number(driver.latitude), lng: Number(driver.longitude) }}
-                                       onClick={() => handleMarkerClick(driver)}
-                                       clusterer={clusterer}
-                                       icon={{
-                                          url: getMapIconForVehicle(driver.vehicle_icon_type || driver.vehicle_type),
-                                          scaledSize: new window.google.maps.Size(32, 32),
-                                          anchor: new window.google.maps.Point(16, 16),
-                                       }}
-                                    />
+                                    <React.Fragment key={driver._id || driver.id}>
+                                       <MarkerF
+                                             position={{ lat: Number(driver.latitude), lng: Number(driver.longitude) }}
+                                             onClick={() => handleMarkerClick(driver)}
+                                             clusterer={clusterer}
+                                             icon={{
+                                                url: getMapIconForVehicle(driver.vehicle_icon_type || driver.vehicle_type),
+                                                scaledSize: new window.google.maps.Size(32, 32),
+                                                anchor: new window.google.maps.Point(16, 16),
+                                             }}
+                                       />
+                                       {Number.isFinite(Number(driver.heading)) && (
+                                          <MarkerF
+                                             position={{ lat: Number(driver.latitude), lng: Number(driver.longitude) }}
+                                             clickable={false}
+                                             icon={headingArrow(driver.heading)}
+                                             zIndex={999}
+                                          />
+                                       )}
+                                    </React.Fragment>
                                  ))}
                               </>
                            )}
@@ -555,6 +588,11 @@ const GodsEye = () => {
                      <div>
                         <h3 className="text-base font-black text-black leading-tight">{selectedDriver.name || 'Unknown Driver'}</h3>
                         <p className="text-xs text-gray-500 font-medium">{selectedDriver.phone || 'No Phone'}</p>
+                        {compassFromHeading(selectedDriver.heading) && (
+                           <p className="text-xs text-gray-600 font-semibold mt-0.5">
+                              Heading {compassFromHeading(selectedDriver.heading)} &middot; {Math.round(Number(selectedDriver.heading))}&deg;
+                           </p>
+                        )}
                         <div className="flex items-center gap-1 mt-1">
                            {selectedDriver.isOnline ? (
                               <><CheckCircle2 size={12} className="text-green-500" /><span className="text-[10px] font-bold text-green-600">ONLINE</span></>

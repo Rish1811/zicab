@@ -1479,6 +1479,7 @@ const serializeRentalBookingRequest = (item = {}) => ({
     city: item.serviceLocation?.city || '',
     latitude: item.serviceLocation?.latitude ?? null,
     longitude: item.serviceLocation?.longitude ?? null,
+    heading: driver.heading ?? null,
     distanceKm: item.serviceLocation?.distanceKm ?? null,
   },
   pickupDateTime: item.pickupDateTime || null,
