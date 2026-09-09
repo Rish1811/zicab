@@ -135,6 +135,16 @@ const driverSchema = new mongoose.Schema(
       ref: 'TaxiVehicle',
       default: null,
     },
+    // Every vehicle category this driver is enrolled to receive requests
+    // for — a driver can pick more than one at onboarding (e.g. both
+    // ZI Cab AC and ZI Cab Non-AC on the same car). `vehicleTypeId` above
+    // is kept in sync as the first entry so every existing single-value
+    // read (marker art, profile display, dispatch's driver-card fields)
+    // keeps working unchanged.
+    vehicleTypeIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'TaxiVehicle' }],
+      default: [],
+    },
     vehicleIconType: {
       type: String,
       default: 'car',
@@ -425,6 +435,14 @@ const driverSchema = new mongoose.Schema(
       ref: 'TaxiZone',
       default: null,
     },
+    // Compass bearing of travel, 0 = north, clockwise. Kept on the driver
+    // as well as the ride so the admin map can orient a marker for a driver
+    // who is online but not currently on a trip.
+    heading: {
+      type: Number,
+      default: null,
+    },
+
     location: {
       type: {
         type: String,

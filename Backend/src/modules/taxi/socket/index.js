@@ -4,6 +4,7 @@ import { env } from '../../../config/env.js';
 import { connectRedis, isRedisEnabled } from '../../../infrastructure/redis/redisClient.js';
 import { normalizePoint, toPoint } from '../../../utils/geo.js';
 import { Driver } from '../driver/models/Driver.js';
+import { Ride } from '../user/models/Ride.js';
 import {
   broadcastSupportMessage,
   createSupportMessage,
@@ -38,6 +39,28 @@ const DRIVER_LOCATION_WRITE_MAX_INTERVAL_MS = 15000;
 const DRIVER_ZONE_REFRESH_MIN_DISTANCE_METERS = 120;
 const DRIVER_ZONE_REFRESH_MAX_INTERVAL_MS = 60000;
 const driverLocationState = new Map();
+
+/// Compass bearing from one coordinate to the next, 0 = north, clockwise.
+///
+/// Devices do report a heading, but only while moving and not on every
+/// platform, so it is treated as a hint: used when present and sane, derived
+/// from the last two positions otherwise. Without this the rider's marker
+/// always points north no matter which way the car is going.
+const computeBearing = ([fromLng, fromLat], [toLng, toLat]) => {
+  const toRad = (value) => (value * Math.PI) / 180;
+  const dLng = toRad(toLng - fromLng);
+  const lat1 = toRad(fromLat);
+  const lat2 = toRad(toLat);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+};
+
+/// Below this the GPS jitter of a stationary vehicle would spin the marker, so
+/// the previous heading is kept instead.
+const HEADING_MIN_MOVE_METERS = 8;
+
+
 
 const getSocketClientIp = (socket) => {
   const forwardedFor = socket.handshake.headers?.['x-forwarded-for'];
@@ -215,7 +238,7 @@ export const configureTaxiSocketServer = async (httpServer) => {
 
     socket.on(
       'locationUpdate',
-      onAsync(socket, async ({ coordinates }) => {
+      onAsync(socket, async ({ coordinates, heading, speed }) => {
         if (identity.role !== 'driver') {
           return;
         }
@@ -245,6 +268,7 @@ export const configureTaxiSocketServer = async (httpServer) => {
           await Driver.findByIdAndUpdate(identity.sub, {
             socketId: socket.id,
             location: toPoint(normalizedCoords, 'coordinates'),
+            heading: resolvedHeading,
             zoneId: zone?._id || null,
           });
         }
@@ -256,6 +280,62 @@ export const configureTaxiSocketServer = async (httpServer) => {
           zoneResolvedAt: shouldRefreshZone ? now : Number(previousDriverState.zoneResolvedAt || 0),
           socketId: socket.id,
         });
+        // Trust the device when it gives a usable heading; otherwise derive one
+        // from the movement since the last ping, and hold the previous value
+        // while the vehicle is essentially stationary.
+        const reportedHeading = Number(heading);
+        let resolvedHeading = Number.isFinite(reportedHeading) && reportedHeading >= 0 && reportedHeading <= 360
+          ? reportedHeading
+          : null;
+
+        if (resolvedHeading === null) {
+          resolvedHeading = Array.isArray(previousDriverState.coordinates)
+            && distanceFromPrevious >= HEADING_MIN_MOVE_METERS
+            ? computeBearing(previousDriverState.coordinates, normalizedCoords)
+            : (previousDriverState.heading ?? null);
+        }
+
+        driverLocationState.set(identity.sub, {
+          ...(driverLocationState.get(identity.sub) || {}),
+          heading: resolvedHeading,
+        });
+
+        // The rider's map listens for this. It was declared in events.js but
+        // never emitted, so live tracking never worked at all.
+        const activeRide = await Ride.findOne({
+          driverId: identity.sub,
+          status: { $in: ['accepted', 'ongoing'] },
+        })
+          .select('_id')
+          .lean();
+
+        if (activeRide) {
+          await Ride.updateOne(
+            { _id: activeRide._id },
+            {
+              $set: {
+                lastDriverLocation: {
+                  type: 'Point',
+                  coordinates: normalizedCoords,
+                  heading: resolvedHeading,
+                  speed: Number.isFinite(Number(speed)) ? Number(speed) : null,
+                  updatedAt: new Date(),
+                },
+              },
+            },
+          );
+
+          io.to(getRideRoom(activeRide._id)).emit(SOCKET_EVENTS.RIDE_DRIVER_LOCATION_UPDATED, {
+            rideId: String(activeRide._id),
+            coordinates: normalizedCoords,
+            lng: normalizedCoords[0],
+            lat: normalizedCoords[1],
+            heading: resolvedHeading,
+            speed: Number.isFinite(Number(speed)) ? Number(speed) : null,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+
         notifyLateAvailableDriver(identity.sub).catch((error) => {
           console.error('Failed to notify late-available driver on location update', error);
         });
