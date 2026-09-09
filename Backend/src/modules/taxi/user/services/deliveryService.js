@@ -111,13 +111,15 @@ const calculateDistanceKm = (fromCoords = [], toCoords = []) => {
 /// Parcels are an intracity service, so a booking that crosses between cities is
 /// refused.
 ///
-/// The unambiguous case is both ends resolving to *different* operating zones —
-/// that is intercity by definition. A drop with no zone at all is not: zone
-/// polygons are drawn tight, and Kempegowda airport sits 23.5km from the centre
-/// of a 23.3km Bangalore circle, so a strict same-zone rule would refuse airport
-/// deliveries, which are a normal intracity job. Those fall back to a distance
-/// limit instead, taken from the pickup zone's own configured maximum where one
-/// is set.
+/// Only one thing is unambiguous: both ends resolving to *different* operating
+/// zones. Everything else is judged on distance, because a point having no zone
+/// does not mean it is far away — the polygons are drawn tight, and the airport,
+/// Devanahalli and Hoskote all fall outside the 23km Bangalore circle while
+/// being ordinary city jobs. An earlier version of this refused any pickup that
+/// matched no zone, which blocked exactly those.
+///
+/// The distance limit comes from whichever end we could place, using that zone's
+/// own configured maximum where one is set.
 const DEFAULT_INTRACITY_MAX_KM = 60;
 
 const assertIntracityDelivery = async (pickupCoords, dropCoords) => {
@@ -126,38 +128,35 @@ const assertIntracityDelivery = async (pickupCoords, dropCoords) => {
     findZoneByPickup(dropCoords),
   ]);
 
-  if (!pickupZone) {
-    throw new ApiError(400, 'We do not deliver from this pickup location yet.');
-  }
-
-  // Both ends inside known, different cities: unambiguously intercity.
-  if (dropZone && String(pickupZone._id) !== String(dropZone._id)) {
+  // Both ends inside known, different cities: intercity by definition.
+  if (pickupZone && dropZone && String(pickupZone._id) !== String(dropZone._id)) {
     throw new ApiError(
       400,
       `Parcels are available within one city only. This pickup is in ${pickupZone.name} and the drop is in ${dropZone.name}.`,
     );
   }
 
-  if (dropZone) {
+  if (pickupZone && dropZone) {
     return pickupZone;
   }
 
-  // Drop is outside every polygon — allow it only if it is still close enough to
-  // be a city job, so somewhere like the airport works but a long-distance hop
-  // does not slip through at intracity rates.
-  const limitKm = Number(pickupZone.maximum_distance_for_regular_rides) > 0
-    ? Number(pickupZone.maximum_distance_for_regular_rides)
+  // At least one end sits outside every polygon. Judge it on distance instead of
+  // refusing, so city work near the boundary still books while a long-distance
+  // hop does not slip through at intracity rates.
+  const knownZone = pickupZone || dropZone;
+  const limitKm = Number(knownZone?.maximum_distance_for_regular_rides) > 0
+    ? Number(knownZone.maximum_distance_for_regular_rides)
     : DEFAULT_INTRACITY_MAX_KM;
   const distanceKm = calculateDistanceKm(pickupCoords, dropCoords);
 
   if (distanceKm > limitKm) {
     throw new ApiError(
       400,
-      `This drop is too far for a parcel delivery. Parcels are available within ${pickupZone.name} and up to ${limitKm}km.`,
+      `This trip is too far for a parcel delivery. Parcels are available within one city, up to ${limitKm}km.`,
     );
   }
 
-  return pickupZone;
+  return knownZone || null;
 };
 
 const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoords = [] }) => {
