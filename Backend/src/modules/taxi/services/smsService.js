@@ -2,9 +2,10 @@ import { env } from '../../../config/env.js';
 import { ApiError } from '../../../utils/ApiError.js';
 import { AdminBusinessSetting } from '../admin/models/AdminBusinessSetting.js';
 
-const SMS_INDIA_HUB_ENDPOINT = 'http://cloud.smsindiahub.in/api/mt/SendSMS';
+// Only pushsms.aspx matches DLT templates; /api/mt/SendSMS returns 006.
+const SMS_INDIA_HUB_ENDPOINT = 'http://cloud.smsindiahub.in/vendorsms/pushsms.aspx';
 const DLT_TEMPLATE_TEXT =
-  'Welcome to the ##var## powered by SMSINDIAHUB. Your OTP for registration is ##var##';
+  'Welcome to the ##var## powered by Appzeto.Your OTP for registration is ##var##.BGADEC';
 const DEFAULT_BRAND_NAME = 'App';
 
 const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
@@ -63,7 +64,7 @@ const getSmsIndiaHubConfig = () => {
   const templateId = readValue(
     env.sms?.indiaHub?.dltTemplateId,
     process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID,
-    '1007801291964877107',
+    '1007282516644508833',
   );
 
   return {
@@ -175,12 +176,11 @@ const buildSmsPayload = ({ phone, otp, appName, authMode = 'apiKey' }) => {
   }
 
   const payload = new URLSearchParams({
-    senderid: config.senderId,
-    channel: 'Trans',
-    DCS: '0',
-    flashsms: '0',
-    number: normalizedPhone,
-    text: renderOtpMessage({ appName, otp }),
+    sid: config.senderId,
+    msisdn: normalizedPhone,
+    msg: renderOtpMessage({ appName, otp }),
+    fl: '0',
+    gwid: '2',
     TemplateId: config.templateId,
   });
 
@@ -206,7 +206,12 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
 
   const config = getSmsIndiaHubConfig();
   const brandName = await getConfiguredBrandName();
-  const authModes = config.apiKey ? ['apiKey', 'credentials'] : ['credentials'];
+  const authModes = [];
+  if (config.apiKey) authModes.push('apiKey');
+  if (config.user && config.password) authModes.push('credentials');
+  if (!authModes.length) {
+    throw new ApiError(500, 'SMS India Hub is not configured: set SMS_INDIA_HUB_API_KEY, or both SMS_INDIA_HUB_USERNAME and SMS_INDIA_HUB_PASSWORD');
+  }
   let finalResponse = null;
   let finalResponseText = '';
   let delivered = false;
@@ -308,7 +313,7 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
   if (looksFailed) {
     throw new ApiError(
       502,
-      `SMS India Hub rejected ${purpose} request: ${finalResponseText || finalResponse.statusText}`,
+      `SMS India Hub rejected ${purpose} request: ${finalResponseText || finalResponse?.statusText || 'no response from provider'}`,
     );
   }
 

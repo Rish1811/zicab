@@ -1,49 +1,51 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building2, Clock3, Mail, MapPin, Phone, ShieldCheck } from 'lucide-react';
-import { SUPPORT_INFO } from '../content/supportInfo';
+import { useSupportInfo } from '../content/supportInfo';
 import { ContainerScroll } from '@/components/ui/container-scroll-animation';
 
-const quickCards = [
-  {
-    title: 'Client care number',
-    value: SUPPORT_INFO.phone,
-    href: `tel:${SUPPORT_INFO.phoneHref}`,
-    helper: 'Call for booking, ride, parcel, or account help',
-    Icon: Phone,
-  },
-  {
-    title: 'Client support email',
-    value: SUPPORT_INFO.email,
-    href: `mailto:${SUPPORT_INFO.email}`,
-    helper: SUPPORT_INFO.responseTime,
-    Icon: Mail,
-  },
-];
-
-const detailCards = [
-  {
-    title: 'Client info',
-    value: SUPPORT_INFO.companyName,
-    helper: `Owner: ${SUPPORT_INFO.ownerName} · ${SUPPORT_INFO.serviceArea}`,
-    Icon: Building2,
-  },
-  {
-    title: 'Availability',
-    value: SUPPORT_INFO.availability,
-    helper: SUPPORT_INFO.supportLabel,
-    Icon: Clock3,
-  },
-  {
-    title: 'Office address',
-    value: SUPPORT_INFO.officeAddress,
-    helper: 'Use this for business communication and document follow-ups',
-    Icon: MapPin,
-  },
-];
-
 const SupportPage = () => {
+  const SUPPORT_INFO = useSupportInfo();
   const navigate = useNavigate();
+
+  const quickCards = [
+    {
+      title: 'Client care number',
+      value: SUPPORT_INFO.phone,
+      href: `tel:${SUPPORT_INFO.phoneHref}`,
+      helper: 'Call for booking, ride, parcel, or account help',
+      Icon: Phone,
+    },
+    {
+      title: 'Client support email',
+      value: SUPPORT_INFO.email,
+      href: `mailto:${SUPPORT_INFO.email}`,
+      helper: SUPPORT_INFO.responseTime,
+      Icon: Mail,
+    },
+  ];
+
+  const detailCards = [
+    {
+      title: 'Client info',
+      value: SUPPORT_INFO.companyName,
+      helper: SUPPORT_INFO.serviceArea,
+      Icon: Building2,
+    },
+    {
+      title: 'Availability',
+      value: SUPPORT_INFO.availability,
+      helper: SUPPORT_INFO.supportLabel,
+      Icon: Clock3,
+    },
+    {
+      title: 'Office address',
+      value: SUPPORT_INFO.officeAddress,
+      helper: 'Use this for business communication and document follow-ups',
+      Icon: MapPin,
+    },
+  ];
+
 
   return (
     <div className="min-h-screen bg-stone-50 text-slate-900">

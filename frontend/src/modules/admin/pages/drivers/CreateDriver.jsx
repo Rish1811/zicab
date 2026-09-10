@@ -17,7 +17,17 @@ import { adminService } from '../../services/adminService';
 
 const NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const VEHICLE_NUMBER_REGEX = /^[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{4}$/;
+// Indian registration formats:
+//   MH12AB1234 / DL1ABCD1234 - state + RTO + letter series + 4 digits
+//   KA651635                 - older plates with no letter series
+//   22BH1234AA               - Bharat (BH) series
+const VEHICLE_NUMBER_PATTERNS = [
+  /^[A-Z]{2}\d{1,2}[A-Z]{1,5}\d{4}$/,
+  /^[A-Z]{2}\d{1,2}\d{4}$/,
+  /^\d{2}BH\d{4}[A-Z]{1,2}$/,
+];
+const isValidVehicleNumber = (value = '') =>
+  VEHICLE_NUMBER_PATTERNS.some((pattern) => pattern.test(value));
 
 const inputClass =
   'w-full rounded-[1.4rem] border-2 border-slate-100 bg-slate-50 px-4 py-3.5 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-300 focus:border-slate-900/10 focus:bg-white focus:ring-0';
@@ -536,7 +546,7 @@ const CreateDriver = () => {
       return `Vehicle year must be between 1980 and ${currentYear}`;
     }
 
-    if (!VEHICLE_NUMBER_REGEX.test(normalizeVehicleNumber(formData.vehicle_number))) {
+    if (!isValidVehicleNumber(normalizeVehicleNumber(formData.vehicle_number))) {
       return 'Vehicle number must be in valid Indian format';
     }
 

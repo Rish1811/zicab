@@ -22,9 +22,14 @@ import {
 } from '../../services/registrationService';
 import { normalizeDriverDocumentTemplates } from '../../utils/documentTemplates';
 
+// Indian registration formats:
+//   MH12AB1234 / DL1ABCD1234 - state + RTO + letter series + 4 digits
+//   KA651635                 - older plates with no letter series
+//   22BH1234AA               - Bharat (BH) series
 const VEHICLE_NUMBER_PATTERNS = [
-    /^[A-Z]{2}\d{1,2}[A-Z]{1,4}\d{4}$/,
     /^[A-Z]{2}\d{1,2}[A-Z]{1,5}\d{4}$/,
+    /^[A-Z]{2}\d{1,2}\d{4}$/,
+    /^\d{2}BH\d{4}[A-Z]{1,2}$/,
 ];
 const getCurrentVehicleYear = () => new Date().getFullYear();
 const normalizeVehicleNumber = (value = '') => String(value).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);

@@ -1,14 +1,10 @@
 import React from 'react';
 import { ArrowLeft, FileText, IndianRupee, Mail, Phone, ReceiptText, Scale, ScrollText, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { SUPPORT_INFO } from '../content/supportInfo';
+import { useSupportInfo } from '../content/supportInfo';
+import useLegalContent from '../content/useLegalContent';
 import termsRawText from '../content/terms-content.txt?raw';
 import privacyRawText from '../content/privacy-content.txt?raw';
-
-const ownerContact = {
-  phone: SUPPORT_INFO.phone,
-  email: SUPPORT_INFO.email,
-};
 
 const vehiclePricing = [
   { type: 'Bike', capacity: 'Up to 2 riders', price: 'Starts at Rs 49', cancellationCut: 'Admin cut up to Rs 10', note: 'Best for quick solo rides and short-distance travel.' },
@@ -24,7 +20,7 @@ const legalContent = {
     title: 'Terms & Conditions',
     icon: ScrollText,
     intro:
-      'These terms are shown from the latest legal document provided for Appzeto 24 users and include the applicable bike, package, auto, and cab clauses.',
+      'These terms are shown from the latest legal document provided for ZI CAB users and include the applicable bike, package, auto, and cab clauses.',
     rawText: termsRawText,
   },
   privacy: {
@@ -32,7 +28,7 @@ const legalContent = {
     title: 'Privacy Policy',
     icon: ShieldCheck,
     intro:
-      'This privacy policy is shown from the latest legal document provided for Appzeto 24 users and explains how information is collected, used, processed, stored, and protected.',
+      'This privacy policy is shown from the latest legal document provided for ZI CAB users and explains how information is collected, used, processed, stored, and protected.',
     rawText: privacyRawText,
   },
   refund: {
@@ -40,7 +36,7 @@ const legalContent = {
     title: 'Refund & Cancellation Policy',
     icon: ReceiptText,
     intro:
-      'This page explains refund eligibility, cancellation timelines, and indicative prices for the main vehicle types available on the Appzeto 24  Trawler platform. Refunds are reviewed based on service status, time of cancellation, and payment mode.',
+      'This page explains refund eligibility, cancellation timelines, and indicative prices for the main vehicle types available on the ZI CAB Technologies Pvt Ltd platform. Refunds are reviewed based on service status, time of cancellation, and payment mode.',
     sections: [
       {
         title: 'When refunds may be approved',
@@ -54,7 +50,7 @@ const legalContent = {
       {
         title: 'Refund policy overview',
         body:
-          'Appzeto 24  Trawler reviews refund requests on a case-by-case basis to confirm whether the booking was completed, cancelled before service, cancelled after dispatch, or affected by a technical or payment issue. Approved refunds are returned only after internal verification of ride logs, payment status, and service records.',
+          'ZI CAB Technologies Pvt Ltd reviews refund requests on a case-by-case basis to confirm whether the booking was completed, cancelled before service, cancelled after dispatch, or affected by a technical or payment issue. Approved refunds are returned only after internal verification of ride logs, payment status, and service records.',
       },
       {
         title: 'Cancellation rules',
@@ -103,7 +99,7 @@ const legalContent = {
         bullets: [
           'Raise the issue through the support team with your booking ID, payment details, and reason for the request.',
           'Submit the request as early as possible after the cancelled or affected booking.',
-          'Appzeto 24   Trawler may ask for screenshots, transaction references, or additional verification before approval.',
+          'ZI CAB Technologies Pvt Ltd may ask for screenshots, transaction references, or additional verification before approval.',
         ],
       },
       {
@@ -122,7 +118,7 @@ const legalContent = {
     title: 'Cancellation Policy',
     icon: Scale,
     intro:
-      'This page summarizes how cancellations are handled across Appzeto 24  Trawler booking categories.',
+      'This page summarizes how cancellations are handled across ZI CAB Technologies Pvt Ltd booking categories.',
     sections: [
       {
         title: 'General policy',
@@ -156,9 +152,20 @@ const isLegalHeadingLine = (line = '') => {
 };
 
 const LegalPage = () => {
+  const { phone, email, phoneHref } = useSupportInfo();
+  const ownerContact = { phone, email, phoneHref };
   const navigate = useNavigate();
   const location = useLocation();
-  const content = legalContent[getDocumentType(location.pathname)];
+  const documentType = getDocumentType(location.pathname);
+  const managed = useLegalContent()[documentType] || {};
+  const bundled = legalContent[documentType];
+  // Whatever the admin has saved wins; anything left blank keeps the bundled
+  // copy, so a half-filled document still renders a complete page.
+  const content = {
+    ...bundled,
+    intro: managed.intro || bundled.intro,
+    rawText: managed.body || bundled.rawText,
+  };
   const Icon = content.icon || FileText;
   const rawParagraphs = content.rawText
     ? content.rawText
@@ -196,7 +203,7 @@ const LegalPage = () => {
           </p>
           <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:flex-wrap">
             <a
-              href={`tel:${ownerContact.phone}`}
+              href={`tel:${ownerContact.phoneHref}`}
               className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
             >
               <Phone size={18} className="text-[#f4b400]" />

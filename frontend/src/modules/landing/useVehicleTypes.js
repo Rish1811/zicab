@@ -20,18 +20,25 @@ const resolveImage = (value, fallbackImage) => {
 };
 
 const toCard = (item, index, fallback) => {
+  // Only a stand-in photo is taken from the fallback list. It used to supply the
+  // price, seats and luggage too, chosen by list position — so every real
+  // vehicle showed a fare belonging to whichever placeholder shared its index.
   const spare = fallback[index % fallback.length] || {};
   const seats = Number(item.capacity || 0);
   const perKm = Number(item.price_per_km ?? item.pricePerKm ?? 0);
 
   return {
     id: item.id || item._id || `v-${index}`,
-    name: item.name || spare.name || 'Vehicle',
-    type: item.category || item.short_description || spare.type || '',
-    seats: seats > 0 ? `${seats} Seats` : spare.seats || '',
-    bags: spare.bags || '',
-    price: perKm > 0 ? `${RUPEE}${perKm}` : spare.price || '',
-    unit: perKm > 0 ? '/km' : spare.unit || '',
+    name: item.name || 'Vehicle',
+    type: item.category || item.short_description || '',
+    seats: seats > 0 ? `${seats} Seats` : '',
+    // The vehicle catalog has no luggage field, so there is nothing truthful to
+    // show here yet.
+    bags: '',
+    // "from" when the same vehicle is priced differently across zones, so a
+    // single figure does not read as the price everywhere.
+    price: perKm > 0 ? `${item.price_per_km_varies ? 'from ' : ''}${RUPEE}${perKm}` : '',
+    unit: perKm > 0 ? '/km' : '',
     image: resolveImage(item.image || item.icon || item.map_icon, spare.image),
   };
 };

@@ -15,6 +15,8 @@ import {
   AdminBusServiceManager,
   AdminCareerApplications,
   AdminCMSBuilder,
+  AdminLandingContent,
+  AdminWebsiteEnquiries,
   AdminCountryManagement,
   AdminCreatePackagePrice,
   AdminCustomizationSettings,
@@ -369,6 +371,8 @@ const adminRoutes = (
       </Route>
       <Route path="safety" element={<AdminSafetyCenter />} />
       <Route path="cms" element={<AdminCMSBuilder />} />
+      <Route path="settings/cms/landing" element={<AdminLandingContent />} />
+      <Route path="settings/cms/enquiries" element={<AdminWebsiteEnquiries />} />
       <Route path="settings/cms/header-footer" element={<AdminHeaderFooter />} />
       <Route path="support/ticket-title" element={<AdminSupportTicketTitle />} />
       <Route path="support/tickets" element={<AdminSupportTickets />} />

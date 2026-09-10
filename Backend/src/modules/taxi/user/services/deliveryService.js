@@ -3,6 +3,7 @@ import { normalizePoint } from '../../../../utils/geo.js';
 import { GoodsType } from '../../admin/models/GoodsType.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { startDispatchFlow } from '../../services/dispatchService.js';
+import { findZoneByPickup } from '../../services/matchingService.js';
 import { Delivery } from '../models/Delivery.js';
 import {
   createRideRecord,
@@ -107,6 +108,57 @@ const calculateDistanceKm = (fromCoords = [], toCoords = []) => {
   return earthRadiusKm * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
+/// Parcels are an intracity service, so a booking that crosses between cities is
+/// refused.
+///
+/// Only one thing is unambiguous: both ends resolving to *different* operating
+/// zones. Everything else is judged on distance, because a point having no zone
+/// does not mean it is far away — the polygons are drawn tight, and the airport,
+/// Devanahalli and Hoskote all fall outside the 23km Bangalore circle while
+/// being ordinary city jobs. An earlier version of this refused any pickup that
+/// matched no zone, which blocked exactly those.
+///
+/// The distance limit comes from whichever end we could place, using that zone's
+/// own configured maximum where one is set.
+const DEFAULT_INTRACITY_MAX_KM = 60;
+
+const assertIntracityDelivery = async (pickupCoords, dropCoords) => {
+  const [pickupZone, dropZone] = await Promise.all([
+    findZoneByPickup(pickupCoords),
+    findZoneByPickup(dropCoords),
+  ]);
+
+  // Both ends inside known, different cities: intercity by definition.
+  if (pickupZone && dropZone && String(pickupZone._id) !== String(dropZone._id)) {
+    throw new ApiError(
+      400,
+      `Parcels are available within one city only. This pickup is in ${pickupZone.name} and the drop is in ${dropZone.name}.`,
+    );
+  }
+
+  if (pickupZone && dropZone) {
+    return pickupZone;
+  }
+
+  // At least one end sits outside every polygon. Judge it on distance instead of
+  // refusing, so city work near the boundary still books while a long-distance
+  // hop does not slip through at intracity rates.
+  const knownZone = pickupZone || dropZone;
+  const limitKm = Number(knownZone?.maximum_distance_for_regular_rides) > 0
+    ? Number(knownZone.maximum_distance_for_regular_rides)
+    : DEFAULT_INTRACITY_MAX_KM;
+  const distanceKm = calculateDistanceKm(pickupCoords, dropCoords);
+
+  if (distanceKm > limitKm) {
+    throw new ApiError(
+      400,
+      `This trip is too far for a parcel delivery. Parcels are available within one city, up to ${limitKm}km.`,
+    );
+  }
+
+  return knownZone || null;
+};
+
 const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoords = [] }) => {
   const pricing = vehicle?.delivery_distance_pricing || {};
   const enabled = Boolean(
@@ -114,6 +166,11 @@ const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoo
     Number(pricing?.base_price || 0) > 0 ||
     Number(pricing?.distance_price || 0) > 0
   );
+  // Computed ahead of the enabled check so both branches — priced and
+  // unpriced — can report the actual pickup/drop distance to the caller;
+  // the quote screen shows this even when the vehicle has no fare configured.
+  const distanceKm = Math.max(0, calculateDistanceKm(pickupCoords, dropCoords));
+  const baseDistance = Math.max(0, Number(pricing?.base_distance ?? pricing?.free_distance ?? 0));
 
   if (!enabled) {
     return {
@@ -121,12 +178,12 @@ const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoo
       subtotal: 0,
       serviceTaxPercentage: Math.max(0, Number(vehicle?.service_tax || 0)),
       serviceTaxAmount: 0,
+      distanceKm: roundCurrency(distanceKm),
+      baseDistanceKm: roundCurrency(baseDistance),
     };
   }
 
-  const distanceKm = Math.max(0, calculateDistanceKm(pickupCoords, dropCoords));
   const basePrice = Math.max(0, Number(pricing?.base_price || 0));
-  const baseDistance = Math.max(0, Number(pricing?.base_distance ?? pricing?.free_distance ?? 0));
   const distancePrice = Math.max(0, Number(pricing?.distance_price || 0));
   const extraDistanceKm = Math.max(distanceKm - baseDistance, 0);
   const distanceCharge = extraDistanceKm * distancePrice;
@@ -139,6 +196,8 @@ const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoo
     subtotal: roundCurrency(subtotal),
     serviceTaxPercentage: roundCurrency(serviceTaxPercentage),
     serviceTaxAmount: roundCurrency(serviceTaxAmount),
+    distanceKm: roundCurrency(distanceKm),
+    baseDistanceKm: roundCurrency(baseDistance),
   };
 };
 
@@ -172,6 +231,7 @@ export const createDeliveryRecord = async ({
   await ensureDeliveryVehicleAllowed({ vehicleTypeId, parcel });
   const pickupCoords = normalizePoint(pickup, 'pickup');
   const dropCoords = normalizePoint(drop, 'drop');
+  await assertIntracityDelivery(pickupCoords, dropCoords);
   const vehicle = vehicleTypeId
     ? await Vehicle.findById(vehicleTypeId).select('delivery_distance_pricing service_tax').lean()
     : null;
@@ -199,6 +259,41 @@ export const createDeliveryRecord = async ({
 
   const detailedRide = await getRideDetails(ride._id);
   return serializeDeliveryRealtime(ensureParcelRide(detailedRide));
+};
+
+/// The fare the app shows on the address/details screen before booking.
+///
+/// Runs the exact same `computeDeliveryFareBreakdown` that `createDeliveryRecord`
+/// uses to set the charged fare, so what the rider is quoted here is always
+/// what the booking actually charges — nothing here is recomputed differently
+/// between the two call sites.
+export const getDeliveryQuote = async ({ vehicleTypeId, pickup, drop, parcel }) => {
+  if (!vehicleTypeId) {
+    throw new ApiError(400, 'vehicleTypeId is required');
+  }
+
+  await ensureDeliveryVehicleAllowed({ vehicleTypeId, parcel });
+
+  const pickupCoords = normalizePoint(pickup, 'pickup');
+  const dropCoords = normalizePoint(drop, 'drop');
+  // Checked here as well as at booking: a quote that a booking then refuses is
+  // worse than refusing up front.
+  await assertIntracityDelivery(pickupCoords, dropCoords);
+  const vehicle = await Vehicle.findById(vehicleTypeId)
+    .select('name delivery_distance_pricing service_tax')
+    .lean();
+
+  if (!vehicle) {
+    throw new ApiError(404, 'Vehicle type not found');
+  }
+
+  const fareBreakdown = computeDeliveryFareBreakdown({ vehicle, pickupCoords, dropCoords });
+
+  return {
+    vehicleTypeId: String(vehicleTypeId),
+    vehicleName: vehicle.name || '',
+    ...fareBreakdown,
+  };
 };
 
 export const getActiveDeliveryForIdentity = async ({ role, entityId }) => {

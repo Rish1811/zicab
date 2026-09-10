@@ -1,6 +1,8 @@
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import * as adminService from "../services/adminService.js";
+import { hasAdminPermission } from "../services/adminAccessService.js";
 import * as landingContentService from "../services/landingContentService.js";
+import * as websiteEnquiryService from "../services/websiteEnquiryService.js";
 import ExcelJS from 'exceljs';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
@@ -1762,12 +1764,51 @@ export const getAppBootstrap = asyncHandler(async (_req, res) => {
 export const getPublicLandingContent = asyncHandler(async (_req, res) =>
   ok(res, await landingContentService.getLandingContent()),
 );
-export const getAdminLandingContent = asyncHandler(async (_req, res) =>
-  ok(res, await landingContentService.getLandingContent({ fresh: true })),
+// Separate from the landing payload on purpose - these documents are large and
+// only the legal routes need them.
+export const getPublicLegalContent = asyncHandler(async (_req, res) =>
+  ok(res, await landingContentService.getLegalContent()),
 );
-export const saveAdminLandingContent = asyncHandler(async (req, res) =>
-  ok(res, await landingContentService.updateLandingContent(req.body)),
-);
+// The router-level authenticate(['admin']) gate lets any admin through, so the
+// per-permission check happens here - matching how the rest of admin does it.
+const assertLandingContentAccess = (admin) => {
+  if (!hasAdminPermission(admin, 'landing_content.view')) {
+    throw new ApiError(403, 'You do not have permission to access website content');
+  }
+};
+export const getAdminLandingContent = asyncHandler(async (req, res) => {
+  assertLandingContentAccess(req.auth?.admin);
+  ok(res, await landingContentService.getLandingContent({ fresh: true, includeLegal: true }));
+});
+export const saveAdminLandingContent = asyncHandler(async (req, res) => {
+  assertLandingContentAccess(req.auth?.admin);
+  ok(res, await landingContentService.updateLandingContent(req.body));
+});
+
+// ---- website enquiries (public marketing forms) ----------------------------
+export const submitWebsiteEnquiry = asyncHandler(async (req, res) => {
+  const data = await websiteEnquiryService.createWebsiteEnquiry(req.body);
+  res.status(201).json({
+    success: true,
+    data: { message: 'Thanks - we have your details and will be in touch.', ...data },
+  });
+});
+
+const assertEnquiryAccess = (admin) => {
+  if (!hasAdminPermission(admin, 'enquiries.view')) {
+    throw new ApiError(403, 'You do not have permission to access website enquiries');
+  }
+};
+
+export const getWebsiteEnquiries = asyncHandler(async (req, res) => {
+  assertEnquiryAccess(req.auth?.admin);
+  ok(res, await websiteEnquiryService.listWebsiteEnquiries(req.query));
+});
+
+export const patchWebsiteEnquiry = asyncHandler(async (req, res) => {
+  assertEnquiryAccess(req.auth?.admin);
+  ok(res, await websiteEnquiryService.updateWebsiteEnquiry(req.params.id, req.body));
+});
 
 // ── Price hike (surge) ───────────────────────────────────────────────────────
 export const getPriceHikes = asyncHandler(async (req, res) =>

@@ -5,6 +5,7 @@ import { Ride } from '../user/models/Ride.js';
 import { User } from '../user/models/User.js';
 import { UserWallet } from '../user/models/UserWallet.js';
 import { Driver } from '../driver/models/Driver.js';
+import { Vehicle } from '../admin/models/Vehicle.js';
 import { WalletTransaction } from '../driver/models/WalletTransaction.js';
 import { applyDriverWalletAdjustment } from '../driver/services/walletService.js';
 import { matchDrivers } from './matchingService.js';
@@ -727,6 +728,21 @@ const closeDriverRequestWindow = (rideId, driverIds = []) => {
   sendRideOfferClosedPush(safeDriverIds, rideId);
 };
 
+/// The real, admin-configured vehicle-type name (e.g. "Zi Mini Truck",
+/// "Zi Scooty Parcel") — shown on the driver's offer so they know which of
+/// their registered vehicle types this particular request is for. Distinct
+/// from `serviceType` ('ride'/'parcel'), which only says whether it's a
+/// passenger trip or a delivery, not which vehicle class within it.
+const resolveVehicleLabel = async (vehicleTypeId) => {
+  if (!vehicleTypeId) return '';
+  try {
+    const vehicle = await Vehicle.findById(vehicleTypeId).select('name').lean();
+    return vehicle?.name || '';
+  } catch {
+    return '';
+  }
+};
+
 const emitRideRequestToDrivers = async ({
   ride,
   targetDrivers = [],
@@ -741,6 +757,10 @@ const emitRideRequestToDrivers = async ({
   }
 
   const requestExpiresAt = new Date(Date.now() + dispatchConfig.retryDelayMs).toISOString();
+  // Resolved once per dispatch wave, not per driver — every driver in this
+  // wave is being offered the same ride, so the label is identical for all
+  // of them.
+  const vehicleLabel = await resolveVehicleLabel(ride.vehicleTypeId);
 
   for (const driver of targetDrivers) {
     emitToDriver(driver._id, 'rideRequest', {
@@ -763,6 +783,7 @@ const emitRideRequestToDrivers = async ({
       estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
       vehicleTypeId: ride.vehicleTypeId ? String(ride.vehicleTypeId) : null,
       vehicleTypeIds: dispatchVehicleTypeIds,
+      vehicleLabel,
       vehicleIconType: ride.vehicleIconType,
       vehicleIconUrl: ride.vehicleIconUrl || '',
       fare: ride.fare,
@@ -830,7 +851,10 @@ const emitRideRequestToDrivers = async ({
         ),
         tripDistanceKm: formatOfferKm(ride.estimatedDistanceMeters),
         vehicleIconType: ride.vehicleIconType || '',
-        vehicleLabel: ride.serviceType === 'parcel' ? 'Parcel' : 'Ride',
+        // The real catalog name ("Zi Mini Truck") when the vehicle resolved;
+        // falls back to the generic type only if it didn't (e.g. a ride with
+        // no vehicleTypeId at all), so the card is never blank.
+        vehicleLabel: vehicleLabel || (ride.serviceType === 'parcel' ? 'Parcel' : 'Ride'),
         expiresInSeconds: String(dispatchConfig.retryWindowSeconds),
       },
     }).catch((error) => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { markIntroDone, introAlreadyPlayed } from '../hooks/introGate';
+import { useLanding } from '../landingContentContext';
 
 /**
  * Full-screen intro curtain: logo, a 0-100 counter, then two panels slide apart
@@ -16,6 +17,7 @@ import { markIntroDone, introAlreadyPlayed } from '../hooks/introGate';
 const HARD_TIMEOUT_MS = 4000;
 
 export default function Preloader() {
+  const { brand } = useLanding();
   const rootRef = useRef(null);
   const [gone, setGone] = useState(
     () =>
@@ -85,10 +87,10 @@ export default function Preloader() {
 
       <div className="pl-center">
         <div className="pl-brand">
-          <img src="/zicab-logo.jpg" alt="" className="pl-logo" />
+          <img src={brand.logo} alt="" className="pl-logo" />
           <span className="pl-wordmark">
-            <span className="pl-zi">ZI</span>
-            <span className="pl-cab">CAB</span>
+            <span className="pl-zi">{brand.wordmarkPrimary}</span>
+            <span className="pl-cab">{brand.wordmarkSecondary}</span>
           </span>
         </div>
         <div className="pl-meta">

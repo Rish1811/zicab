@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { X, MapPin, Calendar, User, CheckCircle2, Car, Shield, ArrowRight } from 'lucide-react';
 import api from '../../../shared/api/axiosInstance';
-import { CONTACT } from '../siteConfig';
+import { useLanding } from '../landingContentContext';
 
 const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
+  const { contact: CONTACT } = useLanding();
   const [step, setStep] = useState(1);
   const [tripType, setTripType] = useState('city');
   const [pickup, setPickup] = useState('Gandhinagar, Bengaluru');

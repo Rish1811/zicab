@@ -1,9 +1,10 @@
 import React from 'react';
 import { Phone, Mail, MapPin, ShieldCheck, Clock, MessageCircle } from 'lucide-react';
 import { scrollToTop } from '../hooks/useSmoothScroll';
-import { CONTACT, LAUNCH_CITIES, waLink } from '../siteConfig';
+import { useLanding } from '../landingContentContext';
 
 const Footer = ({ setActiveTab }) => {
+  const { contact: CONTACT, launchCities: LAUNCH_CITIES, waLink, brand, footer } = useLanding();
   const handleNavClick = (id) => {
     setActiveTab(id);
     scrollToTop();
@@ -16,18 +17,16 @@ const Footer = ({ setActiveTab }) => {
           {/* Brand Info */}
           <div className="footer-brand">
             <div className="footer-logo">
-              <img src="/zicab-logo.jpg" alt="ZI CAB" className="footer-logo-img" />
+              <img src={brand.logo} alt={`${brand.wordmarkPrimary} ${brand.wordmarkSecondary}`} className="footer-logo-img" />
               <div>
                 <div className="footer-logo-text">
-                  <span className="logo-zi">ZI</span>
-                  <span className="logo-cab">CAB</span>
+                  <span className="logo-zi">{brand.wordmarkPrimary}</span>
+                  <span className="logo-cab">{brand.wordmarkSecondary}</span>
                 </div>
-                <p className="footer-tagline">Your Ride. Our Priority.</p>
+                <p className="footer-tagline">{brand.tagline}</p>
               </div>
             </div>
-            <p className="footer-desc">
-              ZI CAB is a premium cab booking platform providing safe, transparent, and 24x7 verified rides — now live in Bengaluru, Mangaluru and Hubballi.
-            </p>
+            <p className="footer-desc">{footer.description}</p>
 
             <div className="footer-contacts">
               <div className="contact-item">
@@ -78,44 +77,48 @@ const Footer = ({ setActiveTab }) => {
 
           {/* Our Services */}
           <div className="footer-col">
-            <h4 className="footer-heading">Cab Services</h4>
+            <h4 className="footer-heading">{footer.servicesHeading}</h4>
             <ul className="footer-links">
-              <li><button onClick={() => handleNavClick('services')}>Auto Ride</button></li>
-              <li><button onClick={() => handleNavClick('services')}>City Ride (Local Cabs)</button></li>
-              <li><button onClick={() => handleNavClick('services')}>Airport Pickup & Drop</button></li>
-              <li><button onClick={() => handleNavClick('services')}>Outstation One-Way & Roundtrip</button></li>
-              <li><button onClick={() => handleNavClick('services')}>Premium Executive Sedans</button></li>
-              <li><button onClick={() => handleNavClick('services')}>SUV & Innova Crysta</button></li>
-              <li><button onClick={() => handleNavClick('services')}>Hotel & Mall Pickup</button></li>
+              {(footer.cabServices || []).map((item, index) => (
+                <li key={index}>
+                  <button onClick={() => handleNavClick('services')}>{item.label}</button>
+                </li>
+              ))}
             </ul>
           </div>
 
           {/* Mobile App & Safety */}
           <div className="footer-col">
             <h4 className="footer-heading">Download App</h4>
-            <p className="footer-text-sm">
-              Book rides in seconds, track drivers live, and manage invoices with the ZI CAB app.
-            </p>
+            <p className="footer-text-sm">{brand.appBlurb}</p>
             <div className="footer-app-badges">
-              <div className="app-badge">
-                <span className="app-badge-title">GET IT ON</span>
-                <span className="app-badge-store">Google Play</span>
-              </div>
-              <div className="app-badge">
-                <span className="app-badge-title">Download on the</span>
-                <span className="app-badge-store">App Store</span>
-              </div>
+              {/* Anchors only when a store URL is set — otherwise these stay the
+                  inert badges they have always been, rather than dead links. */}
+              {[
+                { url: brand.playStoreUrl, title: 'GET IT ON', store: 'Google Play' },
+                { url: brand.appStoreUrl, title: 'Download on the', store: 'App Store' },
+              ].map((badge) => {
+                const Tag = badge.url ? 'a' : 'div';
+                const props = badge.url ? { href: badge.url, target: '_blank', rel: 'noreferrer' } : {};
+                return (
+                  <Tag key={badge.store} className="app-badge" {...props}>
+                    <span className="app-badge-title">{badge.title}</span>
+                    <span className="app-badge-store">{badge.store}</span>
+                  </Tag>
+                );
+              })}
             </div>
 
             <div className="footer-trust-mini">
-              <div className="trust-pill">
-                <ShieldCheck size={14} color="#00BBA9" />
-                <span>Verified Drivers</span>
-              </div>
-              <div className="trust-pill">
-                <Clock size={14} color="#00BBA9" />
-                <span>24x7 Live SOS</span>
-              </div>
+              {(footer.trustPills || []).map((pill, index) => {
+                const PillIcon = index === 0 ? ShieldCheck : Clock;
+                return (
+                  <div className="trust-pill" key={index}>
+                    <PillIcon size={14} color="#00BBA9" />
+                    <span>{pill.label}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -130,13 +133,15 @@ const Footer = ({ setActiveTab }) => {
         </div>
 
         <div className="footer-bottom">
-          <p>© 2026 ZI CAB Technologies Pvt Ltd. All Rights Reserved.</p>
+          <p>{footer.copyright}</p>
           <div className="footer-bottom-links">
-            <a href="#privacy">Privacy Policy</a>
+            {/* These were #privacy / #terms / #refund, which scrolled nowhere.
+                The real routes have existed all along. */}
+            <a href="/privacy">Privacy Policy</a>
             <span>•</span>
-            <a href="#terms">Terms of Service</a>
+            <a href="/terms">Terms of Service</a>
             <span>•</span>
-            <a href="#refund">Refund & Cancellation</a>
+            <a href="/refund">Refund & Cancellation</a>
             <span>•</span>
             {/* Required credit for the Creative Commons vehicle photos.
                 Safe to delete once they are replaced with ZI CAB's own fleet photos. */}

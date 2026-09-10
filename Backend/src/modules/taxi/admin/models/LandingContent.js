@@ -30,6 +30,32 @@ const landingContentSchema = new mongoose.Schema(
     launchCities: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // { email, whatsapp, whatsappDisplay, tollFree, tollFreeLive, address, addressShort, mapsUrl }
     contact: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { tag, title, subtitle, stats[], founders[], pillars[], headings }
+    about: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // the four remaining marketing pages
+    corporatePage: { type: mongoose.Schema.Types.Mixed, default: {} },
+    partnerPage: { type: mongoose.Schema.Types.Mixed, default: {} },
+    driverPage: { type: mongoose.Schema.Types.Mixed, default: {} },
+    advertisePage: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { tag, title, subtitle, ctaLabel, items[] } - the /services page
+    servicesPage: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // [{ q, a }] - contact page accordion
+    faqs: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    // { titleLine1, titleLine2, subtitle, primaryCta, secondaryCta, badges[] }
+    hero: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { description, servicesHeading, cabServices[], trustPills[], copyright }
+    footer: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { title, description } - applied to document.title at runtime
+    seo: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { logo, wordmarkPrimary, wordmarkSecondary, tagline, appBlurb,
+    //   playStoreUrl, appStoreUrl, playStoreQr, appStoreQr }
+    brand: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // { terms: { intro, body }, privacy: {...}, refund: {...} }
+    //
+    // Served by its own endpoint rather than with the rest of the content: the
+    // documents run to six figures of characters and the landing payload is
+    // fetched on every visit to the marketing site.
+    legal: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   {
     timestamps: true,

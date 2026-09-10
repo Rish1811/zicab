@@ -43,8 +43,14 @@ const OTP_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DRIVER_NAME_REGEX = /^[A-Za-z]+(?:[ .'-][A-Za-z]+)*$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+// Indian registration formats:
+//   MH12AB1234 / DL1ABCD1234 - state + RTO + letter series + 4 digits
+//   KA651635                 - older plates with no letter series
+//   22BH1234AA               - Bharat (BH) series
 const VEHICLE_NUMBER_PATTERNS = [
   /^[A-Z]{2}\d{1,2}[A-Z]{1,5}\d{4}$/,
+  /^[A-Z]{2}\d{1,2}\d{4}$/,
+  /^\d{2}BH\d{4}[A-Z]{1,2}$/,
 ];
 const ALLOWED_SERVICE_CATEGORIES = ['taxi', 'outstation', 'delivery', 'pooling'];
 
@@ -1162,7 +1168,7 @@ export const saveDriverVehicle = async ({
     }
 
     if (normalizedNumber && !VEHICLE_NUMBER_PATTERNS.some((pattern) => pattern.test(normalizedNumber))) {
-      throw new ApiError(400, 'Vehicle number must be in a valid format, for example DL1AB2345, DL1ABCD1234, or MH12AB1234');
+      throw new ApiError(400, 'Vehicle number must be in a valid format, for example MH12AB1234, DL1ABCD1234, KA651635, or 22BH1234AA');
     }
   }
 
@@ -1806,7 +1812,7 @@ export const verifyDriverVehicleRc = async ({
   }
 
   if (!VEHICLE_NUMBER_PATTERNS.some((pattern) => pattern.test(normalizedRcNumber))) {
-    throw new ApiError(400, 'RC number must be in a valid format, for example DL1AB2345 or MH12AB1234');
+    throw new ApiError(400, 'RC number must be in a valid format, for example MH12AB1234, KA651635, or 22BH1234AA');
   }
 
   const providerResponse = await verifyRcWithRecharge({

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -6,7 +6,7 @@ import BookingModal from './components/BookingModal';
 import Preloader from './components/Preloader';
 import useSmoothScroll from './hooks/useSmoothScroll';
 import { pathForTab, tabForPath } from './landingTabs';
-import { waLink } from './siteConfig';
+import { LandingContentProvider, useLanding } from './landingContentContext';
 import './landing.css';
 
 /**
@@ -23,13 +23,25 @@ import './landing.css';
  * would apply to the taxi app too.
  */
 
-export default function LandingShell() {
+function LandingShellBody() {
+  const { waLink, seo } = useLanding();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [bookingOpen, setBookingOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
 
   useSmoothScroll();
+
+  // index.html ships a static title and description. Applying the CMS values at
+  // runtime keeps them editable; crawlers that do not run JS still see the
+  // build-time copy, so the two should be kept roughly in step.
+  useEffect(() => {
+    if (seo?.title) document.title = seo.title;
+    if (seo?.description) {
+      const tag = document.querySelector('meta[name="description"]');
+      if (tag) tag.setAttribute('content', seo.description);
+    }
+  }, [seo?.title, seo?.description]);
 
   const activeTab = useMemo(() => tabForPath(pathname), [pathname]);
   const setActiveTab = useCallback((id) => navigate(pathForTab(id)), [navigate]);
@@ -77,5 +89,18 @@ export default function LandingShell() {
         selectedVehicle={selectedVehicle}
       />
     </div>
+  );
+}
+
+/**
+ * The provider wraps the body rather than living inside it, so the shell's own
+ * chrome (the WhatsApp button) reads the same CMS content as the pages, and the
+ * content is fetched once for all eight routes instead of per page.
+ */
+export default function LandingShell() {
+  return (
+    <LandingContentProvider>
+      <LandingShellBody />
+    </LandingContentProvider>
   );
 }

@@ -195,6 +195,31 @@ const rideSchema = new mongoose.Schema(
         default: '',
         trim: true,
       },
+      /// Photos of the parcel taken by the sender when booking. The app caps
+      /// this at two; they are upload URLs rather than inline data so that ride
+      /// documents stay small.
+      photos: {
+        type: [String],
+        default: [],
+      },
+      /// Handling notes from the sender ('fragile', 'call before arriving').
+      /// Separate from `description`, which names what is inside.
+      instructions: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+      /// Proof the driver collected the parcel. Without it the trip cannot
+      /// start -- see `assertParcelProof` in rideService.
+      pickupProof: {
+        url: { type: String, default: '' },
+        at: { type: Date, default: null },
+      },
+      /// Proof the driver handed it over. Without it the trip cannot complete.
+      deliveryProof: {
+        url: { type: String, default: '' },
+        at: { type: Date, default: null },
+      },
     },
     scheduledAt: {
       type: Date,
@@ -246,6 +271,19 @@ const rideSchema = new mongoose.Schema(
     fare: {
       type: Number,
       required: true,
+      min: 0,
+    },
+    // Parcel waiting at pickup: minutes the driver waited beyond the free
+    // window, and what that added to the fare. Stored so a receipt can show the
+    // charge rather than an unexplained jump in the total.
+    waitingMinutes: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    waitingCharge: {
+      type: Number,
+      default: 0,
       min: 0,
     },
     baseFare: {
@@ -307,6 +345,18 @@ const rideSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TaxiRideBid',
       default: null,
+    },
+    /// The road route for this trip, resolved once when the ride is created.
+    ///
+    /// Stored rather than fetched per client so the rider and the driver draw
+    /// the same line, and so the map still works when a routing provider is
+    /// throttled.
+    route: {
+      polyline: { type: String, default: '' },
+      distanceMeters: { type: Number, default: 0 },
+      durationMinutes: { type: Number, default: 0 },
+      provider: { type: String, default: '' },
+      fetchedAt: { type: Date, default: null },
     },
     estimatedDistanceMeters: {
       type: Number,

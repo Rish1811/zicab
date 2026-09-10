@@ -1,28 +1,41 @@
+import { useLanding } from '../landingContentContext';
+import useEnquiryForm from '../useEnquiryForm';
+import { LANDING_ICONS } from '../useLandingContent';
 import React, { useRef, useState } from 'react';
 import { Car, DollarSign, Award, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
 
 const Partner = () => {
+  const { partnerPage } = useLanding();
+  const partnerPerks = (partnerPage.perks || []).map((item) => ({
+    ...item,
+    icon: LANDING_ICONS[item.icon] || Award,
+  }));
+
   const pageRef = useRef(null);
   useReveal(pageRef);
 
-  const [submitted, setSubmitted] = useState(false);
+  const { submitted, sending, error, submit } = useEnquiryForm('partner');
   const [vehicleType, setVehicleType] = useState('Sedan (Dzire/Etios)');
   const [city, setCity] = useState('Bengaluru');
   const [ownerName, setOwnerName] = useState('');
   const [mobile, setMobile] = useState('');
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    setSubmitted(true);
+    submit(e, {
+      name: ownerName,
+      phone: mobile,
+      city,
+      vehicleCategory: vehicleType,
+    });
   };
 
   return (
     <div className="partner-page animate-fade-in" ref={pageRef}>
       <div className="page-hero">
         <div className="container">
-          <span className="page-tag">Attach Cabs & Earn</span>
-          <h1 className="page-title">Partner With ZI CAB Fleet Network</h1>
+          <span className="page-tag">{partnerPage.tag}</span>
+          <h1 className="page-title">{partnerPage.title}</h1>
           <p className="page-subtitle">
             Attach your commercial vehicle to India's fastest growing premium cab platform and earn up to ₹90,000/month per vehicle.
           </p>
@@ -33,58 +46,39 @@ const Partner = () => {
         <div className="container partner-grid">
           {/* Left Info & Earnings Estimator */}
           <div className="partner-info">
-            <h2 className="section-title">Why Fleet Owners Trust ZI CAB</h2>
+            <h2 className="section-title">{partnerPage.perksHeading}</h2>
             
             <div className="partner-perks-grid" data-reveal-stagger>
-              <div className="perk-card">
-                <DollarSign size={28} color="#00BBA9" />
-                <h4>Weekly Direct Payouts</h4>
-                <p>Transparent weekly payments straight to your bank account with zero hidden deductions.</p>
-              </div>
-
-              <div className="perk-card">
-                <Car size={28} color="#00BBA9" />
-                <h4>High Return Trips</h4>
-                <p>Guaranteed outstation and airport rides minimize empty dry runs on highway routes.</p>
-              </div>
-
-              <div className="perk-card">
-                <Award size={28} color="#00BBA9" />
-                <h4>Low Commission Rates</h4>
-                <p>Keep more of your hard-earned fare with our industry-best low commission structure.</p>
-              </div>
-
-              <div className="perk-card">
-                <ShieldCheck size={28} color="#00BBA9" />
-                <h4>24x7 Fleet Support</h4>
-                <p>Dedicated fleet manager helpline for trip dispatch, fastag support, and emergency help.</p>
-              </div>
+              {partnerPerks.map((perk, index) => {
+                const PerkIcon = perk.icon;
+                return (
+                  <div className="perk-card" key={index}>
+                    <PerkIcon size={28} color="#00BBA9" />
+                    <h4>{perk.title}</h4>
+                    <p>{perk.desc}</p>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Potential Earnings Table */}
             <div className="earnings-box mt-8">
-              <h3 className="earnings-title">Est. Monthly Earnings Calculator</h3>
+              <h3 className="earnings-title">{partnerPage.earningsHeading}</h3>
               <div className="earnings-table">
-                <div className="e-row">
-                  <span>Sedan (Dzire / Etios)</span>
-                  <span className="e-val">₹45,000 - ₹60,000 / mo</span>
-                </div>
-                <div className="e-row">
-                  <span>MUV (Ertiga / XL6)</span>
-                  <span className="e-val">₹60,000 - ₹75,000 / mo</span>
-                </div>
-                <div className="e-row">
-                  <span>Premium SUV (Innova Crysta)</span>
-                  <span className="e-val">₹75,000 - ₹95,000 / mo</span>
-                </div>
+                {(partnerPage.earnings || []).map((row, index) => (
+                  <div className="e-row" key={index}>
+                    <span>{row.label}</span>
+                    <span className="e-val">{row.value}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
           {/* Right Attachment Form */}
           <div className="partner-form-card" data-reveal>
-            <h3 className="form-card-title">Attach Your Cab Today</h3>
-            <p className="form-card-sub">Fill the form below to receive callback within 30 minutes.</p>
+            <h3 className="form-card-title">{partnerPage.formTitle}</h3>
+            <p className="form-card-sub">{partnerPage.formSubtitle}</p>
 
             {submitted ? (
               <div className="form-success text-center py-6">
@@ -139,8 +133,11 @@ const Partner = () => {
                   </select>
                 </div>
 
-                <button type="submit" className="btn btn-teal w-full mt-4">
-                  Submit Attachment Form <ArrowRight size={16} />
+                {error && (
+                  <p style={{ color: '#e11d48', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{error}</p>
+                )}
+                <button type="submit" className="btn btn-teal w-full mt-4" disabled={sending}>
+                  {sending ? 'Sending\u2026' : 'Submit Attachment Form'} <ArrowRight size={16} />
                 </button>
               </form>
             )}

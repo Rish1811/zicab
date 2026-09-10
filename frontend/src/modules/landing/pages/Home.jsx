@@ -14,7 +14,8 @@ import {
   Briefcase, Building2, ShoppingBag, Smartphone, QrCode, ChevronRight,
   Star, BadgeCheck, Megaphone, Bike
 } from 'lucide-react';
-import useLandingContent from '../useLandingContent';
+import { useLanding } from '../landingContentContext';
+import useAppModules from '../useAppModules';
 import useVehicleTypes from '../useVehicleTypes';
 
 const initials = (name) =>
@@ -22,14 +23,12 @@ const initials = (name) =>
 
 const Home = ({ openBookingModal, setActiveTab }) => {
   const pageRef = useRef(null);
-  const vehicleRail = useRef(null);
   const driverRail = useRef(null);
 
   useReveal(pageRef);
   useScrollFx(pageRef);
   useMagnetic(pageRef);
   useTilt(pageRef);
-  useAutoScroll(vehicleRail);
   useAutoScroll(driverRail, { interval: 3800 });
 
   /**
@@ -99,7 +98,10 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
   // Photos live in Frontend/public/vehicles/ — see that folder's README + ATTRIBUTION
   // before swapping any of them out.
-  const fallbackVehicles = [
+  // Hero badges store an icon name; components cannot be serialised.
+const HERO_BADGE_ICONS = { ShieldCheck, Navigation, Headphones, Wallet };
+
+const fallbackVehicles = [
     {
       name: 'Auto Rickshaw',
       type: 'Auto',
@@ -149,7 +151,11 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
   // All page content comes from the CMS, falling back to the bundled copy so the
   // page is never blank while the request is in flight or if it fails.
-  const { services, valueProps, drivers, partners, launchCities, contact } = useLandingContent();
+  const { services, valueProps, drivers, partners, launchCities, contact, brand, hero } = useLanding();
+  // The app's own module list is the source of truth for what ZI CAB sells;
+  // the CMS list is only a fallback for when it cannot be reached.
+  const appModules = useAppModules();
+  const serviceCards = appModules.length ? appModules : services;
   const { vehicles } = useVehicleTypes(fallbackVehicles);
 
 
@@ -163,47 +169,42 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           {/* Left Content */}
           <div className="hero-left" data-hero-exit>
             {/* each word gets a clipping mask so it can rise into view */}
+            {/* Split per word so each keeps its own clipping mask and rise-in
+                animation; the copy itself comes from the CMS. */}
             <h1 className="hero-title">
-              <span className="hero-line">
-                <span className="hero-word">Your</span>{' '}
-                <span className="hero-word">Ride.</span>
-              </span>
-              <span className="hero-line">
-                <span className="hero-word teal-text">Our</span>{' '}
-                <span className="hero-word teal-text">Priority.</span>
-              </span>
+              {[hero.titleLine1, hero.titleLine2].map((line, lineIndex) => (
+                <span className="hero-line" key={lineIndex}>
+                  {String(line || '').split(/\s+/).filter(Boolean).map((word, wordIndex, words) => (
+                    <span key={wordIndex}>
+                      <span className={lineIndex === 1 ? 'hero-word teal-text' : 'hero-word'}>{word}</span>
+                      {wordIndex < words.length - 1 ? ' ' : null}
+                    </span>
+                  ))}
+                </span>
+              ))}
             </h1>
-            <p className="hero-subtitle">
-              Premium rides, verified drivers and 24x7 support with our dedicated ride coordinators.
-            </p>
+            <p className="hero-subtitle">{hero.subtitle}</p>
 
             <div className="hero-cta-group">
               <button className="btn btn-teal hero-btn-main" data-magnetic onClick={openBookingModal}>
-                Book a Ride <ArrowRight size={18} />
+                {hero.primaryCta} <ArrowRight size={18} />
               </button>
               <button className="btn btn-outline-light hero-btn-app" onClick={() => setActiveTab('contact')}>
-                <Smartphone size={18} /> Download App
+                <Smartphone size={18} /> {hero.secondaryCta}
               </button>
             </div>
 
             {/* Trust Badges */}
             <div className="hero-trust-badges">
-              <div className="badge-item">
-                <ShieldCheck size={16} color="#00BBA9" />
-                <span>Verified Drivers</span>
-              </div>
-              <div className="badge-item">
-                <Navigation size={16} color="#00BBA9" />
-                <span>Live Tracking</span>
-              </div>
-              <div className="badge-item">
-                <Headphones size={16} color="#00BBA9" />
-                <span>24x7 Support</span>
-              </div>
-              <div className="badge-item">
-                <Wallet size={16} color="#00BBA9" />
-                <span>Secure Payments</span>
-              </div>
+              {(hero.badges || []).map((badge, index) => {
+                const BadgeIcon = HERO_BADGE_ICONS[badge.icon] || ShieldCheck;
+                return (
+                  <div className="badge-item" key={index}>
+                    <BadgeIcon size={16} color="#00BBA9" />
+                    <span>{badge.label}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -301,18 +302,25 @@ const Home = ({ openBookingModal, setActiveTab }) => {
           </div>
 
           <div className="services-grid" data-reveal-stagger>
-            {services.map((s) => {
-              const IconComp = s.icon;
+            {serviceCards.map((s) => {
+              // Modules carry a real icon image; the CMS fallback carries a
+              // lucide component instead.
+              const IconComp = typeof s.icon === 'function' ? s.icon : null;
               return (
-                <div 
-                  key={s.id} 
+                <div
+                  key={s.id}
                   className="service-card"
                   onClick={() => setActiveTab('services')}
                 >
                   <div className="service-icon-wrapper">
-                    <IconComp size={22} color="#0B1F3A" />
+                    {s.image ? (
+                      <img src={s.image} alt="" className="service-icon-img" loading="lazy" />
+                    ) : IconComp ? (
+                      <IconComp size={22} color="#0B1F3A" />
+                    ) : null}
                   </div>
                   <h3 className="service-card-title">{s.title}</h3>
+                  {s.desc && <p className="service-card-desc">{s.desc}</p>}
                 </div>
               );
             })}
@@ -357,7 +365,12 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             </div>
           </div>
 
-          <div className="vehicles-grid snap-row" data-reveal-stagger ref={vehicleRail}>
+          {/* Two identical tracks: the first slides left by exactly its own
+              width plus one gap, at which point the second sits where the
+              first began, so the loop has no visible seam and no end. */}
+          <div className="vehicles-marquee">
+            {[0, 1].map((pass) => (
+            <div className="vehicles-track" key={pass} aria-hidden={pass === 1}>
             {vehicles.map((v, i) => (
               <div key={i} className="vehicle-card" data-tilt>
                 <div className="vehicle-img-container" data-img-parallax>
@@ -367,14 +380,20 @@ const Home = ({ openBookingModal, setActiveTab }) => {
                 <div className="vehicle-card-body">
                   <h3 className="vehicle-name">{v.name}</h3>
                   <div className="vehicle-specs">
-                    <span><Users size={14} /> {v.seats}</span>
-                    <span><Briefcase size={14} /> {v.bags}</span>
+                    {v.seats && <span><Users size={14} /> {v.seats}</span>}
+                    {v.bags && <span><Briefcase size={14} /> {v.bags}</span>}
                   </div>
 
                   <div className="vehicle-price-row">
+                    {/* No price row at all when the vehicle has no configured
+                        rate — better than showing an empty or invented one. */}
                     <div className="price-tag">
-                      <span className="price-num">{v.price}</span>
-                      <span className="price-unit">{v.unit}</span>
+                      {v.price ? (
+                        <>
+                          <span className="price-num">{v.price}</span>
+                          <span className="price-unit">{v.unit}</span>
+                        </>
+                      ) : null}
                     </div>
                     <button 
                       className="btn btn-outline-teal btn-sm"
@@ -385,6 +404,8 @@ const Home = ({ openBookingModal, setActiveTab }) => {
                   </div>
                 </div>
               </div>
+            ))}
+            </div>
             ))}
           </div>
         </div>
@@ -513,18 +534,32 @@ const Home = ({ openBookingModal, setActiveTab }) => {
               <p className="app-banner-desc">Book rides on the go, anytime, anywhere.</p>
 
               <div className="app-store-btns flex gap-4 mt-6">
+                {/* Falls back to the placeholder icon until a QR image is uploaded. */}
                 <div className="qr-box">
-                  <QrCode size={40} color="#0B1F3A" />
+                  {brand.playStoreQr || brand.appStoreQr ? (
+                    <img
+                      src={brand.playStoreQr || brand.appStoreQr}
+                      alt="Scan to download the app"
+                      style={{ width: 64, height: 64, objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <QrCode size={40} color="#0B1F3A" />
+                  )}
                 </div>
                 <div className="store-btns-column">
-                  <div className="store-btn">
-                    <span className="st-sub">GET IT ON</span>
-                    <span className="st-name">Google Play</span>
-                  </div>
-                  <div className="store-btn">
-                    <span className="st-sub">Download on the</span>
-                    <span className="st-name">App Store</span>
-                  </div>
+                  {[
+                    { url: brand.playStoreUrl, sub: 'GET IT ON', name: 'Google Play' },
+                    { url: brand.appStoreUrl, sub: 'Download on the', name: 'App Store' },
+                  ].map((badge) => {
+                    const Tag = badge.url ? 'a' : 'div';
+                    const props = badge.url ? { href: badge.url, target: '_blank', rel: 'noreferrer' } : {};
+                    return (
+                      <Tag key={badge.name} className="store-btn" {...props}>
+                        <span className="st-sub">{badge.sub}</span>
+                        <span className="st-name">{badge.name}</span>
+                      </Tag>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -762,6 +797,20 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             gap: 12px;
           }
 
+          .service-icon-img {
+            width: 26px;
+            height: 26px;
+            object-fit: contain;
+          }
+
+          .service-card-desc {
+            margin-top: 4px;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #64748B;
+            text-align: center;
+          }
+
           .service-card {
             background: var(--bg-raised);
             border: 1px solid var(--border-light);
@@ -873,10 +922,79 @@ const Home = ({ openBookingModal, setActiveTab }) => {
               var(--bg-light);
           }
 
-          .vehicles-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 20px;
+          /* Continuous, endless marquee — same approach as the partner strip.
+             The catalog outgrew a single screen (eighteen vehicles five-across
+             stacked into four rows), and a scroll-snap rail only stepped a card
+             at a time and stopped at the end. */
+          .vehicles-marquee {
+            display: flex;
+            --marquee-gap: 20px;
+            gap: var(--marquee-gap);
+            overflow: hidden;
+            mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+            -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+          }
+
+          .vehicles-track {
+            display: flex;
+            gap: var(--marquee-gap);
+            flex-shrink: 0;
+            animation: zc-marqueeScroll 42s linear infinite;
+          }
+
+          .vehicles-marquee:hover .vehicles-track {
+            animation-play-state: paused;
+          }
+
+          .vehicles-track > .vehicle-card {
+            flex: 0 0 246px;
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .vehicles-track {
+              animation: none;
+            }
+            .vehicles-marquee {
+              overflow-x: auto;
+            }
+          }
+
+          /* On a touch screen a moving row is the wrong trade: you cannot swipe
+             an overflow:hidden marquee, and Book Now becomes a target that
+             slides out from under your thumb. Touch devices get a swipeable
+             snap rail instead, and the duplicate track is dropped since there is
+             nothing to loop. Pointer devices keep the continuous marquee. */
+          @media (hover: none), (max-width: 768px) {
+            .vehicles-marquee {
+              overflow-x: auto;
+              scroll-snap-type: x mandatory;
+              -webkit-overflow-scrolling: touch;
+              scrollbar-width: none;
+              mask-image: none;
+              -webkit-mask-image: none;
+              /* bleed to the gutter so the next card peeks in and the row reads
+                 as swipeable without a hint label */
+              margin: 0 -16px;
+              padding: 2px 16px 12px;
+            }
+
+            .vehicles-marquee::-webkit-scrollbar {
+              display: none;
+            }
+
+            .vehicles-track {
+              animation: none;
+            }
+
+            .vehicles-track[aria-hidden='true'] {
+              display: none;
+            }
+
+            .vehicles-track > .vehicle-card {
+              scroll-snap-align: start;
+              flex-basis: 72vw;
+              max-width: 260px;
+            }
           }
 
           .vehicle-card {
@@ -1221,7 +1339,10 @@ const Home = ({ openBookingModal, setActiveTab }) => {
              track width, so the second lands where the first started — seamless. */
           .partners-marquee {
             display: flex;
-            gap: 20px;
+            /* the keyframe shifts by one track width plus this gap, so the two
+               must always agree — keep them tied through the variable */
+            --marquee-gap: 20px;
+            gap: var(--marquee-gap);
             overflow: hidden;
             mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
             -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
@@ -1229,13 +1350,18 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
           .partners-track {
             display: flex;
-            gap: 20px;
+            gap: var(--marquee-gap);
             flex-shrink: 0;
-            animation: zc-zc-partnerScroll 32s linear infinite;
+            animation: zc-marqueeScroll 32s linear infinite;
           }
 
           .partners-marquee:hover .partners-track {
             animation-play-state: paused;
+          }
+
+          /* decorative only: never intercept a swipe */
+          .partners-marquee {
+            pointer-events: none;
           }
 
           
@@ -1371,8 +1497,8 @@ const Home = ({ openBookingModal, setActiveTab }) => {
 
           /* RESPONSIVE MEDIA QUERIES */
           @media (max-width: 1200px) {
-            .vehicles-grid {
-              grid-template-columns: repeat(3, 1fr);
+            .vehicles-track > .vehicle-card {
+              flex-basis: 210px;
             }
           }
 
@@ -1386,7 +1512,7 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             .services-grid {
               grid-template-columns: repeat(4, 1fr);
             }
-            .vehicles-grid, .why-us-grid, .drivers-grid {
+            .why-us-grid, .drivers-grid {
               grid-template-columns: repeat(2, 1fr);
             }
             .advertise-teaser-inner {
@@ -1449,11 +1575,11 @@ const Home = ({ openBookingModal, setActiveTab }) => {
             .services-grid {
               grid-template-columns: repeat(2, 1fr);
             }
-            .vehicles-grid, .why-us-grid, .drivers-grid, .cities-grid {
+            .why-us-grid, .drivers-grid, .cities-grid {
               grid-template-columns: 1fr;
             }
-            .partners-marquee, .partners-track {
-              gap: 12px;
+            .partners-marquee, .vehicles-marquee {
+              --marquee-gap: 12px;
             }
             
             .partner-logo-item {
@@ -1506,6 +1632,11 @@ const Home = ({ openBookingModal, setActiveTab }) => {
               padding: 34px 0 38px;
             }
             .why-us-grid {
+              gap: 18px;
+            }
+            /* the icon shrinks on mobile, so the row gap has to grow to stop the
+               heading sitting right against it */
+            .why-us-card {
               gap: 14px;
             }
             .why-icon-box {
@@ -1555,12 +1686,14 @@ const Home = ({ openBookingModal, setActiveTab }) => {
       
         }
 
-        @keyframes zc-partnerScroll {
-        to { transform: translateX(calc(-100% - 20px)); }
-        }
-
-        @keyframes zc-partnerScroll {
-        to { transform: translateX(calc(-100% - 12px)); }
+        /* One track width plus the gap, so track two lands exactly where
+           track one started. */
+        /* One track width plus one gap, so the duplicate track lands exactly
+           where the first began. There were previously two blocks with the same
+           name and different offsets, and the partner strip referenced a third
+           name that did not exist — so it never moved at all. */
+        @keyframes zc-marqueeScroll {
+        to { transform: translateX(calc(-100% - var(--marquee-gap))); }
         }
       `}</style>
     </div>

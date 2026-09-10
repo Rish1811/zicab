@@ -1,4 +1,9 @@
 import { Router } from 'express';
+import {
+  getVehicleMapIconImage,
+  getVehicleMapIcons,
+} from '../controllers/vehicleMapIconController.js';
+import { getPublicBanners } from '../../admin/promotions/controllers/promotionsController.js';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticate } from '../../middlewares/authMiddleware.js';
 import {
@@ -69,7 +74,7 @@ import {
   createPoolingBooking,
   getMyPoolingBookings
 } from '../controllers/poolingController.js';
-import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog, getPublicLandingContent } from '../../admin/controllers/adminController.js';
+import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog, getPublicLandingContent, getPublicLegalContent, submitWebsiteEnquiry } from '../../admin/controllers/adminController.js';
 import { getPublicCancellationReasons } from '../../admin/controllers/cancellationReasonController.js';
 import { triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
 
@@ -84,6 +89,15 @@ userRouter.get('/intercity-packages', asyncHandler(getIntercityPackageCatalog));
 userRouter.get('/goods-types', asyncHandler(getGoodsTypes));
 userRouter.get('/vehicle-types', asyncHandler(getPublicVehicleTypeCatalog));
 userRouter.get('/landing-content', asyncHandler(getPublicLandingContent));
+// Marker art for the map. The controller has existed since the marker work
+// landed but was never routed, so both apps 404'd and silently fell back to
+// bundled silhouettes - admin-uploaded vehicle art never reached a map.
+userRouter.get('/vehicle-map-icons', asyncHandler(getVehicleMapIcons));
+userRouter.get('/vehicle-map-icons/:vehicleId/image', asyncHandler(getVehicleMapIconImage));
+// Home-screen promo banners, which were only exposed under /admin, so the
+// app's request 404'd and the carousel stayed empty.
+userRouter.get('/banners', asyncHandler(getPublicBanners));
+userRouter.get('/legal-content', asyncHandler(getPublicLegalContent));
 userRouter.get('/set-prices', asyncHandler(getSetPrices));
 userRouter.get('/zones', asyncHandler(getZones));
 userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));
@@ -107,6 +121,9 @@ userRouter.post('/fcm-token', authenticate(['user']), asyncHandler(saveUserFcmTo
 // Public: booking enquiry from the marketing site. Rate limited because it
 // is unauthenticated and writes a record.
 userRouter.post('/booking-request', loginRateLimit, asyncHandler(submitWebsiteBooking));
+// Public marketing forms. Same rate limit as the booking form - both are
+// unauthenticated and equally worth spamming.
+userRouter.post('/enquiry', loginRateLimit, asyncHandler(submitWebsiteEnquiry));
 userRouter.get('/me', authenticate(['user']), asyncHandler(getCurrentUser));
 userRouter.patch('/me', authenticate(['user']), asyncHandler(updateCurrentUser));
 userRouter.get('/subscriptions/plans', authenticate(['user']), asyncHandler(getAvailableSubscriptionPlans));

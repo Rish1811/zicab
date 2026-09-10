@@ -1,5 +1,6 @@
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { Ride } from '../../user/models/Ride.js';
+import { Vehicle } from '../../admin/models/Vehicle.js';
 import { RIDE_STATUS } from '../../constants/index.js';
 import { resolveTransportDispatchConfig } from '../../services/transportSettingsService.js';
 
@@ -38,6 +39,15 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
     .limit(5)
     .populate('userId', 'name phone countryCode')
     .lean();
+
+  // Batched once for the whole page rather than per ride — mirrors the
+  // socket dispatch path's own single lookup per wave, and these rides can
+  // repeat the same vehicle type across several of them.
+  const vehicleTypeIds = [...new Set(rides.map((r) => r.vehicleTypeId).filter(Boolean).map(String))];
+  const vehicles = vehicleTypeIds.length
+    ? await Vehicle.find({ _id: { $in: vehicleTypeIds } }).select('name').lean()
+    : [];
+  const vehicleNameById = new Map(vehicles.map((v) => [String(v._id), v.name || '']));
 
   const offers = rides
     .filter((ride) => !asIdSet(ride?.dispatchTracking?.rejectedDriverIds).has(driverId))
@@ -79,6 +89,7 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
         estimatedDurationMinutes: ride.estimatedDurationMinutes || 0,
         vehicleTypeId: ride.vehicleTypeId ? String(ride.vehicleTypeId) : null,
         vehicleTypeIds: (ride.dispatchVehicleTypeIds || []).map(String),
+        vehicleLabel: vehicleNameById.get(String(ride.vehicleTypeId || '')) || '',
         vehicleIconType: ride.vehicleIconType || '',
         vehicleIconUrl: ride.vehicleIconUrl || '',
         fare: ride.fare,

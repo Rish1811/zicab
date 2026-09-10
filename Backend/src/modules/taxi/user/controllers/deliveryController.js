@@ -1,4 +1,10 @@
-import { createDeliveryRecord, getActiveDeliveryForIdentity, getDeliveryById, listDeliveriesForIdentity } from '../services/deliveryService.js';
+import {
+  createDeliveryRecord,
+  getActiveDeliveryForIdentity,
+  getDeliveryById,
+  getDeliveryQuote as getDeliveryQuoteBreakdown,
+  listDeliveriesForIdentity,
+} from '../services/deliveryService.js';
 
 export const createDelivery = async (req, res) => {
   const { pickup, drop, pickupAddress, dropAddress, fare, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, parcel } = req.body;
@@ -21,6 +27,17 @@ export const createDelivery = async (req, res) => {
   res.status(201).json({
     success: true,
     data: delivery,
+  });
+};
+
+export const getDeliveryQuote = async (req, res) => {
+  const { vehicleTypeId, pickup, drop, parcel } = req.body;
+
+  const quote = await getDeliveryQuoteBreakdown({ vehicleTypeId, pickup, drop, parcel });
+
+  res.json({
+    success: true,
+    data: quote,
   });
 };
 

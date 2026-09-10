@@ -285,6 +285,16 @@ export const adminService = {
   uploadImage: (image) => api.post('/admin/upload-image', { image }),
 
   /**
+   * Public marketing site content (CMS).
+   * PUT accepts a partial - only the sections present are written.
+   */
+  getWebsiteEnquiries: (params) => api.get('/admin/enquiries', { params }),
+  updateWebsiteEnquiry: (id, payload) => api.patch(`/admin/enquiries/${id}`, payload),
+
+  getLandingContent: () => api.get('/admin/landing-content'),
+  updateLandingContent: (payload) => api.put('/admin/landing-content', payload),
+
+  /**
    * Languages Management (Master)
    */
   getLanguages: (params) => api.get('/admin/languages', { params }),

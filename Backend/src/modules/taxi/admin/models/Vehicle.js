@@ -179,6 +179,14 @@ const vehicleSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    /// App modules this vehicle is offered under, by module id.
+    ///
+    /// Empty means every module, which is what keeps the whole catalog working
+    /// while an admin assigns them one vehicle at a time.
+    app_modules: {
+      type: [String],
+      default: [],
+    },
     supported_other_vehicle_types: {
       type: [ObjectId],
       ref: 'TaxiVehicle',

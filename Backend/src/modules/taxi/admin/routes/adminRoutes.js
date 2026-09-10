@@ -163,6 +163,8 @@ import {
   restoreDeletedDriver,
   permanentlyDeleteDeletedDriver,
   getAdminLandingContent,
+  getWebsiteEnquiries,
+  patchWebsiteEnquiry,
   saveAdminLandingContent,
   getRideRequests,
   rejectUserDeletionRequest,
@@ -459,6 +461,8 @@ adminRouter.get('/admin/safety/alerts', authenticate(['admin']), listSafetyAlert
 adminRouter.patch('/admin/safety/alerts/:id/resolve', authenticate(['admin']), resolveSafetyAlert);
 adminRouter.get('/admin/ongoing-rides', getOngoingRides);
 adminRouter.get('/admin/ride-requests', getRideRequests);
+adminRouter.get('/admin/enquiries', getWebsiteEnquiries);
+adminRouter.patch('/admin/enquiries/:id', patchWebsiteEnquiry);
 adminRouter.get('/admin/landing-content', getAdminLandingContent);
 adminRouter.put('/admin/landing-content', saveAdminLandingContent);
 adminRouter.delete('/admin/ongoing-rides/:id', deleteOngoingRide);
