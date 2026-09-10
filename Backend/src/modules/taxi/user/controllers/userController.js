@@ -35,6 +35,7 @@ import { sendPushNotificationToEntities } from '../../services/pushNotificationS
 import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../services/rentalTrackingService.js';
 import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
 import { listServiceStores, listSetPrices, listZones } from '../../admin/services/adminService.js';
+import { findZoneByPickup } from '../../services/matchingService.js';
 import {
   findActiveEmployeeByCode,
   normalizeEmployeeCode,
@@ -4415,9 +4416,126 @@ export const listMyBusBookings = async (req, res) => {
   });
 };
 
+/// The rider's catalog is one row per vehicle, chosen the way the fare is.
+///
+/// Mirrors the cascade in `resolveSetPriceForRide`: a tariff for this exact
+/// zone wins, then one for the zone's service location, then a global one.
+/// Ranking here rather than querying per vehicle keeps this a single read.
+///
+/// A row carrying its own zone can only match that zone. Otherwise a tariff
+/// written for Mysuru would price a Bangalore trip merely because both sit in
+/// the same service location.
+const pickTariffPerVehicle = (rows, zoneId, serviceLocationId, transportType) => {
+  // Zone precedence, mirroring the cascade in `resolveSetPriceForRide`. A row
+  // carrying its own zone can only apply to that zone: otherwise a tariff
+  // written for Mysuru would price a Bangalore trip merely because the two
+  // share a service location.
+  const zoneRank = (row) => {
+    if (zoneId && row.zone_id === zoneId) return 0;
+    if (serviceLocationId && !row.zone_id && row.service_location_id === serviceLocationId) return 1;
+    if (!row.zone_id) return 2;
+    return null;
+  };
+
+  const best = new Map();
+
+  for (const row of rows) {
+    if (!row.type_id) continue;
+    if (row.status && row.status !== 'active') continue;
+    if (row.active === 0) continue;
+
+    // Transport type narrows the catalog only when the caller names one. Rides
+    // and parcels read the same endpoint, so filtering to taxi by default would
+    // strip every parcel vehicle out of the delivery screen.
+    let transportRank = 0;
+    if (transportType) {
+      if (row.transport_type === transportType) transportRank = 0;
+      else if (row.transport_type === 'both') transportRank = 1;
+      else continue;
+    }
+
+    const zoneScore = zoneRank(row);
+    if (zoneScore === null) continue;
+
+    // One tariff per vehicle. With no transport type named, a vehicle offered
+    // for both rides and parcels keeps a row for each, because the two are
+    // priced separately.
+    const key = transportType ? row.type_id : `${row.type_id}:${row.transport_type}`;
+    const score = zoneScore * 2 + transportRank;
+    const incumbent = best.get(key);
+    if (!incumbent || score < incumbent.score) best.set(key, { score, row });
+  }
+
+  return [...best.values()].map((entry) => entry.row);
+};
+
+/// Tariff catalog for the rider apps.
+///
+/// Two things separate this from the admin listing, and both were mispricing
+/// every quote in the app:
+///
+///   - It is never paginated. The admin default of ten rows truncated a
+///     sixteen-row catalog, so six vehicle types arrived with no tariff at all
+///     and the app quoted them at an unrelated vehicle's rate.
+///   - It is scoped to one zone. The app takes the first row matching a
+///     vehicle, so returning every zone's rows let whichever zone was edited
+///     last price the whole country - a Bangalore rider was quoted Indore's
+///     tariff and then charged Bangalore's.
+///
+/// Pass the pickup as `lat`/`lng` (or a `zone_id` outright) to get the tariffs
+/// that trip will actually be billed at. Callers that send neither still get
+/// the full unscoped list, so older app builds keep working.
 export const getSetPrices = asyncHandler(async (req, res) => {
-  const data = await listSetPrices(req.query || {}, null);
-  res.status(200).json({ success: true, ...data });
+  const query = { ...(req.query || {}) };
+  const latitude = Number(query.lat ?? query.latitude);
+  const longitude = Number(query.lng ?? query.longitude);
+  const transportType = String(query.transport_type || '').trim().toLowerCase() || null;
+
+  // A catalog, not a browsable table: a client that receives only part of it
+  // cannot price the vehicles it is already showing.
+  if (!query.limit && !query.per_page) {
+    query.limit = 100;
+  }
+
+  let zone = null;
+  const requestedZoneId = String(query.zone_id || '').trim();
+
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    zone = await findZoneByPickup([longitude, latitude]);
+  }
+
+  // The listing's own zone filter is an exact match, which would drop the
+  // service-location and global rows the cascade needs to fall back to.
+  delete query.zone_id;
+  // Matched exactly by the listing, which would discard every row marked
+  // 'both'; ranked here instead.
+  delete query.transport_type;
+  delete query.lat;
+  delete query.lng;
+  delete query.latitude;
+  delete query.longitude;
+
+  const data = await listSetPrices(query, null);
+
+  const zoneId = zone ? String(zone._id) : (requestedZoneId || null);
+  if (!zoneId) {
+    res.status(200).json({ success: true, ...data });
+    return;
+  }
+
+  const serviceLocationId = zone?.service_location_id
+    ? String(zone.service_location_id._id || zone.service_location_id)
+    : null;
+
+  const results = pickTariffPerVehicle(data.results, zoneId, serviceLocationId, transportType);
+
+  res.status(200).json({
+    success: true,
+    ...data,
+    results,
+    zone_id: zoneId,
+    zone_name: zone?.name || null,
+  });
 });
 
 export const getZones = asyncHandler(async (req, res) => {
