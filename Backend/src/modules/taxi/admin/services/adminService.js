@@ -68,7 +68,7 @@ import { buildRentalTrackingSnapshot, listActiveRentalTrackingBookings } from '.
 import { sendEmail } from '../../services/mailService.js';
 import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
 import { signAccessToken } from '../../services/tokenService.js';
-import { applyPriceHikeToSetPrice, getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
+import { getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
 import { PriceHike } from '../models/PriceHike.js';
 import {
   ADMIN_PERMISSIONS,
@@ -2778,6 +2778,9 @@ const serializeDriverListItem = (driver) => ({
   wallet_balance: Number(driver.wallet?.balance || 0),
   latitude: Number(driver.location?.coordinates?.[1] ?? null),
   longitude: Number(driver.location?.coordinates?.[0] ?? null),
+  // Which way the vehicle is pointing, so the admin map can orient the
+  // marker instead of drawing every driver facing north.
+  heading: driver.heading ?? null,
   approve: Boolean(driver.approve),
   status: driver.status || (driver.approve ? 'approved' : 'pending'),
   active: driver.approve !== false && String(driver.status || '').toLowerCase() !== 'inactive',
@@ -6652,6 +6655,36 @@ export const listPublicVehicleCatalog = async () => {
     .sort({ createdAt: -1 })
     .lean();
 
+  // Per-km rate for the public fleet listing. Ride fares live in SetPrice and
+  // vary by zone, so the lowest active rate is used as a "from" figure; delivery
+  // vehicles price from their own distance config instead. Without this the
+  // catalog carries no price at all, and the website was filling the gap with a
+  // number picked by list position.
+  const ridePriceRows = await SetPrice.aggregate([
+    {
+      $match: {
+        pricing_scope: 'ride',
+        status: 'active',
+        active: 1,
+        vehicle_type: { $ne: null },
+        price_per_distance: { $gt: 0 },
+      },
+    },
+    {
+      $group: {
+        _id: '$vehicle_type',
+        perKm: { $min: '$price_per_distance' },
+        maxPerKm: { $max: '$price_per_distance' },
+      },
+    },
+  ]);
+  const ridePerKm = new Map(
+    ridePriceRows.map((row) => [
+      String(row._id),
+      { perKm: Number(row.perKm) || 0, varies: Number(row.maxPerKm) > Number(row.perKm) },
+    ]),
+  );
+
   const results = items.map((item) => ({
     id: String(item._id),
     _id: item._id,
@@ -6667,6 +6700,18 @@ export const listPublicVehicleCatalog = async () => {
     service_tax: normalizeDeliveryServiceTax(item.service_tax),
     ...normalizeVehicleCommissionConfig(item),
     capacity: Number(item.capacity || 0),
+    // 0 means "no price configured" — callers should omit the price rather than
+    // substitute one.
+    price_per_km:
+      item.transport_type === 'delivery'
+        ? Number(item.delivery_distance_pricing?.distance_price || 0)
+        : ridePerKm.get(String(item._id))?.perKm || 0,
+    // Ride fares are set per zone, so a single figure is a "from" price whenever
+    // the zones disagree. Delivery prices come from one per-vehicle config.
+    price_per_km_varies:
+      item.transport_type === 'delivery'
+        ? false
+        : Boolean(ridePerKm.get(String(item._id))?.varies),
     image: item.image || '',
     map_icon: item.map_icon || item.icon || item.image || '',
     status: item.status ?? 1,
@@ -7135,19 +7180,26 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
   const from = total === 0 ? 0 : (safePage - 1) * safeLimit + 1;
   const to = total === 0 ? 0 : Math.min((safePage - 1) * safeLimit + pagedRows.length, total);
 
-  // Apps compute the fare client-side from these numbers, so the hike is applied
-  // here — the one place every client reads pricing from. Admin callers are
-  // excluded on purpose: the price management screens must show and edit the
-  // base fare, or a hike would be baked in permanently on the next save.
-  const hikeMultiplier = currentAdmin ? 1 : await getActivePriceHikeMultiplier();
-  const withHike = (row) => applyPriceHikeToSetPrice(row, hikeMultiplier);
+  // The active hike is reported here but deliberately not applied.
+  //
+  // It used to be multiplied into these rows for every non-admin caller, on
+  // the reasoning that clients price the fare from them. But the fare a rider
+  // is actually charged comes from resolveSetPriceForRide, which never applied
+  // it — so the 2x hike configured in production doubled every quote in the
+  // app while the trip still billed at the base tariff. Quote and charge have
+  // to come from the same number, and the base tariff is the one that settles
+  // the bill.
+  //
+  // Wiring the hike into the fare path is what would make surge pricing real.
+  // Until that happens, applying it here only misquotes the rider.
+  const hikeMultiplier = await getActivePriceHikeMultiplier();
 
   return {
-    results: pagedRows.map((row) => withHike(row.result)),
+    results: pagedRows.map((row) => row.result),
     price_hike_multiplier: hikeMultiplier,
     paginator: {
       ...paginated.paginator,
-      data: pagedRows.map((row) => withHike(row.paginatorItem)),
+      data: pagedRows.map((row) => row.paginatorItem),
       from,
       to,
     }
@@ -7328,6 +7380,7 @@ export const createSetPrice = async (payload, currentAdmin = null) => {
     status: payload.status || 'active',
   });
 
+  publicVehicleCatalogCache = { value: null, expiresAt: 0 };
   return setPrice.toObject();
 };
 
@@ -7468,6 +7521,7 @@ export const updateSetPrice = async (id, payload, currentAdmin = null) => {
   }
 
   await setPrice.save();
+  publicVehicleCatalogCache = { value: null, expiresAt: 0 };
   return setPrice.toObject();
 };
 
@@ -7484,6 +7538,7 @@ export const deleteSetPrice = async (id, currentAdmin = null) => {
   }
   const deleted = await SetPrice.findByIdAndDelete(id);
   if (!deleted) throw new ApiError(404, 'Set Price not found');
+  publicVehicleCatalogCache = { value: null, expiresAt: 0 };
   return true;
 };
 
