@@ -243,6 +243,18 @@ export const createRateLimitMiddleware = ({
   };
 };
 
+/// Routing is billed per call by Google, so this is capped tighter than a
+/// plain read would be. A live trip needs very few: the route is cached
+/// server-side and a reroute only fires after ten seconds of sustained
+/// deviation. The limit exists so a leaked token cannot run up a bill.
+export const routeRateLimit = createRateLimitMiddleware({
+  scope: 'route',
+  max: 60,
+  windowMs: 5 * 60 * 1000,
+  modes: ['ip'],
+  message: 'Too many route requests. Please try again shortly.',
+});
+
 export const otpSendRateLimit = createRateLimitMiddleware({
   scope: 'otp_send',
   max: 5,

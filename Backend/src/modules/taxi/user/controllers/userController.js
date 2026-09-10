@@ -36,6 +36,8 @@ import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../ser
 import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
 import { listServiceStores, listSetPrices, listZones } from '../../admin/services/adminService.js';
 import { findZoneByPickup } from '../../services/matchingService.js';
+import { resolveRideRoute } from '../../services/routeService.js';
+import { getOrLoadCachedValue } from '../../../../utils/cache.js';
 import {
   findActiveEmployeeByCode,
   normalizeEmployeeCode,
@@ -4536,6 +4538,78 @@ export const getSetPrices = asyncHandler(async (req, res) => {
     zone_id: zoneId,
     zone_name: zone?.name || null,
   });
+});
+
+/// Reads a "lat,lng" query value into GeoJSON [lng, lat] order.
+const parseLatLng = (raw) => {
+  const parts = String(raw || '').split(',');
+  if (parts.length !== 2) return null;
+  const latitude = Number(parts[0].trim());
+  const longitude = Number(parts[1].trim());
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  return [longitude, latitude];
+};
+
+/// About a hundred metres. A driver creeping along a road would otherwise bill
+/// a fresh Directions call every few seconds for a route that is materially
+/// the same one.
+const ROUTE_CACHE_PRECISION = 3;
+const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const roundForCache = (coordinates) =>
+  coordinates.map((value) => value.toFixed(ROUTE_CACHE_PRECISION)).join(',');
+
+/// Road route between two points, for the apps' maps.
+///
+/// Both apps used to call the public OSRM demo server directly. It is
+/// unauthenticated, rate-limited, and its usage policy forbids production
+/// traffic - and when it throttled, the rider app fell back to drawing a
+/// synthetic L-shaped path that follows no road at all. Rider and driver also
+/// fetched independently, so they could draw different routes for one trip.
+///
+/// Serving it here gives one provider, the account's own Directions key, a
+/// shared cache, and the same polyline for everyone. Authenticated because
+/// each miss costs money.
+export const getRoute = asyncHandler(async (req, res) => {
+  const origin = parseLatLng(req.query.origin);
+  const destination = parseLatLng(req.query.destination);
+
+  if (!origin || !destination) {
+    throw new ApiError(400, 'origin and destination are required, each as "lat,lng"');
+  }
+
+  const stops = String(req.query.waypoints || '')
+    .split('|')
+    .filter(Boolean)
+    .map(parseLatLng)
+    .filter(Boolean)
+    .slice(0, 8);
+
+  const cacheKey = [
+    'cache:route',
+    roundForCache(origin),
+    roundForCache(destination),
+    stops.map(roundForCache).join('|') || 'direct',
+  ].join(':');
+
+  const route = await getOrLoadCachedValue(cacheKey, {
+    ttlMs: ROUTE_CACHE_TTL_MS,
+    load: () => resolveRideRoute({
+      pickupCoords: origin,
+      dropCoords: destination,
+      stops,
+    }),
+  });
+
+  if (!route?.polyline) {
+    // 503, not 502: both providers being unreachable is a temporary condition
+    // and the caller should keep whatever line it already has rather than
+    // treating this as a permanent failure.
+    throw new ApiError(503, 'No route provider is reachable right now');
+  }
+
+  res.status(200).json({ success: true, data: route });
 });
 
 export const getZones = asyncHandler(async (req, res) => {

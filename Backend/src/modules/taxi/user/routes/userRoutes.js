@@ -8,6 +8,7 @@ import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticate } from '../../middlewares/authMiddleware.js';
 import {
   loginRateLimit,
+  routeRateLimit,
   otpSendRateLimit,
   otpVerifyRateLimit,
   paymentOrderRateLimit,
@@ -63,6 +64,7 @@ import {
   getAvailableSubscriptionPlans,
   getMySubscriptions,
   buySubscription,
+  getRoute,
   getSetPrices,
   getZones,
 } from '../controllers/userController.js';
@@ -99,6 +101,9 @@ userRouter.get('/vehicle-map-icons/:vehicleId/image', asyncHandler(getVehicleMap
 userRouter.get('/banners', asyncHandler(getPublicBanners));
 userRouter.get('/legal-content', asyncHandler(getPublicLegalContent));
 userRouter.get('/set-prices', asyncHandler(getSetPrices));
+// Road routes for the maps. Authenticated and rate limited because every
+// cache miss is a billed Directions call.
+userRouter.get('/route', authenticate(['user', 'driver']), routeRateLimit, asyncHandler(getRoute));
 userRouter.get('/zones', asyncHandler(getZones));
 userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));
 userRouter.get('/service-locations', asyncHandler(listPublicServiceLocations));
