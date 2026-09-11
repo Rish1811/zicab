@@ -7,6 +7,7 @@ import { findZoneByPickup } from '../../services/matchingService.js';
 import { Delivery } from '../models/Delivery.js';
 import { Ride } from '../models/Ride.js';
 import { resolveDeliveryTariff } from '../../services/deliveryTariffService.js';
+import { resolveRouteCached } from '../../services/routeService.js';
 import {
   createRideRecord,
   ensureRideParticipantAccess,
@@ -161,16 +162,41 @@ const assertIntracityDelivery = async (pickupCoords, dropCoords) => {
   return knownZone || null;
 };
 
-/// The fare for one parcel, on the tariff for the zone it is picked up in.
+/// Road distance for a parcel fare, or straight-line when no route resolves.
 ///
-/// Distance is straight-line, as it always has been here. What changed is the
-/// tariff: it used to be the vehicle's single price for every city, and is now
-/// whatever resolveDeliveryTariff finds for the pickup zone.
-const computeDeliveryFareBreakdown = ({ tariff = {}, pickupCoords = [], dropCoords = [] }) => {
-  // Computed ahead of the priced check so both branches — priced and
-  // unpriced — can report the actual pickup/drop distance to the caller;
-  // the quote screen shows this even when the vehicle has no fare configured.
-  const distanceKm = Math.max(0, calculateDistanceKm(pickupCoords, dropCoords));
+/// Parcels used to be priced on straight-line distance, which under-charged
+/// every trip by however far the roads wind. The route comes from the same
+/// server-side cache as the map's route line, so the parallel quotes the
+/// vehicle picker makes for one trip cost a single Directions call, and a
+/// booking made soon after reads the same distance it was quoted on.
+///
+/// Falls back rather than refusing: a routing outage should cost accuracy,
+/// never the ability to send a parcel.
+const resolveDeliveryDistance = async (pickupCoords, dropCoords) => {
+  const route = await resolveRouteCached({ origin: pickupCoords, destination: dropCoords })
+    .catch(() => null);
+
+  if (route?.distanceMeters > 0) {
+    return {
+      distanceKm: route.distanceMeters / 1000,
+      durationMinutes: Number(route.durationMinutes) || 0,
+      source: 'road',
+    };
+  }
+
+  return {
+    distanceKm: calculateDistanceKm(pickupCoords, dropCoords),
+    durationMinutes: 0,
+    source: 'straight_line',
+  };
+};
+
+/// The fare for one parcel: the tariff for the zone it is picked up in, over
+/// the distance resolveDeliveryDistance found.
+const computeDeliveryFareBreakdown = ({ tariff = {}, distanceKm: tripKm = 0 }) => {
+  // Reported by both branches — priced and unpriced — since the quote screen
+  // shows the distance even when the vehicle has no fare configured.
+  const distanceKm = Math.max(0, Number(tripKm) || 0);
   const baseDistance = Math.max(0, Number(tariff.baseDistanceKm || 0));
   const serviceTaxPercentage = Math.max(0, Number(tariff.serviceTaxPercentage || 0));
 
@@ -234,8 +260,11 @@ export const createDeliveryRecord = async ({
   const vehicle = vehicleTypeId
     ? await Vehicle.findById(vehicleTypeId).select('delivery_distance_pricing service_tax').lean()
     : null;
-  const tariff = await resolveDeliveryTariff({ vehicle, zone: pricingZone });
-  const fareBreakdown = computeDeliveryFareBreakdown({ tariff, pickupCoords, dropCoords });
+  const [tariff, distance] = await Promise.all([
+    resolveDeliveryTariff({ vehicle, zone: pricingZone }),
+    resolveDeliveryDistance(pickupCoords, dropCoords),
+  ]);
+  const fareBreakdown = computeDeliveryFareBreakdown({ tariff, distanceKm: distance.distanceKm });
 
   // The server's price is the only one a parcel books at. This used to fall
   // back to whatever `fare` the app sent whenever the server could not price
@@ -251,6 +280,12 @@ export const createDeliveryRecord = async ({
     pickupAddress,
     dropAddress,
     fare: fareBreakdown.total,
+    // A fallback only: createRideRecord routes the trip itself and prefers its
+    // own figures, but if that lookup fails the ride still records these.
+    estimatedDistanceMeters: distance.source === 'road'
+      ? Math.round(distance.distanceKm * 1000)
+      : undefined,
+    estimatedDurationMinutes: distance.durationMinutes || undefined,
     // Lets the ride's commission and payment rules find this zone's row too;
     // until now every parcel resolved them with no zone at all.
     zone_id: pricingZone?._id ? String(pricingZone._id) : undefined,
@@ -309,16 +344,20 @@ export const getDeliveryQuote = async ({ vehicleTypeId, pickup, drop, parcel }) 
     throw new ApiError(404, 'Vehicle type not found');
   }
 
-  const tariff = await resolveDeliveryTariff({ vehicle, zone: pricingZone });
-  const fareBreakdown = computeDeliveryFareBreakdown({ tariff, pickupCoords, dropCoords });
+  const [tariff, distance] = await Promise.all([
+    resolveDeliveryTariff({ vehicle, zone: pricingZone }),
+    resolveDeliveryDistance(pickupCoords, dropCoords),
+  ]);
+  const fareBreakdown = computeDeliveryFareBreakdown({ tariff, distanceKm: distance.distanceKm });
 
   return {
     vehicleTypeId: String(vehicleTypeId),
     vehicleName: vehicle.name || '',
     ...fareBreakdown,
-    // Which tariff priced this — 'zone', 'service_location' or 'vehicle' — and
-    // where. The app ignores both; they are what make a wrong price diagnosable.
+    // Which tariff and which distance priced this, and where. The app ignores
+    // them; they are what make a wrong price diagnosable.
     tariffSource: tariff.source,
+    distanceSource: distance.source,
     zoneName: pricingZone?.name || null,
   };
 };

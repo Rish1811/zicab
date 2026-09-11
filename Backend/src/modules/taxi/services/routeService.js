@@ -1,4 +1,5 @@
 import { env } from '../../../config/env.js';
+import { getOrLoadCachedValue } from '../../../utils/cache.js';
 
 /**
  * Road route for a trip, resolved once on the server.
@@ -130,5 +131,51 @@ export const resolveRideRoute = async ({ pickupCoords, dropCoords, stops = [] })
   } catch (error) {
     console.error('route resolution failed', error?.message || error);
     return null;
+  }
+};
+
+/// About a hundred metres. Coordinates this close resolve to one cache entry,
+/// so a driver creeping along a road, or a vehicle picker quoting seven
+/// vehicles for the same trip at once, costs one Directions call.
+const ROUTE_CACHE_PRECISION = 3;
+const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const roundForCache = (coordinates) =>
+  coordinates.map((value) => Number(value).toFixed(ROUTE_CACHE_PRECISION)).join(',');
+
+class NoRouteResolved extends Error {}
+
+/**
+ * resolveRideRoute behind the shared route cache, for callers that ask
+ * repeatedly: the map's route line and parcel pricing.
+ *
+ * A failure is never cached. getOrLoadCachedValue stores whatever its loader
+ * resolves with, null included, so returning null would pin "no route" for the
+ * whole TTL after one slow response; throwing instead leaves nothing behind and
+ * the next caller simply tries again. Concurrent callers still share the one
+ * in-flight lookup either way.
+ *
+ * Coordinates are GeoJSON [lng, lat]. Resolves to the route, or null.
+ */
+export const resolveRouteCached = async ({ origin, destination, stops = [] }) => {
+  const key = [
+    'cache:route',
+    roundForCache(origin),
+    roundForCache(destination),
+    stops.map(roundForCache).join('|') || 'direct',
+  ].join(':');
+
+  try {
+    return await getOrLoadCachedValue(key, {
+      ttlMs: ROUTE_CACHE_TTL_MS,
+      load: async () => {
+        const route = await resolveRideRoute({ pickupCoords: origin, dropCoords: destination, stops });
+        if (!route?.polyline) throw new NoRouteResolved();
+        return route;
+      },
+    });
+  } catch (error) {
+    if (error instanceof NoRouteResolved) return null;
+    throw error;
   }
 };
