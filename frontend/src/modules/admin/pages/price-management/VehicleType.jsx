@@ -229,6 +229,8 @@ const defaultFormData = {
     base_price: '',
     free_distance: '',
     distance_price: '',
+    free_time: '',
+    time_price: '',
   },
   service_tax: '0',
   admin_commission_type_from_driver: '1',
@@ -289,6 +291,8 @@ const normalizeDeliveryDistancePricing = (value = {}) => ({
   base_price: String(value?.base_price ?? ''),
   free_distance: String(value?.free_distance ?? value?.base_distance ?? ''),
   distance_price: String(value?.distance_price ?? ''),
+  free_time: String(value?.free_time ?? ''),
+  time_price: String(value?.time_price ?? ''),
 });
 
 const clampNonNegativeInput = (value) => {
@@ -620,8 +624,10 @@ const VehicleType = ({ mode: propMode }) => {
               base_price: Number(formData.delivery_distance_pricing?.base_price || 0),
               free_distance: Number(formData.delivery_distance_pricing?.free_distance || 0),
               distance_price: Number(formData.delivery_distance_pricing?.distance_price || 0),
-              free_time: 0,
-              time_price: 0,
+              // These used to be hard-coded to 0, so saving a delivery vehicle
+              // for any reason silently switched off its waiting charge.
+              free_time: Number(formData.delivery_distance_pricing?.free_time || 0),
+              time_price: Number(formData.delivery_distance_pricing?.time_price || 0),
             }
           : {
               enabled: false,
@@ -1117,6 +1123,44 @@ const VehicleType = ({ mode: propMode }) => {
                     placeholder="12"
                     disabled={!formData.delivery_distance_pricing?.enabled}
                   />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Free Waiting (min)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.delivery_distance_pricing?.free_time ?? ''}
+                    onChange={(e) => updateForm('delivery_distance_pricing', {
+                      ...formData.delivery_distance_pricing,
+                      free_time: e.target.value,
+                    })}
+                    className={inputClass}
+                    placeholder="5"
+                    disabled={!formData.delivery_distance_pricing?.enabled}
+                  />
+                  <p className="mt-2 text-[11px] font-medium text-slate-400">
+                    Minutes the driver waits at pickup before charging.
+                  </p>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Waiting Charge (per min)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.delivery_distance_pricing?.time_price ?? ''}
+                    onChange={(e) => updateForm('delivery_distance_pricing', {
+                      ...formData.delivery_distance_pricing,
+                      time_price: e.target.value,
+                    })}
+                    className={inputClass}
+                    placeholder="1"
+                    disabled={!formData.delivery_distance_pricing?.enabled}
+                  />
+                  <p className="mt-2 text-[11px] font-medium text-slate-400">
+                    Default for every zone. A zone's row in Set Prices overrides it.
+                  </p>
                 </div>
 
                 <div>
