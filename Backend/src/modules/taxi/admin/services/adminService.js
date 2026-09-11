@@ -6650,7 +6650,12 @@ export const listPublicVehicleCatalog = async () => {
     return publicVehicleCatalogCache.value;
   }
 
-  const items = await Vehicle.find()
+  // Only vehicles the admin has left switched on. This feeds the rider app
+  // and the website's fleet, which showed every vehicle regardless - a
+  // switched-off one sat in the ride list unpriced and unbookable. The admin
+  // listing (listVehicleTypes) still returns them all, so one can be
+  // switched back on.
+  const items = await Vehicle.find({ active: { $ne: false }, status: { $nin: [0, '0'] } })
     .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing service_tax admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active app_modules')
     .sort({ createdAt: -1 })
     .lean();
