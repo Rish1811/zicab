@@ -1479,7 +1479,6 @@ const serializeRentalBookingRequest = (item = {}) => ({
     city: item.serviceLocation?.city || '',
     latitude: item.serviceLocation?.latitude ?? null,
     longitude: item.serviceLocation?.longitude ?? null,
-    heading: driver.heading ?? null,
     distanceKm: item.serviceLocation?.distanceKm ?? null,
   },
   pickupDateTime: item.pickupDateTime || null,
@@ -6652,7 +6651,7 @@ export const listPublicVehicleCatalog = async () => {
   }
 
   const items = await Vehicle.find()
-    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing service_tax admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active')
+    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing service_tax admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active app_modules')
     .sort({ createdAt: -1 })
     .lean();
 
@@ -6697,6 +6696,10 @@ export const listPublicVehicleCatalog = async () => {
     icon_types: item.icon_types || 'car',
     category: item.category || '',
     delivery_category: item.delivery_category || '',
+    // Which home-screen modules (Zi Airport, Zi City Ride, Zi Parcel, ...)
+    // this vehicle is offered under. Empty means every module — see the
+    // schema comment on Vehicle.app_modules for why.
+    app_modules: Array.isArray(item.app_modules) ? item.app_modules.map(String) : [],
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
     service_tax: normalizeDeliveryServiceTax(item.service_tax),
     ...normalizeVehicleCommissionConfig(item),
