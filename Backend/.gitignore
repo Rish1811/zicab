@@ -21,3 +21,6 @@ firebase-service-account.json
 # One-off migration backups written next to the app
 pricing-backup-*.json
 parcel-pricing-backup-*.json
+
+# Local dev server output, never source.
+*.log
