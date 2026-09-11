@@ -5,6 +5,8 @@ import { Vehicle } from '../../admin/models/Vehicle.js';
 import { startDispatchFlow } from '../../services/dispatchService.js';
 import { findZoneByPickup } from '../../services/matchingService.js';
 import { Delivery } from '../models/Delivery.js';
+import { Ride } from '../models/Ride.js';
+import { resolveDeliveryTariff } from '../../services/deliveryTariffService.js';
 import {
   createRideRecord,
   ensureRideParticipantAccess,
@@ -159,36 +161,34 @@ const assertIntracityDelivery = async (pickupCoords, dropCoords) => {
   return knownZone || null;
 };
 
-const computeDeliveryFareBreakdown = ({ vehicle = {}, pickupCoords = [], dropCoords = [] }) => {
-  const pricing = vehicle?.delivery_distance_pricing || {};
-  const enabled = Boolean(
-    pricing?.enabled ||
-    Number(pricing?.base_price || 0) > 0 ||
-    Number(pricing?.distance_price || 0) > 0
-  );
-  // Computed ahead of the enabled check so both branches — priced and
+/// The fare for one parcel, on the tariff for the zone it is picked up in.
+///
+/// Distance is straight-line, as it always has been here. What changed is the
+/// tariff: it used to be the vehicle's single price for every city, and is now
+/// whatever resolveDeliveryTariff finds for the pickup zone.
+const computeDeliveryFareBreakdown = ({ tariff = {}, pickupCoords = [], dropCoords = [] }) => {
+  // Computed ahead of the priced check so both branches — priced and
   // unpriced — can report the actual pickup/drop distance to the caller;
   // the quote screen shows this even when the vehicle has no fare configured.
   const distanceKm = Math.max(0, calculateDistanceKm(pickupCoords, dropCoords));
-  const baseDistance = Math.max(0, Number(pricing?.base_distance ?? pricing?.free_distance ?? 0));
+  const baseDistance = Math.max(0, Number(tariff.baseDistanceKm || 0));
+  const serviceTaxPercentage = Math.max(0, Number(tariff.serviceTaxPercentage || 0));
 
-  if (!enabled) {
+  if (!tariff.enabled) {
     return {
       total: 0,
       subtotal: 0,
-      serviceTaxPercentage: Math.max(0, Number(vehicle?.service_tax || 0)),
+      serviceTaxPercentage: roundCurrency(serviceTaxPercentage),
       serviceTaxAmount: 0,
       distanceKm: roundCurrency(distanceKm),
       baseDistanceKm: roundCurrency(baseDistance),
     };
   }
 
-  const basePrice = Math.max(0, Number(pricing?.base_price || 0));
-  const distancePrice = Math.max(0, Number(pricing?.distance_price || 0));
+  const basePrice = Math.max(0, Number(tariff.basePrice || 0));
+  const distancePrice = Math.max(0, Number(tariff.pricePerKm || 0));
   const extraDistanceKm = Math.max(distanceKm - baseDistance, 0);
-  const distanceCharge = extraDistanceKm * distancePrice;
-  const subtotal = basePrice + distanceCharge;
-  const serviceTaxPercentage = Math.max(0, Number(vehicle?.service_tax || 0));
+  const subtotal = basePrice + extraDistanceKm * distancePrice;
   const serviceTaxAmount = (subtotal * serviceTaxPercentage) / 100;
 
   return {
@@ -220,7 +220,6 @@ export const createDeliveryRecord = async ({
   drop,
   pickupAddress,
   dropAddress,
-  fare,
   vehicleTypeId,
   vehicleTypeIds,
   vehicleIconType,
@@ -231,12 +230,19 @@ export const createDeliveryRecord = async ({
   await ensureDeliveryVehicleAllowed({ vehicleTypeId, parcel });
   const pickupCoords = normalizePoint(pickup, 'pickup');
   const dropCoords = normalizePoint(drop, 'drop');
-  await assertIntracityDelivery(pickupCoords, dropCoords);
+  const pricingZone = await assertIntracityDelivery(pickupCoords, dropCoords);
   const vehicle = vehicleTypeId
     ? await Vehicle.findById(vehicleTypeId).select('delivery_distance_pricing service_tax').lean()
     : null;
-  const fareBreakdown = computeDeliveryFareBreakdown({ vehicle, pickupCoords, dropCoords });
-  const resolvedFare = fareBreakdown.total > 0 ? fareBreakdown.total : Number(fare || 0);
+  const tariff = await resolveDeliveryTariff({ vehicle, zone: pricingZone });
+  const fareBreakdown = computeDeliveryFareBreakdown({ tariff, pickupCoords, dropCoords });
+
+  // The server's price is the only one a parcel books at. This used to fall
+  // back to whatever `fare` the app sent whenever the server could not price
+  // the vehicle, so an unpriced vehicle booked at a number the client chose.
+  if (!(fareBreakdown.total > 0)) {
+    throw new ApiError(400, 'Delivery is not priced for this vehicle in this area yet.');
+  }
 
   const ride = await createRideRecord({
     userId,
@@ -244,7 +250,10 @@ export const createDeliveryRecord = async ({
     dropCoords,
     pickupAddress,
     dropAddress,
-    fare: resolvedFare,
+    fare: fareBreakdown.total,
+    // Lets the ride's commission and payment rules find this zone's row too;
+    // until now every parcel resolved them with no zone at all.
+    zone_id: pricingZone?._id ? String(pricingZone._id) : undefined,
     vehicleTypeId,
     vehicleTypeIds,
     vehicleIconType,
@@ -254,6 +263,19 @@ export const createDeliveryRecord = async ({
     serviceType: 'parcel',
     parcel,
   });
+
+  // Waiting at the pickup is charged on the same tariff as the fare, and locked
+  // now, so an admin edit mid-trip cannot change what this parcel pays.
+  await Ride.updateOne(
+    { _id: ride._id },
+    {
+      $set: {
+        'pricingSnapshot.waiting_charge': tariff.waitingChargePerMinute,
+        'pricingSnapshot.free_waiting_before': tariff.freeWaitingMinutes,
+        'pricingSnapshot.delivery_tariff_source': tariff.source,
+      },
+    },
+  );
 
   await startDispatchFlow(ride);
 
@@ -277,8 +299,8 @@ export const getDeliveryQuote = async ({ vehicleTypeId, pickup, drop, parcel }) 
   const pickupCoords = normalizePoint(pickup, 'pickup');
   const dropCoords = normalizePoint(drop, 'drop');
   // Checked here as well as at booking: a quote that a booking then refuses is
-  // worse than refusing up front.
-  await assertIntracityDelivery(pickupCoords, dropCoords);
+  // worse than refusing up front. It also names the zone the tariff comes from.
+  const pricingZone = await assertIntracityDelivery(pickupCoords, dropCoords);
   const vehicle = await Vehicle.findById(vehicleTypeId)
     .select('name delivery_distance_pricing service_tax')
     .lean();
@@ -287,12 +309,17 @@ export const getDeliveryQuote = async ({ vehicleTypeId, pickup, drop, parcel }) 
     throw new ApiError(404, 'Vehicle type not found');
   }
 
-  const fareBreakdown = computeDeliveryFareBreakdown({ vehicle, pickupCoords, dropCoords });
+  const tariff = await resolveDeliveryTariff({ vehicle, zone: pricingZone });
+  const fareBreakdown = computeDeliveryFareBreakdown({ tariff, pickupCoords, dropCoords });
 
   return {
     vehicleTypeId: String(vehicleTypeId),
     vehicleName: vehicle.name || '',
     ...fareBreakdown,
+    // Which tariff priced this — 'zone', 'service_location' or 'vehicle' — and
+    // where. The app ignores both; they are what make a wrong price diagnosable.
+    tariffSource: tariff.source,
+    zoneName: pricingZone?.name || null,
   };
 };
 

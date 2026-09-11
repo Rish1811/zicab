@@ -549,6 +549,14 @@ const rideSchema = new mongoose.Schema(
         type: [String],
         default: ['cash', 'online'],
       },
+      // Where a parcel's delivery tariff came from: 'zone', 'service_location'
+      // or 'vehicle'. Its presence also tells the waiting charge that
+      // waiting_charge and free_waiting_before above were locked to that tariff
+      // at booking; parcels booked before it existed use the vehicle's pricing.
+      delivery_tariff_source: {
+        type: String,
+        default: null,
+      },
       resolvedAt: {
         type: Date,
         default: null,

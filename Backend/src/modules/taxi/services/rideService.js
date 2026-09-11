@@ -866,7 +866,8 @@ const buildDriverVehicleAcceptFilter = async (ride) => {
 /// `arrivedAt` is stamped when the driver reaches the pickup and `startedAt`
 /// when the parcel is collected, so the gap between them is the time the driver
 /// spent waiting for the sender. The free window and per-minute rate come from
-/// the vehicle's delivery pricing, the same place the distance rate lives.
+/// the delivery tariff the fare was priced on, locked onto the ride at booking
+/// so they follow the pickup zone just as the fare does.
 ///
 /// Only whole elapsed minutes are charged, so a part-minute is never rounded up
 /// against the customer. The cap is a safety net: if a driver marks the pickup
@@ -882,14 +883,24 @@ const applyParcelWaitingCharge = async (ride) => {
   const elapsedMs = new Date(ride.startedAt).getTime() - new Date(ride.arrivedAt).getTime();
   if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return;
 
-  const vehicle = ride.vehicleTypeId
-    ? await Vehicle.findById(ride.vehicleTypeId).select('delivery_distance_pricing').lean()
-    : null;
-  const pricing = vehicle?.delivery_distance_pricing || {};
-  const perMinute = Math.max(0, Number(pricing.time_price) || 0);
-  if (perMinute <= 0) return;
+  let perMinute;
+  let freeMinutes;
 
-  const freeMinutes = Math.max(0, Number(pricing.free_time) || 0);
+  if (ride.pricingSnapshot?.delivery_tariff_source) {
+    perMinute = Math.max(0, Number(ride.pricingSnapshot.waiting_charge) || 0);
+    freeMinutes = Math.max(0, Number(ride.pricingSnapshot.free_waiting_before) || 0);
+  } else {
+    // Booked before the terms were locked onto the ride: read the vehicle, as
+    // this always did.
+    const vehicle = ride.vehicleTypeId
+      ? await Vehicle.findById(ride.vehicleTypeId).select('delivery_distance_pricing').lean()
+      : null;
+    const pricing = vehicle?.delivery_distance_pricing || {};
+    perMinute = Math.max(0, Number(pricing.time_price) || 0);
+    freeMinutes = Math.max(0, Number(pricing.free_time) || 0);
+  }
+
+  if (perMinute <= 0) return;
   const waitedMinutes = Math.floor(elapsedMs / 60000);
   const chargeableMinutes = Math.min(
     Math.max(0, waitedMinutes - freeMinutes),
