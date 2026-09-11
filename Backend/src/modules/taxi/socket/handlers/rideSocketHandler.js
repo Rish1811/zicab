@@ -1,6 +1,8 @@
-import { normalizePoint } from '../../../../utils/geo.js';
+import { normalizePoint, toPoint } from '../../../../utils/geo.js';
+import { runRedisCommand } from '../../../../infrastructure/redis/redisClient.js';
 import { RIDE_LIVE_STATUS } from '../../constants/index.js';
 import { getDriverRoom } from '../../services/dispatchService.js';
+import { DriverLocationHistory } from '../../driver/models/DriverLocationHistory.js';
 import {
   appendRideMessage,
   getActiveRideForIdentity,
@@ -17,6 +19,24 @@ import {
 import { authorizeRideRoomAccess } from '../middleware/rideRoomAuth.js';
 import { SOCKET_EVENTS } from '../events.js';
 import { clearDriverRoute, updateDriverRoute } from '../services/driverRouteService.js';
+import { consumeScopedRateLimit } from '../../middlewares/rateLimitMiddleware.js';
+
+// Same fast-read cache key the ambient (not-on-a-ride) location handler
+// writes in socket/index.js, so a REST read of "where is this driver" works
+// the same way regardless of whether they're mid-trip.
+const DRIVER_LOCATION_CACHE_TTL_SECONDS = 120;
+const cacheDriverLocation = (driverId, payload) => {
+  runRedisCommand(
+    (client) =>
+      client.set(`driver:${driverId}:location`, JSON.stringify(payload), {
+        EX: DRIVER_LOCATION_CACHE_TTL_SECONDS,
+      }),
+    { label: 'cache driver location' },
+  );
+};
+
+const RIDE_LOCATION_RATE_LIMIT_MAX = 30;
+const RIDE_LOCATION_RATE_LIMIT_WINDOW_MS = 10_000;
 
 const driverLifecycleStatuses = new Set([
   RIDE_LIVE_STATUS.ACCEPTED,
@@ -126,6 +146,17 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
         throw new Error('Only drivers can update live ride location');
       }
 
+      const rateLimitOutcome = await consumeScopedRateLimit({
+        scope: 'ride_driver_location_socket',
+        max: RIDE_LOCATION_RATE_LIMIT_MAX,
+        windowMs: RIDE_LOCATION_RATE_LIMIT_WINDOW_MS,
+        mode: 'custom',
+        parts: [socket.auth.sub],
+      });
+      if (!rateLimitOutcome.allowed) {
+        return;
+      }
+
       await authorizeRideRoomAccess({ socket, rideId });
       const normalizedCoordinates = normalizePoint(coordinates, 'coordinates');
       const persistKey = `${rideId}:${socket.auth.sub}`;
@@ -155,6 +186,14 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
         : fallbackLocationUpdate;
 
       io.to(getRideRoom(rideId)).emit(SOCKET_EVENTS.RIDE_DRIVER_LOCATION_UPDATED, locationUpdate);
+      // Fast-read cache, written every tick regardless of the persist
+      // throttle above — a REST read should see the true latest fix.
+      cacheDriverLocation(socket.auth.sub, {
+        coordinates: normalizedCoordinates,
+        heading: locationUpdate.heading,
+        speed: locationUpdate.speed,
+        updatedAt: now,
+      });
       if (shouldPersistLocation) {
         setImmediate(() => {
           mirrorRideDriverLocation({
@@ -163,6 +202,16 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
             heading: locationUpdate.heading,
             speed: locationUpdate.speed,
           }).catch(() => {});
+        });
+        // Analytics only — never let this hold up the live-tracking path.
+        DriverLocationHistory.create({
+          driverId: socket.auth.sub,
+          rideId,
+          location: toPoint(normalizedCoordinates, 'coordinates'),
+          heading: locationUpdate.heading,
+          speed: locationUpdate.speed,
+        }).catch((error) => {
+          console.error('Failed to persist ride driver location history', error.message);
         });
       }
 

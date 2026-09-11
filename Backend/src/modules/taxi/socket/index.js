@@ -1,9 +1,10 @@
 import { createAdapter } from '@socket.io/redis-adapter';
 import { Server } from 'socket.io';
 import { env } from '../../../config/env.js';
-import { connectRedis, isRedisEnabled } from '../../../infrastructure/redis/redisClient.js';
+import { connectRedis, isRedisEnabled, runRedisCommand } from '../../../infrastructure/redis/redisClient.js';
 import { normalizePoint, toPoint } from '../../../utils/geo.js';
 import { Driver } from '../driver/models/Driver.js';
+import { DriverLocationHistory } from '../driver/models/DriverLocationHistory.js';
 import { Ride } from '../user/models/Ride.js';
 import {
   broadcastSupportMessage,
@@ -39,6 +40,30 @@ const DRIVER_LOCATION_WRITE_MAX_INTERVAL_MS = 15000;
 const DRIVER_ZONE_REFRESH_MIN_DISTANCE_METERS = 120;
 const DRIVER_ZONE_REFRESH_MAX_INTERVAL_MS = 60000;
 const driverLocationState = new Map();
+
+// Fast-read cache for "where is this driver right now" — Mongo remains the
+// source of truth (written on the same throttle as everything else below),
+// this is purely so a REST read elsewhere doesn't wait on a Mongo round trip.
+// Expires on its own so a driver who disconnects without a clean 'disconnect'
+// event (killed app, dead battery) doesn't leave a stale entry forever.
+const DRIVER_LOCATION_CACHE_TTL_SECONDS = 120;
+const cacheDriverLocation = (driverId, payload) => {
+  runRedisCommand(
+    (client) =>
+      client.set(`driver:${driverId}:location`, JSON.stringify(payload), {
+        EX: DRIVER_LOCATION_CACHE_TTL_SECONDS,
+      }),
+    { label: 'cache driver location' },
+  );
+};
+
+// Generous headroom over the client's real cadence (one send every 3-30s per
+// driver, adaptive — see the Flutter side) so legitimate bursts (a GPS fix
+// retried after a dropped packet, a reconnect catch-up) never get dropped,
+// while still capping a misbehaving or malicious client well short of
+// hammering the DB on every tick.
+const DRIVER_LOCATION_RATE_LIMIT_MAX = 30;
+const DRIVER_LOCATION_RATE_LIMIT_WINDOW_MS = 10_000;
 
 /// Compass bearing from one coordinate to the next, 0 = north, clockwise.
 ///
@@ -243,6 +268,17 @@ export const configureTaxiSocketServer = async (httpServer) => {
           return;
         }
 
+        const rateLimitOutcome = await consumeScopedRateLimit({
+          scope: 'driver_location_socket',
+          max: DRIVER_LOCATION_RATE_LIMIT_MAX,
+          windowMs: DRIVER_LOCATION_RATE_LIMIT_WINDOW_MS,
+          mode: 'custom',
+          parts: [identity.sub],
+        });
+        if (!rateLimitOutcome.allowed) {
+          return;
+        }
+
         // Drivers push fresh GPS coordinates every few seconds so matching stays accurate.
         const normalizedCoords = normalizePoint(coordinates, 'coordinates');
         const now = Date.now();
@@ -251,38 +287,18 @@ export const configureTaxiSocketServer = async (httpServer) => {
           ? getDistanceMeters(previousDriverState.coordinates, normalizedCoords)
           : Number.POSITIVE_INFINITY;
         const timeSincePreviousWrite = now - Number(previousDriverState.updatedAt || 0);
-        const shouldRefreshZone = !previousDriverState.zoneId ||
-          distanceFromPrevious >= DRIVER_ZONE_REFRESH_MIN_DISTANCE_METERS ||
-          now - Number(previousDriverState.zoneResolvedAt || 0) >= DRIVER_ZONE_REFRESH_MAX_INTERVAL_MS;
-        const zone = shouldRefreshZone
-          ? await findZoneByPickup(normalizedCoords)
-          : (previousDriverState.zoneId ? { _id: previousDriverState.zoneId } : null);
-        const nextZoneId = zone?._id ? String(zone._id) : null;
-        const shouldWriteDriverState = !Array.isArray(previousDriverState.coordinates) ||
-          distanceFromPrevious >= DRIVER_LOCATION_WRITE_MIN_DISTANCE_METERS ||
-          timeSincePreviousWrite >= DRIVER_LOCATION_WRITE_MAX_INTERVAL_MS ||
-          previousDriverState.socketId !== socket.id ||
-          String(previousDriverState.zoneId || '') !== String(nextZoneId || '');
 
-        if (shouldWriteDriverState) {
-          await Driver.findByIdAndUpdate(identity.sub, {
-            socketId: socket.id,
-            location: toPoint(normalizedCoords, 'coordinates'),
-            heading: resolvedHeading,
-            zoneId: zone?._id || null,
-          });
-        }
-
-        driverLocationState.set(identity.sub, {
-          coordinates: normalizedCoords,
-          updatedAt: shouldWriteDriverState ? now : Number(previousDriverState.updatedAt || 0),
-          zoneId: nextZoneId,
-          zoneResolvedAt: shouldRefreshZone ? now : Number(previousDriverState.zoneResolvedAt || 0),
-          socketId: socket.id,
-        });
         // Trust the device when it gives a usable heading; otherwise derive one
         // from the movement since the last ping, and hold the previous value
-        // while the vehicle is essentially stationary.
+        // while the vehicle is essentially stationary. Resolved up front —
+        // this used to be computed after the block below that already
+        // consumed it, which threw on every write (a `let` read before its
+        // own declaration) and silently dropped the driver's location update
+        // whenever shouldWriteDriverState was true, i.e. on almost every
+        // real-world tick (first ping, >25m moved, >15s elapsed, or a
+        // reconnect). That's why a driver who was online but not yet on a
+        // ride would so often show stale on the demand map and in nearby-ETA
+        // lookups: the DB write for that path was failing silently.
         const reportedHeading = Number(heading);
         let resolvedHeading = Number.isFinite(reportedHeading) && reportedHeading >= 0 && reportedHeading <= 360
           ? reportedHeading
@@ -295,8 +311,55 @@ export const configureTaxiSocketServer = async (httpServer) => {
             : (previousDriverState.heading ?? null);
         }
 
+        const shouldRefreshZone = !previousDriverState.zoneId ||
+          distanceFromPrevious >= DRIVER_ZONE_REFRESH_MIN_DISTANCE_METERS ||
+          now - Number(previousDriverState.zoneResolvedAt || 0) >= DRIVER_ZONE_REFRESH_MAX_INTERVAL_MS;
+        const zone = shouldRefreshZone
+          ? await findZoneByPickup(normalizedCoords)
+          : (previousDriverState.zoneId ? { _id: previousDriverState.zoneId } : null);
+        const nextZoneId = zone?._id ? String(zone._id) : null;
+        const shouldWriteDriverState = !Array.isArray(previousDriverState.coordinates) ||
+          distanceFromPrevious >= DRIVER_LOCATION_WRITE_MIN_DISTANCE_METERS ||
+          timeSincePreviousWrite >= DRIVER_LOCATION_WRITE_MAX_INTERVAL_MS ||
+          previousDriverState.socketId !== socket.id ||
+          String(previousDriverState.zoneId || '') !== String(nextZoneId || '');
+        const normalizedSpeed = Number.isFinite(Number(speed)) ? Number(speed) : null;
+
+        if (shouldWriteDriverState) {
+          await Driver.findByIdAndUpdate(identity.sub, {
+            socketId: socket.id,
+            location: toPoint(normalizedCoords, 'coordinates'),
+            heading: resolvedHeading,
+            zoneId: zone?._id || null,
+          });
+
+          // Analytics only — never let this hold up the live-tracking path.
+          DriverLocationHistory.create({
+            driverId: identity.sub,
+            location: toPoint(normalizedCoords, 'coordinates'),
+            heading: resolvedHeading,
+            speed: normalizedSpeed,
+          }).catch((error) => {
+            console.error('Failed to persist driver location history', error.message);
+          });
+        }
+
+        // Fast-read cache: written on every tick (not just throttled writes)
+        // so a REST read always sees the true latest fix, not one up to
+        // DRIVER_LOCATION_WRITE_MAX_INTERVAL_MS stale.
+        cacheDriverLocation(identity.sub, {
+          coordinates: normalizedCoords,
+          heading: resolvedHeading,
+          speed: normalizedSpeed,
+          updatedAt: now,
+        });
+
         driverLocationState.set(identity.sub, {
-          ...(driverLocationState.get(identity.sub) || {}),
+          coordinates: normalizedCoords,
+          updatedAt: shouldWriteDriverState ? now : Number(previousDriverState.updatedAt || 0),
+          zoneId: nextZoneId,
+          zoneResolvedAt: shouldRefreshZone ? now : Number(previousDriverState.zoneResolvedAt || 0),
+          socketId: socket.id,
           heading: resolvedHeading,
         });
 
@@ -318,7 +381,7 @@ export const configureTaxiSocketServer = async (httpServer) => {
                   type: 'Point',
                   coordinates: normalizedCoords,
                   heading: resolvedHeading,
-                  speed: Number.isFinite(Number(speed)) ? Number(speed) : null,
+                  speed: normalizedSpeed,
                   updatedAt: new Date(),
                 },
               },
@@ -331,7 +394,7 @@ export const configureTaxiSocketServer = async (httpServer) => {
             lng: normalizedCoords[0],
             lat: normalizedCoords[1],
             heading: resolvedHeading,
-            speed: Number.isFinite(Number(speed)) ? Number(speed) : null,
+            speed: normalizedSpeed,
             updatedAt: new Date().toISOString(),
           });
         }

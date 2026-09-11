@@ -1079,6 +1079,7 @@ export const saveDriverVehicle = async ({
   locationName,
   serviceLocation,
   vehicleTypeId,
+  vehicleTypeIds,
   rcNumber,
   make,
   model,
@@ -1102,6 +1103,17 @@ export const saveDriverVehicle = async ({
   const selectedLocation = getServiceLocationName(selectedServiceLocation) || String(locationName || city || '').trim();
   const normalizedServiceCategories = normalizeServiceCategories(serviceCategories, registerFor || session.role || 'taxi');
   const normalizedRegisterFor = getPrimaryRegisterFor(normalizedServiceCategories, registerFor || session.role || 'taxi');
+  // Drivers can enroll in more than one vehicle category now (e.g. both
+  // ZI Cab AC and ZI Cab Non-AC). Older app builds still send a single
+  // `vehicleTypeId`, so that's folded in too — de-duplicated, in case it
+  // duplicates one already in the list.
+  const normalizedVehicleTypeIds = [
+    ...new Set(
+      [...(Array.isArray(vehicleTypeIds) ? vehicleTypeIds : []), vehicleTypeId]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    ),
+  ];
 
   if (!selectedLocation) {
     throw new ApiError(400, 'A valid service location is required');
@@ -1153,7 +1165,7 @@ export const saveDriverVehicle = async ({
     const currentYear = new Date().getFullYear();
 
     requireField('serviceCategories', normalizedServiceCategories, 'Service category');
-    requireField('vehicleTypeId', vehicleTypeId, 'Vehicle type');
+    requireField('vehicleTypeId', normalizedVehicleTypeIds, 'Vehicle type');
     if (!normalizedRcNumber) {
       throw new ApiError(400, 'RC number is required');
     }
@@ -1221,7 +1233,8 @@ export const saveDriverVehicle = async ({
           coordinates: getServiceLocationCoordinates(selectedServiceLocation),
         }
       : null,
-    vehicleTypeId: String(vehicleTypeId || '').trim(),
+    vehicleTypeId: normalizedVehicleTypeIds[0] || '',
+    vehicleTypeIds: normalizedVehicleTypeIds,
     rcNumber: normalizedRcNumber,
     make: String(make || '').trim(),
     model: String(model || '').trim(),
@@ -1601,10 +1614,19 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
   }
 
   const zone = serviceLocationCoordinates ? await findZoneByPickup(serviceLocationCoordinates) : null;
-  const selectedVehicle =
-    session.vehicle.vehicleTypeId && /^[a-f\d]{24}$/i.test(String(session.vehicle.vehicleTypeId))
-      ? await Vehicle.findById(session.vehicle.vehicleTypeId).lean()
-      : null;
+  const requestedVehicleTypeIds = Array.isArray(session.vehicle.vehicleTypeIds) && session.vehicle.vehicleTypeIds.length
+    ? session.vehicle.vehicleTypeIds
+    : [session.vehicle.vehicleTypeId].filter(Boolean);
+  const validVehicleTypeIds = requestedVehicleTypeIds.filter((id) => /^[a-f\d]{24}$/i.test(String(id)));
+  const selectedVehicles = validVehicleTypeIds.length
+    ? await Vehicle.find({ _id: { $in: validVehicleTypeIds } }).lean()
+    : [];
+  // Preserve the driver's chosen order (Vehicle.find doesn't), so the first
+  // one they picked stays the "primary" vehicleType/vehicleTypeId below.
+  const orderedSelectedVehicles = validVehicleTypeIds
+    .map((id) => selectedVehicles.find((vehicle) => String(vehicle._id) === String(id)))
+    .filter(Boolean);
+  const selectedVehicle = orderedSelectedVehicles[0] || null;
   const vehicleType = selectedVehicle
     ? getGenericVehicleTypeFromCatalog(selectedVehicle)
     : getVehicleType(session.vehicle.vehicleTypeId, session.vehicle.registerFor);
@@ -1711,6 +1733,7 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
         : null,
     vehicleType,
     vehicleTypeId: selectedVehicle?._id || null,
+    vehicleTypeIds: orderedSelectedVehicles.map((vehicle) => vehicle._id),
     vehicleIconType: selectedVehicle?.icon_types || vehicleType,
     registerFor: session.vehicle.registerFor,
     serviceCategories: Array.isArray(session.vehicle.serviceCategories) ? session.vehicle.serviceCategories : [],
@@ -1743,6 +1766,7 @@ export const completeDriverOnboarding = async ({ registrationId, phone, document
         locationId: session.vehicle.locationId,
         locationName: session.vehicle.locationName,
         vehicleTypeId: session.vehicle.vehicleTypeId,
+        vehicleTypeIds: session.vehicle.vehicleTypeIds || [],
         rcNumber: session.vehicle.rcNumber,
         make: session.vehicle.make,
         model: session.vehicle.model,

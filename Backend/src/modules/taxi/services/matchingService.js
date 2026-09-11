@@ -38,7 +38,14 @@ const buildDriverMatchFilters = ({ zoneId, serviceLocationId, vehicleTypeId, veh
     ? [...new Set(vehicleTypeKeys.map(normalizeVehicleKey).filter(Boolean))]
     : [];
   const vehicleTypeClauses = normalizedVehicleTypeIds.length
-    ? [{ vehicleTypeId: { $in: normalizedVehicleTypeIds } }]
+    ? [
+        { vehicleTypeId: { $in: normalizedVehicleTypeIds } },
+        // A driver enrolled in more than one category at onboarding stores
+        // them in vehicleTypeIds; vehicleTypeId (above) only ever holds the
+        // first/primary one. Checking both means a driver whose primary
+        // type is A but who also enrolled in B still gets offered a B ride.
+        { vehicleTypeIds: { $in: normalizedVehicleTypeIds } },
+      ]
     : [
         ...(normalizedVehicleTypeKeys.length
           ? [
@@ -300,7 +307,7 @@ const findDriversForZone = async ({
     vehicleTypeKeys,
   });
   const selectedFields =
-    'name phone socketId vehicleTypeId vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId service_location_id isOnline isOnRide routeBooking';
+    'name phone socketId vehicleTypeId vehicleTypeIds vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId service_location_id isOnline isOnRide routeBooking';
 
   const [liveLocationDrivers, routeBookingDrivers] = await Promise.all([
     Driver.find({
