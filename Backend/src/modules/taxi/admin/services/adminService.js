@@ -6963,6 +6963,8 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
       'capacity',
       'enable_shared_ride',
       'service_tax',
+      'admin_commision_type',
+      'admin_commision',
       'base_price',
       'base_distance',
       'price_per_distance',
@@ -7037,6 +7039,12 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
         : (item.payment_type ? String(item.payment_type).split(',') : ['cash', 'online', 'wallet']),
       status: item.status || (item.active === false ? 'inactive' : 'active'),
       service_tax: Number(item.service_tax ?? 0),
+      // The per-ride fee charged to the rider on top of the trip - the client's
+      // "admin charges" (platform support + third party + GST). Kept in the
+      // admin_commision pair the Set Prices screen already edits as customer
+      // commission, where 1 means a percentage and anything else a fixed sum.
+      rider_platform_fee: Number(item.admin_commision ?? 0),
+      rider_platform_fee_type: Number(item.admin_commision_type ?? 1) === 1 ? 'percentage' : 'fixed',
       base_price: Number(item.base_price ?? 0),
       base_distance: Number(item.base_distance ?? 0),
       price_per_distance: Number(item.price_per_distance ?? 0),

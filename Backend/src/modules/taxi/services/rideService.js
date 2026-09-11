@@ -984,6 +984,7 @@ export const createRideRecord = async ({
   bookingMode,
   userMaxBidFare,
   bidStepAmount,
+  platformFee,
 }) => {
   const user = await User.findById(userId);
 
@@ -1114,6 +1115,18 @@ export const createRideRecord = async ({
           admin_commission_for_owner: Number(primaryVehicle?.admin_commission_for_owner ?? 0),
         }
       : null;
+  // The per-ride fee the rider was charged on top of the trip, kept apart so
+  // settlement pays it to admin rather than the driver. Taken from what the app
+  // says it added and capped at what this tariff allows: a build that predates
+  // the fee adds none and sends none, and a driver must never pay for a fee the
+  // rider was not charged.
+  const configuredPlatformFee = Number(pricingRule?.admin_commision_type ?? 1) === 1
+    ? (safeFare * Math.max(0, Number(pricingRule?.admin_commision) || 0)) / 100
+    : Math.max(0, Number(pricingRule?.admin_commision) || 0);
+  const riderPlatformFee = Math.round(
+    Math.min(Math.max(0, Number(platformFee) || 0), configuredPlatformFee) * 100,
+  ) / 100;
+
   const pricingSnapshot = {
     setPriceId: pricingRule?._id || null,
     admin_commission_type_from_driver: Number(pricingRule?.admin_commission_type_from_driver ?? parcelCommissionFallback?.admin_commission_type_from_driver ?? 1),
@@ -1124,6 +1137,7 @@ export const createRideRecord = async ({
     free_waiting_before: Number(pricingRule?.free_waiting_before ?? 0),
     free_waiting_after: Number(pricingRule?.free_waiting_after ?? 0),
     allowed_payment_methods: allowedPaymentMethods,
+    rider_platform_fee: riderPlatformFee,
     resolvedAt: pricingRule ? new Date() : null,
   };
 

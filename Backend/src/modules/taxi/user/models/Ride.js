@@ -557,6 +557,13 @@ const rideSchema = new mongoose.Schema(
         type: String,
         default: null,
       },
+      // The platform fee the rider was charged on top of the trip. Part of
+      // `fare`, but admin's money: settlement takes it with the commission.
+      rider_platform_fee: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
       resolvedAt: {
         type: Date,
         default: null,

@@ -376,11 +376,17 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
 
     const fare = normalizeAmount(ride.fare || 0, 'fare');
     const commissionConfig = await resolveCommissionConfigForRide(ride, session);
-    const commissionAmount = computeCommissionAmount({
+    const tripCommission = computeCommissionAmount({
       fare,
       type: commissionConfig.type,
       value: commissionConfig.value,
     });
+    // The rider's per-ride platform fee was collected inside the fare but was
+    // never the driver's money: it goes to admin with the commission. Zero on
+    // every ride booked by an app that doesn't charge one, so those settle
+    // exactly as before. Read here, before the snapshot is replaced below.
+    const platformFee = Math.min(Math.max(0, Number(ride.pricingSnapshot?.rider_platform_fee) || 0), fare);
+    const commissionAmount = Math.min(Math.round((tripCommission + platformFee) * 100) / 100, fare);
     const paymentMethod = normalizePaymentMethod(ride.paymentMethod);
     const driverEarnings = Math.max(Math.round((fare - commissionAmount) * 100) / 100, 0);
     const amount = paymentMethod === 'cash' ? -commissionAmount : driverEarnings;
@@ -393,6 +399,7 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
       setPriceId: ride.pricingSnapshot?.setPriceId || commissionConfig.setPriceId || null,
       admin_commission_type_from_driver: Number(commissionConfig.type ?? ride.pricingSnapshot?.admin_commission_type_from_driver ?? 1),
       admin_commission_from_driver: Number(commissionConfig.value ?? ride.pricingSnapshot?.admin_commission_from_driver ?? 0),
+      rider_platform_fee: platformFee,
       resolvedAt: ride.pricingSnapshot?.resolvedAt || new Date(),
     };
     await ride.save({ session });
@@ -408,7 +415,7 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
       amount,
       type,
       description: paymentMethod === 'cash'
-        ? 'Commission deducted for cash ride'
+        ? (platformFee > 0 ? 'Commission and platform fee deducted for cash ride' : 'Commission deducted for cash ride')
         : 'Driver earning credited for online ride',
       metadata: {
         fare,
@@ -418,6 +425,8 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
         commissionSource: commissionConfig.source,
         commissionType: normalizeCommissionType(commissionConfig.type),
         commissionValue: Number(commissionConfig.value || 0),
+        tripCommission,
+        platformFee,
       },
       session,
     });
