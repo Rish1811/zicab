@@ -6977,6 +6977,8 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
       'waiting_charge',
       'free_waiting_before',
       'free_waiting_after',
+      'enable_outstation_ride',
+      'support_outstation',
       'outstation_base_price',
       'outstation_base_distance',
       'outstation_price_per_distance',
@@ -7057,6 +7059,12 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
       waiting_charge: Number(item.waiting_charge ?? 0),
       free_waiting_before: Number(item.free_waiting_before ?? 0),
       free_waiting_after: Number(item.free_waiting_after ?? 0),
+      // Whether this vehicle may be booked for an intercity trip at all. The
+      // apps read exactly these two keys and the catalog never sent them, so
+      // every vehicle looked city-only and the Outstation screen was always
+      // empty - even where an admin had enabled it and set rates.
+      enable_outstation_ride: Boolean(item.enable_outstation_ride),
+      support_outstation: Number(item.support_outstation ?? 0),
       outstation_base_price: Number(item.outstation_base_price ?? 0),
       outstation_base_distance: Number(item.outstation_base_distance ?? 0),
       outstation_price_per_distance: Number(item.outstation_price_per_distance ?? 0),
