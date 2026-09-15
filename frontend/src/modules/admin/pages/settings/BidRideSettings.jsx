@@ -164,6 +164,7 @@ const BidRideSettings = () => {
 
   const biddingEnabled = String(settings.bidding_enabled ?? '1') !== '0';
   const allVehicles = String(settings.bidding_all_vehicles ?? '1') === '1';
+  const incrementAlways = String(settings.user_increment_always ?? '1') === '1';
 
   const toggleService = (key, next) => {
     const withoutKey = enabledServices.filter(entry => entry !== key);
@@ -224,6 +225,13 @@ const BidRideSettings = () => {
                  hint="On ignores each vehicle type's own dispatch setting, so a newly added vehicle is biddable straight away."
                  checked={allVehicles}
                  onChange={(next) => handleChange('bidding_all_vehicles', next ? '1' : '0')}
+              />
+
+              <ToggleRow
+                 label="Offer riders more fare while they wait"
+                 hint="Shows the &quot;nobody is accepting at this fare, add more&quot; card during the search, even if the rider did not switch bidding on when booking. They start at exactly the fare they were quoted. Outstation is not affected."
+                 checked={incrementAlways}
+                 onChange={(next) => handleChange('user_increment_always', next ? '1' : '0')}
               />
 
               <div className={`mt-6 ${biddingEnabled ? '' : 'opacity-40 pointer-events-none'}`}>

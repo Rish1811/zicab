@@ -102,6 +102,12 @@ export const createDefaultBusinessSettings = () => ({
     // that is what the client asked for; switch it off and each vehicle's own
     // dispatch type decides again.
     bidding_all_vehicles: '1',
+    // Show the "nobody is accepting at this fare - add more" card while a
+    // rider waits, even when they did not switch bidding on at booking. They
+    // start at exactly the fare they were quoted and only move if they choose
+    // to. Outstation is excluded: handing pricing to the drivers is a
+    // different thing to opt into.
+    user_increment_always: '1',
     bidding_low_percentage: '10',
     bidding_high_percentage: '20',
     bidding_amount_increase_or_decrease: '10',

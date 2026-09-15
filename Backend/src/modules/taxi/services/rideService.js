@@ -1088,8 +1088,26 @@ export const createRideRecord = async ({
     distanceMeters: safeEstimatedDistanceMeters,
     bidSettings: bidRideSettings,
   });
-  const pricingNegotiationMode =
-    requestedBookingMode === 'bidding' && biddingPolicy.allowed ? biddingPolicy.mode : 'none';
+  // Rapido's behaviour, and what the client asked for: a rider who is waiting
+  // and getting nobody should be offered the chance to add to their fare,
+  // whether or not they thought about bidding when they booked. Applies only
+  // to the raise-your-own-fare mode - an outstation ride hands pricing to the
+  // drivers, which is a different thing to opt into, so that still needs the
+  // rider to ask for it.
+  const offerFareRaiseWithoutOptIn =
+    biddingPolicy.allowed &&
+    biddingPolicy.mode === 'user_increment_only' &&
+    String(bidRideSettings.user_increment_always ?? '1').trim() === '1';
+  const pricingNegotiationMode = biddingPolicy.allowed
+    && (requestedBookingMode === 'bidding' || offerFareRaiseWithoutOptIn)
+    ? biddingPolicy.mode
+    : 'none';
+  // A rider who never asked for bidding must still be charged what they were
+  // quoted. Opting in starts them at the bid floor, which the admin may have
+  // set above the fare; this path starts at the fare itself and only moves if
+  // the rider chooses to raise it.
+  const startsAtQuotedFare = pricingNegotiationMode === 'user_increment_only'
+    && requestedBookingMode !== 'bidding';
   const effectiveBookingMode = pricingNegotiationMode === 'driver_bid' ? 'bidding' : 'normal';
   const configuredBidStepAmount = pricingNegotiationMode !== 'none'
     ? normalizeBidStepAmount(
@@ -1115,8 +1133,8 @@ export const createRideRecord = async ({
     : pricingNegotiationMode === 'user_increment_only'
       ? clampBidAmountWithinRange({
           amount: safeFare,
-          minFare: bidRideRange.userBidFloorFare,
-          maxFare: bidRideRange.userBidCeilingFare,
+          minFare: startsAtQuotedFare ? safeFare : bidRideRange.userBidFloorFare,
+          maxFare: Math.max(safeFare, bidRideRange.userBidCeilingFare),
           baseFare: safeFare,
           bidStepAmount: effectiveBidStepAmount,
         })
@@ -1124,12 +1142,12 @@ export const createRideRecord = async ({
   const effectiveBidFloorFare = pricingNegotiationMode === 'driver_bid'
     ? bidRideRange.driverBidFloorFare
     : pricingNegotiationMode === 'user_increment_only'
-      ? bidRideRange.userBidFloorFare
+      ? (startsAtQuotedFare ? safeFare : bidRideRange.userBidFloorFare)
       : safeFare;
   const effectiveBidCeilingMaxFare = pricingNegotiationMode === 'driver_bid'
     ? Math.min(bidRideRange.userBidCeilingFare, bidRideRange.driverBidCeilingFare)
     : pricingNegotiationMode === 'user_increment_only'
-      ? bidRideRange.userBidCeilingFare
+      ? Math.max(safeFare, bidRideRange.userBidCeilingFare)
       : safeFare;
   const effectiveStartingFare = pricingNegotiationMode === 'user_increment_only'
     ? effectiveUserMaxBidFare
