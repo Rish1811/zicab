@@ -107,7 +107,25 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
         setImmediate(() => {
           mirrorRideRealtimeState(payload).catch(() => {});
         });
+        return;
       }
+
+      // This ride is not (or no longer) the caller's active ride — most often
+      // because it was cancelled or completed while this socket was
+      // disconnected. The room broadcast that would normally announce that is
+      // long gone by the time a new connection re-joins, so without this the
+      // rejoining side (typically a driver whose transport dropped mid-trip)
+      // is left showing a ride that is already over with nothing to correct
+      // it. Sending this ride's own current state lets the existing
+      // `ride:state` handler resolve it the same way a live cancellation or
+      // completion does.
+      //
+      // Re-fetched fully rather than reusing `ride`: authorizeRideRoomAccess
+      // only selects the fields it needs for the access check, and
+      // serializeRideRealtime needs the rest (addresses, fare, populated
+      // rider/delivery) to produce a payload the client can actually parse.
+      const fullRide = await getRideDetails(ride._id);
+      socket.emit(SOCKET_EVENTS.RIDE_STATE, serializeRideRealtime(fullRide));
     }),
   );
 
@@ -141,7 +159,7 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
 
   socket.on(
     SOCKET_EVENTS.RIDE_DRIVER_LOCATION_UPDATE,
-    onAsync(socket, async ({ rideId, coordinates, heading, speed }) => {
+    onAsync(socket, async ({ rideId, coordinates, heading, speed, accuracy, timestamp, sequence }) => {
       if (socket.auth.role !== 'driver') {
         throw new Error('Only drivers can update live ride location');
       }
@@ -185,7 +203,22 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
           })
         : fallbackLocationUpdate;
 
-      io.to(getRideRoom(rideId)).emit(SOCKET_EVENTS.RIDE_DRIVER_LOCATION_UPDATED, locationUpdate);
+      // Passthrough only, not persisted — this is what lets the rider app
+      // reject a delayed/out-of-order packet (sequence/timestamp) and avoid
+      // treating a poor-accuracy fix as grounds for a reroute. An older
+      // driver build simply won't send these, and the rider already treats
+      // every one of them as optional.
+      const normalizedAccuracy = Number.isFinite(Number(accuracy)) ? Number(accuracy) : null;
+      const normalizedTimestamp = Number.isFinite(Number(timestamp)) ? Number(timestamp) : null;
+      const normalizedSequence = Number.isFinite(Number(sequence)) ? Number(sequence) : null;
+      const broadcastPayload = {
+        ...locationUpdate,
+        ...(normalizedAccuracy !== null ? { accuracy: normalizedAccuracy } : {}),
+        ...(normalizedTimestamp !== null ? { timestamp: normalizedTimestamp } : {}),
+        ...(normalizedSequence !== null ? { sequence: normalizedSequence } : {}),
+      };
+
+      io.to(getRideRoom(rideId)).emit(SOCKET_EVENTS.RIDE_DRIVER_LOCATION_UPDATED, broadcastPayload);
       // Fast-read cache, written every tick regardless of the persist
       // throttle above — a REST read should see the true latest fix.
       cacheDriverLocation(socket.auth.sub, {
