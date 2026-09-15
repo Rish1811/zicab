@@ -1,7 +1,5 @@
 import simplify from 'simplify-js';
 import { getFirebaseDatabase, firebaseServerTimestamp } from '../../../../config/firebase.js';
-import { SOCKET_EVENTS } from '../events.js';
-import { getRideRoom } from '../../services/rideService.js';
 
 const SIMPLIFY_INTERVAL_MS = 3_000;
 const ROUTE_TOLERANCE = 0.0001;
@@ -55,7 +53,16 @@ const maybeWriteRouteToFirebase = ({ driverId, points }) => {
     });
 };
 
-export const updateDriverRoute = ({ io, rideId, driverId, coordinates }) => {
+/// Keeps the driver's travelled path for the trip, thinned with RDP so a
+/// half-hour drive does not accumulate thousands of near-identical points.
+///
+/// This is the breadcrumb *trail*, not the live position - the marker is
+/// interpolated in the apps and never reads this. It used to be broadcast to
+/// the ride room on every GPS tick as `ride:driver-route:updated`, carrying
+/// the whole accumulated array each time, to a room where neither app has
+/// ever registered a handler. Now it only feeds the Firebase mirror, which is
+/// throttled to one write per ten seconds.
+export const updateDriverRoute = ({ rideId, driverId, coordinates }) => {
   const routePoint = toRoutePoint(coordinates);
   const currentBuffer = driverRouteBuffers.get(driverId) || [];
   currentBuffer.push(routePoint);
@@ -74,7 +81,6 @@ export const updateDriverRoute = ({ io, rideId, driverId, coordinates }) => {
     updatedAt: new Date().toISOString(),
   };
 
-  io.to(getRideRoom(rideId)).emit(SOCKET_EVENTS.RIDE_DRIVER_ROUTE_UPDATED, payload);
   // Firebase is best-effort; never hold up the socket location update path.
   setImmediate(() => maybeWriteRouteToFirebase({ driverId, points: nextBuffer }));
 

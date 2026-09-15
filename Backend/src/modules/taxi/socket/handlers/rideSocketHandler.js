@@ -35,8 +35,18 @@ const cacheDriverLocation = (driverId, payload) => {
   );
 };
 
-const RIDE_LOCATION_RATE_LIMIT_MAX = 30;
+// Headroom over what a driver app on an 8m filter produces at speed, so an
+// honest burst - leaving a tunnel, regaining lock - is not silently discarded.
+// At 30 a three-metre filter went past the limit at ordinary city speed and
+// the surplus was dropped on arrival, which is what gave the rider ragged
+// spacing between fixes and a marker that sped up and slowed down.
+const RIDE_LOCATION_RATE_LIMIT_MAX = 60;
 const RIDE_LOCATION_RATE_LIMIT_WINDOW_MS = 10_000;
+
+/// Past this a fix describes the sky rather than the road. Forwarding one puts
+/// a car through a building on the rider's map, and neither app can tell it
+/// from a real fix once it has arrived.
+const RIDE_LOCATION_MAX_ACCURACY_METERS = 60;
 
 const driverLifecycleStatuses = new Set([
   RIDE_LIVE_STATUS.ACCEPTED,
@@ -180,6 +190,28 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
       const persistKey = `${rideId}:${socket.auth.sub}`;
       const now = Date.now();
       const previousPersistState = rideLocationPersistState.get(persistKey) || {};
+
+      // Passing sequence through lets the rider *reject* a late packet; acting
+      // on it here means the late packet is never sent to anyone in the first
+      // place - including the driver's own second device, the admin map, and
+      // the location history the analytics read.
+      const incomingSequence = Number.isFinite(Number(sequence)) ? Number(sequence) : null;
+      const lastSequence = Number(previousPersistState.sequence);
+      if (incomingSequence !== null && Number.isFinite(lastSequence) && incomingSequence <= lastSequence) {
+        return;
+      }
+
+      // Only once there is an earlier fix worth keeping instead: the first of a
+      // trip goes through however vague it is, or the rider watches an empty
+      // map until the phone gets a clean lock.
+      const incomingAccuracy = Number.isFinite(Number(accuracy)) ? Number(accuracy) : null;
+      if (
+        incomingAccuracy !== null &&
+        incomingAccuracy > RIDE_LOCATION_MAX_ACCURACY_METERS &&
+        Array.isArray(previousPersistState.coordinates)
+      ) {
+        return;
+      }
       const distanceFromPrevious = Array.isArray(previousPersistState.coordinates)
         ? getDistanceMeters(previousPersistState.coordinates, normalizedCoordinates)
         : Number.POSITIVE_INFINITY;
@@ -251,10 +283,14 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
       rideLocationPersistState.set(persistKey, {
         coordinates: normalizedCoordinates,
         persistedAt: shouldPersistLocation ? now : Number(previousPersistState.persistedAt || 0),
+        sequence: incomingSequence ?? previousPersistState.sequence ?? null,
       });
 
+      // Keeps the Firebase breadcrumb trail, which is throttled to one write
+      // per ten seconds inside, without the socket fan-out it used to do on
+      // every tick: `ride:driver-route:updated` carried the whole accumulated
+      // point array to a room where neither app has ever had a handler for it.
       updateDriverRoute({
-        io,
         rideId,
         driverId: socket.auth.sub,
         coordinates: normalizedCoordinates,
