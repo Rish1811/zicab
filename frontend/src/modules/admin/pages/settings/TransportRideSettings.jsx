@@ -97,7 +97,7 @@ const TransportRideSettings = () => {
              <div className="mb-8 rounded-xl border border-gray-200 bg-gray-50/50 px-5 py-4">
                <p className="text-sm font-semibold text-gray-900">Regular ride search behavior is controlled from this page.</p>
                <p className="mt-1 text-sm text-gray-500">
-                 Only the settings below are currently wired into the live dispatch flow.
+                 Every setting on this page is read by the live dispatch flow.
                </p>
              </div>
              
@@ -143,6 +143,15 @@ const TransportRideSettings = () => {
                       type="number" 
                    />
 
+                   <InputField 
+                      label="Driver Markers Shown On The Rider's Map (Kilometer)" 
+                      name="nearby_driver_marker_radius" 
+                      value={settings.nearby_driver_marker_radius} 
+                      onChange={handleChange} 
+                      type="number" 
+                      placeholder="1"
+                   />
+
                    <div className="space-y-1.5">
                       <label className="text-sm font-medium text-gray-700 block ml-0.5">Require Admin Approval to End Rental</label>
                       <select 
@@ -153,6 +162,51 @@ const TransportRideSettings = () => {
                          <option value="0">No (Auto-complete ride)</option>
                          <option value="1">Yes (Awaiting confirmation)</option>
                       </select>
+                   </div>
+                </div>
+             </div>
+
+             <div className="mt-10 pt-8 border-t border-gray-100">
+                <h4 className="text-[13px] font-bold text-gray-700 uppercase tracking-tight mb-1">Bidding rides</h4>
+                <p className="text-sm text-gray-500 mb-6">
+                   A ride being bid on runs on its own clock. Leave these equal to the regular
+                   values above if you want both kinds searched the same way.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
+                   <div className="space-y-6">
+                      <InputField 
+                         label="Maximum Time For Find Drivers For Bidding Ride (Seconds)" 
+                         name="maximum_time_for_find_drivers_for_bitting_ride" 
+                         value={settings.maximum_time_for_find_drivers_for_bitting_ride} 
+                         onChange={handleChange} 
+                         type="number" 
+                         placeholder="300"
+                      />
+
+                      <InputField 
+                         label="Accept/Reject Duration For A Bidding Ride (Seconds)" 
+                         name="maximum_time_for_accept_reject_bidding_ride" 
+                         value={settings.maximum_time_for_accept_reject_bidding_ride} 
+                         onChange={handleChange} 
+                         type="number" 
+                         placeholder="60"
+                      />
+                   </div>
+
+                   <div className="space-y-6">
+                      <InputField 
+                         label="Maximum Ride Distance For Bidding in Kilometer (0 = no limit)" 
+                         name="bidding_ride_maximum_distance" 
+                         value={settings.bidding_ride_maximum_distance} 
+                         onChange={handleChange} 
+                         type="number" 
+                         placeholder="0"
+                      />
+                      <p className="text-xs text-gray-500 -mt-3">
+                         Applies to city and parcel bookings. Outstation trips are long by
+                         nature and are never capped by this.
+                      </p>
                    </div>
                 </div>
              </div>

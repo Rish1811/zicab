@@ -22,12 +22,23 @@ const asIdSet = (values = []) => new Set((values || []).map((value) => String(va
 
 export const getPendingRideOffers = asyncHandler(async (req, res) => {
   const driverId = String(req.auth.sub);
-  const dispatchConfig = await resolveTransportDispatchConfig();
+  const [dispatchConfig, biddingDispatchConfig] = await Promise.all([
+    resolveTransportDispatchConfig(),
+    resolveTransportDispatchConfig({ bidding: true }),
+  ]);
 
   // An offer is only worth replaying while its dispatch is still plausibly
   // live. Beyond the whole search window the ride is either taken or about to
   // be closed as unmatched, and surfacing it would put a dead card on screen.
-  const freshestDispatchAt = new Date(Date.now() - dispatchConfig.maxSearchSeconds * 1000);
+  //
+  // This query spans rides of both kinds, so it uses whichever window is
+  // longer: cutting at the regular one would hide a bidding ride that is still
+  // being searched for when the admin has given bidding more time.
+  const longestSearchSeconds = Math.max(
+    dispatchConfig.maxSearchSeconds,
+    biddingDispatchConfig.maxSearchSeconds,
+  );
+  const freshestDispatchAt = new Date(Date.now() - longestSearchSeconds * 1000);
 
   const rides = await Ride.find({
     status: RIDE_STATUS.SEARCHING,
@@ -63,9 +74,14 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
       const elapsedSeconds = lastDispatchAt
         ? Math.max(0, Math.round((Date.now() - lastDispatchAt.getTime()) / 1000))
         : 0;
+      // A ride being bid on is offered on the admin's bidding clock, so the
+      // card has to count down on the same one or it expires early.
+      const rideDispatchConfig = ride.pricingNegotiationMode === 'driver_bid'
+        ? biddingDispatchConfig
+        : dispatchConfig;
       const expiresInSeconds = Math.max(
         1,
-        dispatchConfig.retryWindowSeconds - elapsedSeconds,
+        rideDispatchConfig.retryWindowSeconds - elapsedSeconds,
       );
 
       return {
@@ -101,8 +117,8 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
         paymentMethod: ride.paymentMethod,
         parcel: ride.parcel || null,
         intercity: ride.intercity || null,
-        maxAttempts: dispatchConfig.maxAttempts,
-        acceptRejectDurationSeconds: dispatchConfig.retryWindowSeconds,
+        maxAttempts: rideDispatchConfig.maxAttempts,
+        acceptRejectDurationSeconds: rideDispatchConfig.retryWindowSeconds,
         expiresInSeconds,
         requestExpiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
       };

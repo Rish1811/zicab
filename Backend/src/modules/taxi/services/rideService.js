@@ -20,6 +20,7 @@ import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
+import { resolveBiddingPolicy } from './biddingPolicyService.js';
 import { resolveRideRoute } from './routeService.js';
 
 const clearUserActiveRideIfPresent = async (user) => {
@@ -1067,7 +1068,6 @@ export const createRideRecord = async ({
   const resolvedRequestedPaymentMethod = allowedPaymentMethods.includes(normalizedPaymentMethod)
     ? normalizedPaymentMethod
     : (allowedPaymentMethods[0] || 'cash');
-  const supportsBidding = ['bidding', 'both'].includes(String(primaryVehicle?.dispatch_type || '').trim().toLowerCase());
   const requestedBookingMode = String(bookingMode || '').trim().toLowerCase();
   const normalizedServiceType = normalizeServiceType(serviceType);
   const bidRideSettings = await getBidRideSettings();
@@ -1076,12 +1076,20 @@ export const createRideRecord = async ({
     2,
   );
   const isOutstationBiddingFlow = normalizedServiceType === 'intercity';
+  // Whether this booking may be negotiated is the admin's call, not the app's.
+  // The policy weighs the master switch, the services bidding is switched on
+  // for, whether this vehicle is marked biddable, and the distance cap - which
+  // had been sitting in the settings unread. A request the policy turns down
+  // is booked at the quoted fare rather than refused, so an app that has not
+  // caught up with the setting still books.
+  const biddingPolicy = await resolveBiddingPolicy({
+    vehicle: primaryVehicle,
+    serviceType: normalizedServiceType,
+    distanceMeters: safeEstimatedDistanceMeters,
+    bidSettings: bidRideSettings,
+  });
   const pricingNegotiationMode =
-    supportsBidding && requestedBookingMode === 'bidding'
-      ? isOutstationBiddingFlow
-        ? 'driver_bid'
-        : 'user_increment_only'
-      : 'none';
+    requestedBookingMode === 'bidding' && biddingPolicy.allowed ? biddingPolicy.mode : 'none';
   const effectiveBookingMode = pricingNegotiationMode === 'driver_bid' ? 'bidding' : 'normal';
   const configuredBidStepAmount = pricingNegotiationMode !== 'none'
     ? normalizeBidStepAmount(

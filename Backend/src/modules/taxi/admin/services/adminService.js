@@ -69,6 +69,8 @@ import { sendEmail } from '../../services/mailService.js';
 import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
 import { signAccessToken } from '../../services/tokenService.js';
 import { getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
+import { getBidRideSettings } from '../../services/transportSettingsService.js';
+import { resolveCatalogDispatchType } from '../../services/biddingPolicyService.js';
 import { PriceHike } from '../models/PriceHike.js';
 import {
   ADMIN_PERMISSIONS,
@@ -6690,6 +6692,11 @@ export const listPublicVehicleCatalog = async () => {
     ]),
   );
 
+  // The apps read dispatch_type to decide whether to offer bidding at all, so
+  // the admin's bidding switches have to reach it here - otherwise turning
+  // bidding off left the toggle sitting in the app doing nothing.
+  const bidRideSettings = await getBidRideSettings();
+
   const results = items.map((item) => ({
     id: String(item._id),
     _id: item._id,
@@ -6697,7 +6704,7 @@ export const listPublicVehicleCatalog = async () => {
     short_description: item.short_description || '',
     description: item.description || '',
     transport_type: item.transport_type || 'taxi',
-    dispatch_type: item.dispatch_type || 'normal',
+    dispatch_type: resolveCatalogDispatchType(item, bidRideSettings),
     icon_types: item.icon_types || 'car',
     category: item.category || '',
     delivery_category: item.delivery_category || '',

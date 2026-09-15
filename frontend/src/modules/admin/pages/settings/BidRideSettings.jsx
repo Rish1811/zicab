@@ -47,6 +47,35 @@ const InputField = ({ label, name, value, onChange, placeholder, type = "text", 
   </div>
 );
 
+/// The services bidding can be switched on and off for. These match the keys
+/// biddingPolicyService understands; an airport booking reaches the server as
+/// an ordinary city ride, so it follows the city rule.
+const BIDDING_SERVICES = [
+  { key: 'city', label: 'City ride', hint: 'Includes airport pickups and drops' },
+  { key: 'outstation', label: 'Outstation', hint: 'Drivers quote their own fare' },
+  { key: 'parcel', label: 'Parcel and delivery', hint: 'Sender can raise their offer' },
+];
+
+const ToggleRow = ({ label, hint, checked, onChange }) => (
+  <div className="flex items-start justify-between gap-6 py-4 border-b border-gray-100 last:border-0">
+    <div>
+      <p className="text-sm font-medium text-gray-800">{label}</p>
+      {hint && <p className="text-xs text-gray-500 mt-0.5">{hint}</p>}
+    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${checked ? 'bg-yellow-400' : 'bg-gray-200'}`}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''}`}
+      />
+    </button>
+  </div>
+);
+
 const PreviewBox = ({ label }) => (
   <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gray-50/50 border-l border-gray-100 relative overflow-hidden hidden lg:flex">
      <div className="mb-4 z-10">
@@ -125,6 +154,26 @@ const BidRideSettings = () => {
     setSettings(prev => ({ ...prev, [name]: value }));
   };
 
+  // Stored as a comma separated list, because the settings document is a flat
+  // bag of strings. An absent value means every service, which is how installs
+  // that predate this setting keep behaving.
+  const enabledServices = settings.bidding_services === undefined || settings.bidding_services === null
+    ? BIDDING_SERVICES.map(service => service.key)
+    : String(settings.bidding_services).split(',').map(entry => entry.trim()).filter(Boolean);
+
+  const biddingEnabled = String(settings.bidding_enabled ?? '1') !== '0';
+  const allVehicles = String(settings.bidding_all_vehicles ?? '1') === '1';
+
+  const toggleService = (key, next) => {
+    const withoutKey = enabledServices.filter(entry => entry !== key);
+    const updated = next ? [...withoutKey, key] : withoutKey;
+    // Kept in a fixed order so the stored value does not churn with click order.
+    handleChange(
+      'bidding_services',
+      BIDDING_SERVICES.filter(service => updated.includes(service.key)).map(service => service.key).join(','),
+    );
+  };
+
   const openInfoModal = (label) => {
     let content = "This setting configures the bidding parameters for the ride.";
     if (label.includes("Low Percentage")) content = "Sets the minimum percentage below the recommended fare that can be offered.";
@@ -156,6 +205,68 @@ const BidRideSettings = () => {
              <span>Business Settings</span>
              <ChevronRight size={14} />
              <span className="text-gray-900">Bid Ride Settings</span>
+           </div>
+        </div>
+
+        {/* Where bidding is offered at all */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+           <SectionHeader title="Where bidding is offered" />
+           <div className="p-6">
+              <ToggleRow
+                 label="Bidding enabled"
+                 hint="Off hides the bid option in the rider app and books every ride at the quoted fare."
+                 checked={biddingEnabled}
+                 onChange={(next) => handleChange('bidding_enabled', next ? '1' : '0')}
+              />
+              <ToggleRow
+                 label="Offer bidding on every vehicle"
+                 hint="On ignores each vehicle type's own dispatch setting, so a newly added vehicle is biddable straight away."
+                 checked={allVehicles}
+                 onChange={(next) => handleChange('bidding_all_vehicles', next ? '1' : '0')}
+              />
+
+              <div className={`mt-6 ${biddingEnabled ? '' : 'opacity-40 pointer-events-none'}`}>
+                 <p className="text-sm font-semibold text-gray-900 mb-1">Services</p>
+                 <p className="text-xs text-gray-500 mb-3">
+                    A booking for a service that is switched off is created at the quoted fare
+                    instead, so a rider on an older app version can still book.
+                 </p>
+                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {BIDDING_SERVICES.map((service) => {
+                      const checked = enabledServices.includes(service.key);
+                      return (
+                        <button
+                          type="button"
+                          key={service.key}
+                          onClick={() => toggleService(service.key, !checked)}
+                          className={`text-left rounded-lg border px-4 py-3 transition-all ${checked ? 'border-yellow-400 bg-yellow-50/60' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`w-4 h-4 rounded border flex items-center justify-center ${checked ? 'bg-yellow-400 border-yellow-400' : 'border-gray-300'}`}>
+                              {checked && <span className="w-1.5 h-1.5 bg-black rounded-sm" />}
+                            </span>
+                            <span className="text-sm font-medium text-gray-800">{service.label}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1 ml-6">{service.hint}</p>
+                        </button>
+                      );
+                    })}
+                 </div>
+                 <p className="text-xs text-gray-500 mt-4">
+                    How long a bidding ride is searched for, and the distance it is capped at,
+                    live on the Transport Ride Settings page.
+                 </p>
+              </div>
+           </div>
+           <div className="px-6 py-5 bg-gray-50/50 border-t border-gray-100 flex justify-end">
+              <button 
+               onClick={handleUpdate}
+               disabled={saving}
+               className="bg-yellow-400 text-black px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                Update Availability
+              </button>
            </div>
         </div>
 

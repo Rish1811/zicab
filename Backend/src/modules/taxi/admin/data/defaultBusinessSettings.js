@@ -72,6 +72,11 @@ export const createDefaultBusinessSettings = () => ({
     maximum_time_for_find_drivers_for_regular_ride: '300',
     trip_accept_reject_duration_for_driver: '15',
     driver_search_radius: '5',
+    // How far out the rider's map draws the online-driver markers, in km.
+    // Separate from driver_search_radius, which is how far dispatch will
+    // actually reach for a driver: a marker eight km away is not "who is
+    // around me", and the client asked for one km.
+    nearby_driver_marker_radius: '1',
     bidding_ride_maximum_distance: '50',
     user_can_make_a_ride_after_x_miniutes: '15',
     minimum_time_for_search_drivers_for_schedule_ride: '1',
@@ -87,6 +92,16 @@ export const createDefaultBusinessSettings = () => ({
     how_many_times_a_driver_can_enable_the_my_route_booking_per_day: '1',
   },
   bid_ride: {
+    // The master switch, and which services may be bid on at all. Both are
+    // read by biddingPolicyService; an absent bidding_services means every
+    // service, so an install that predates these keys keeps its behaviour.
+    bidding_enabled: '1',
+    bidding_services: 'city,outstation,parcel',
+    // Offer bidding on every vehicle, rather than only the ones an admin has
+    // individually marked biddable on the vehicle type. On by default because
+    // that is what the client asked for; switch it off and each vehicle's own
+    // dispatch type decides again.
+    bidding_all_vehicles: '1',
     bidding_low_percentage: '10',
     bidding_high_percentage: '20',
     bidding_amount_increase_or_decrease: '10',

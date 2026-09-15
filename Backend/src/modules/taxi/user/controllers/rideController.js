@@ -33,7 +33,7 @@ import {
   startDispatchFlow,
 } from '../../services/dispatchService.js';
 import { getTipSettings } from '../../services/appSettingsService.js';
-import { getBidRideSettings } from '../../services/transportSettingsService.js';
+import { getBidRideSettings, getTransportRideSettings } from '../../services/transportSettingsService.js';
 import { matchDrivers } from '../../services/matchingService.js';
 import { Ride } from '../models/Ride.js';
 import { UserWallet } from '../models/UserWallet.js';
@@ -1106,8 +1106,20 @@ export const listAvailableDrivers = async (req, res) => {
       ? new mongoose.Types.ObjectId(service_location_id)
       : null;
 
+  // Two callers, two meanings. With a vehicle type this is the fare screen
+  // asking how far the closest Sedan is, and it needs the full search range or
+  // it reports no driver at all. Without one it is the map's ambient markers,
+  // and the admin decides how wide "around me" is - the client wants one km,
+  // so a driver eight km away no longer appears beside the rider's pin.
+  const transportSettings = await getTransportRideSettings();
+  const markerRadiusMeters = Math.max(
+    100,
+    Math.round((Number(transportSettings.nearby_driver_marker_radius) || 1) * 1000),
+  );
+  const requestedDistance = Number.isFinite(distance) && distance > 0 ? Math.min(distance, 25000) : 25000;
+
   const matchOptions = {
-    maxDistance: Number.isFinite(distance) && distance > 0 ? Math.min(distance, 25000) : 25000,
+    maxDistance: vehicleTypeId ? requestedDistance : Math.min(requestedDistance, markerRadiusMeters),
     limit: Math.min(Number(limit) || 30, 50),
     ...(vehicleTypeId ? { vehicleTypeId } : {}),
   };

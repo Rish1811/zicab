@@ -1339,7 +1339,9 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
 
   try {
     const dispatchState = hydrateDispatchStateFromRide(ride);
-    const dispatchConfig = await resolveTransportDispatchConfig();
+    const dispatchConfig = await resolveTransportDispatchConfig({
+      bidding: ride.pricingNegotiationMode === 'driver_bid',
+    });
     const radius = getAttemptRadiusMeters(
       dispatchConfig.baseDistanceMeters || dispatchConfig.maxDistanceMeters,
       attemptIndex,
@@ -1529,7 +1531,6 @@ export const notifyLateAvailableDriver = async (driverId) => {
       return;
     }
 
-    const dispatchConfig = await resolveTransportDispatchConfig();
     const activeRideIds = Array.from(activeDispatches.keys());
 
     for (const rideId of activeRideIds) {
@@ -1539,6 +1540,11 @@ export const notifyLateAvailableDriver = async (driverId) => {
         continue;
       }
 
+      // Per ride, not once for the loop: a ride being bid on runs on the
+      // admin's bidding timers rather than the regular ride's.
+      const dispatchConfig = await resolveTransportDispatchConfig({
+        bidding: ride.pricingNegotiationMode === 'driver_bid',
+      });
       const dispatchState = getDispatchState(rideId);
 
       if (

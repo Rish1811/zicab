@@ -49,23 +49,40 @@ export const getBidRideSettings = async () => {
   );
 };
 
-export const resolveTransportDispatchConfig = async () => {
+/// Dispatch timing for one search.
+///
+/// A ride being bid on gets its own two timers. They have always been in the
+/// settings document and were read by nothing, so a bidding ride was searched
+/// on the regular ride's clock; pass `bidding` and the admin's bidding timers
+/// are the ones that apply.
+export const resolveTransportDispatchConfig = async ({ bidding = false } = {}) => {
   const settings = await getTransportRideSettings();
   const driverSearchRadiusKm = toPositiveNumber(
     settings.driver_search_radius,
     toPositiveNumber(defaultTransportRideSettings.driver_search_radius, 5),
   );
-  const retryWindowSeconds = toPositiveNumber(
-    settings.trip_accept_reject_duration_for_driver,
-    toPositiveNumber(defaultTransportRideSettings.trip_accept_reject_duration_for_driver, 15),
-  );
-  const maxSearchSeconds = toPositiveNumber(
-    settings.maximum_time_for_find_drivers_for_regular_ride,
-    toPositiveNumber(defaultTransportRideSettings.maximum_time_for_find_drivers_for_regular_ride, 300),
-  );
+  const retryWindowSeconds = bidding
+    ? toPositiveNumber(
+        settings.maximum_time_for_accept_reject_bidding_ride,
+        toPositiveNumber(defaultTransportRideSettings.maximum_time_for_accept_reject_bidding_ride, 60),
+      )
+    : toPositiveNumber(
+        settings.trip_accept_reject_duration_for_driver,
+        toPositiveNumber(defaultTransportRideSettings.trip_accept_reject_duration_for_driver, 15),
+      );
+  const maxSearchSeconds = bidding
+    ? toPositiveNumber(
+        settings.maximum_time_for_find_drivers_for_bitting_ride,
+        toPositiveNumber(defaultTransportRideSettings.maximum_time_for_find_drivers_for_bitting_ride, 300),
+      )
+    : toPositiveNumber(
+        settings.maximum_time_for_find_drivers_for_regular_ride,
+        toPositiveNumber(defaultTransportRideSettings.maximum_time_for_find_drivers_for_regular_ride, 300),
+      );
 
   return {
     settings,
+    bidding: Boolean(bidding),
     dispatchType: String(settings.trip_dispatch_type || defaultTransportRideSettings.trip_dispatch_type) === '2'
       ? 'broadcast'
       : 'one_by_one',
