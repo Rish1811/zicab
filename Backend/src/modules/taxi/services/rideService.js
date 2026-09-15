@@ -349,6 +349,27 @@ const processCompletedDriverReferralReward = async (ride) => {
 
 const normalizeAddress = (value = '') => String(value || '').trim();
 const generateRideOtp = () => String(Math.floor(1000 + Math.random() * 9000));
+
+/// The rider's ride OTP: the same four digits for every trip they take.
+///
+/// Kept on the account and resolved once. A rider who already has rides keeps
+/// the code from their most recent one, so a code a driver has already been
+/// given does not change underneath them.
+const resolveRiderOtp = async (user) => {
+  if (/^\d{4}$/.test(String(user.rideOtp || ''))) {
+    return String(user.rideOtp);
+  }
+
+  const previous = await Ride.findOne({ userId: user._id, otp: /^\d{4}$/ })
+    .sort({ createdAt: -1 })
+    .select('otp')
+    .lean();
+
+  const otp = previous?.otp || generateRideOtp();
+  user.rideOtp = otp;
+  await User.updateOne({ _id: user._id }, { $set: { rideOtp: otp } });
+  return otp;
+};
 const DEFAULT_BID_STEP_AMOUNT = 10;
 const DEFAULT_MAX_BID_STEPS = 5;
 
@@ -994,6 +1015,8 @@ export const createRideRecord = async ({
 
   await clearUserActiveRideIfPresent(user);
 
+  const riderOtp = await resolveRiderOtp(user);
+
   const safeFare = Number(fare);
   const safeEstimatedDistanceMeters = Math.max(0, Number(estimatedDistanceMeters || 0));
   const safeEstimatedDurationMinutes = Math.max(0, Number(estimatedDurationMinutes || 0));
@@ -1248,7 +1271,7 @@ export const createRideRecord = async ({
       paymentMethod: effectivePaymentMethod,
       driverPaymentCollection: effectiveDriverPaymentCollection,
       subscriptionUsage: effectiveSubscriptionUsage,
-      otp: generateRideOtp(),
+      otp: riderOtp,
       service_location_id: resolvedServiceLocationId,
       transport_type: normalizedTransportType,
       pricingSnapshot,
@@ -1304,7 +1327,7 @@ export const createRideRecord = async ({
             paymentMethod: effectivePaymentMethod,
             driverPaymentCollection: effectiveDriverPaymentCollection,
             subscriptionUsage: effectiveSubscriptionUsage,
-            otp: generateRideOtp(),
+            otp: riderOtp,
             service_location_id: resolvedServiceLocationId,
             transport_type: normalizedTransportType,
             pricingSnapshot,

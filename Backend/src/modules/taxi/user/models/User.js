@@ -78,6 +78,19 @@ const userSchema = new mongoose.Schema(
       default: '+91',
       trim: true,
     },
+    // The code a driver is given to start this rider's trips. Fixed per rider
+    // rather than per ride, as the client asked: the same four digits every
+    // time. Set on their first ride and never changed afterwards.
+    //
+    // Worth knowing what it trades away - a per-ride code proves the rider is
+    // present, while this one only proves the driver has carried them before.
+    rideOtp: {
+      type: String,
+      trim: true,
+      minlength: 4,
+      maxlength: 4,
+      default: null,
+    },
     name: {
       type: String,
       required: true,
