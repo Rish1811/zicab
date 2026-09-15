@@ -6532,7 +6532,7 @@ export const listVehicleTypes = async (queryParams = {}) => {
       : { $in: [normalizedTransportType, 'both'] };
   }
   const items = await Vehicle.find(query)
-    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing service_tax admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active createdAt updatedAt')
+    .select('name short_description description transport_type dispatch_type icon_types category delivery_category delivery_distance_pricing service_tax admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner capacity image icon map_icon status active app_modules createdAt updatedAt')
     .sort({ createdAt: -1 })
     .lean();
   const results = items.map((item) => ({
@@ -6544,6 +6544,7 @@ export const listVehicleTypes = async (queryParams = {}) => {
     delivery_category: item.delivery_category || '',
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
     service_tax: normalizeDeliveryServiceTax(item.service_tax),
+    app_modules: Array.isArray(item.app_modules) ? item.app_modules.map(String) : [],
   }));
 
   return {
@@ -6770,6 +6771,23 @@ export const listVehiclePreferences = async () => {
   return listPreferences();
 };
 
+/// Which home-screen modules a vehicle is offered under.
+///
+/// Ids are stored as plain strings, matching the schema. An empty list means
+/// every module - see the comment on Vehicle.app_modules - so clearing the
+/// picker restores a vehicle to the whole app rather than hiding it.
+const normalizeAppModuleIds = (value) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return [...new Set(
+    value
+      .map((entry) => String(entry?._id || entry || '').trim())
+      .filter((entry) => mongoose.Types.ObjectId.isValid(entry)),
+  )];
+};
+
 export const createVehicleType = async (payload) => {
   if (!payload.name?.trim()) {
     throw new ApiError(400, 'Vehicle name is required');
@@ -6818,6 +6836,7 @@ export const createVehicleType = async (payload) => {
     vehicle_preference: Array.isArray(payload.vehicle_preference)
       ? payload.vehicle_preference.filter(Boolean).map(toObjectId)
       : [],
+    app_modules: normalizeAppModuleIds(payload.app_modules),
   });
 
   publicVehicleCatalogCache = { value: null, expiresAt: 0 };
@@ -6912,6 +6931,12 @@ export const updateVehicleType = async (id, payload) => {
     vehicle.vehicle_preference = Array.isArray(payload.vehicle_preference)
       ? payload.vehicle_preference.filter(Boolean).map(toObjectId)
       : [];
+  }
+  // The admin panel has always sent this and the server has always dropped it,
+  // so the module picker on the vehicle form saved nothing: every vehicle kept
+  // an empty list and therefore appeared under every module.
+  if (payload.app_modules !== undefined) {
+    vehicle.app_modules = normalizeAppModuleIds(payload.app_modules);
   }
 
   await vehicle.save();

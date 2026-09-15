@@ -405,6 +405,7 @@ const VehicleType = ({ mode: propMode }) => {
   const [appModules, setAppModules] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, current_page: 1 });
   const [errorMessage, setErrorMessage] = useState('');
+  const [togglingId, setTogglingId] = useState('');
   const [formData, setFormData] = useState({ ...defaultFormData, transport_type: '' });
   const { transportTypes } = useTaxiTransportTypes({ enabled: isEditor });
   const transportTypeOptions = useMemo(() => {
@@ -442,17 +443,16 @@ const VehicleType = ({ mode: propMode }) => {
         const vehicleCatalogPromise = api.get(isEditor ? '/admin/types/vehicle-types' : '/admin/types/vehicle-types/list');
         const preferencePromise = isEditor ? api.get('/admin/vehicle_preference') : Promise.resolve(null);
         // Public route: the module list is the same one the rider app reads, so
-        // the admin cannot assign a module the app will not offer.
-        if (isEditor) {
-          api.get('/users/app-modules')
-            .then((response) => {
-              if (!mounted) return;
-              const payload = unwrap(response);
-              const rows = Array.isArray(payload?.results) ? payload.results : [];
-              setAppModules(rows.filter((row) => row && (row.active ?? 1)));
-            })
-            .catch(() => {});
-        }
+        // the admin cannot assign a module the app will not offer. Fetched on
+        // the list too, which names the modules each vehicle is offered under.
+        api.get('/users/app-modules')
+          .then((response) => {
+            if (!mounted) return;
+            const payload = unwrap(response);
+            const rows = Array.isArray(payload?.results) ? payload.results : [];
+            setAppModules(rows.filter((row) => row && (row.active ?? 1)));
+          })
+          .catch(() => {});
         const detailPromise = isEditor && id ? api.get(`/admin/types/vehicle-types/${id}`) : Promise.resolve(null);
 
         if (!id && propMode === 'create') {
@@ -663,6 +663,52 @@ const VehicleType = ({ mode: propMode }) => {
     }
   };
 
+  /// Switches a vehicle on or off for the rider app straight from the list.
+  ///
+  /// The row flips first and is put back if the server refuses, because the
+  /// alternative - a switch that does nothing until a round trip finishes -
+  /// reads as broken, which is what this one was: it had no handler at all.
+  const handleToggleActive = async (vehicle) => {
+    const vehicleId = String(vehicle.id || vehicle._id || '');
+    if (!vehicleId || togglingId) {
+      return;
+    }
+
+    const nextActive = vehicle.active === false;
+    setTogglingId(vehicleId);
+    setVehicles((prev) => prev.map((item) => (
+      String(item.id || item._id) === vehicleId
+        ? { ...item, active: nextActive, status: nextActive ? 1 : 0 }
+        : item
+    )));
+
+    try {
+      await api.patch(`/admin/types/vehicle-types/${vehicleId}`, { status: nextActive ? 1 : 0 });
+    } catch (error) {
+      setVehicles((prev) => prev.map((item) => (
+        String(item.id || item._id) === vehicleId
+          ? { ...item, active: !nextActive, status: !nextActive ? 1 : 0 }
+          : item
+      )));
+      setErrorMessage(error?.response?.data?.message || error.message || 'Could not change this vehicle.');
+    } finally {
+      setTogglingId('');
+    }
+  };
+
+  /// The modules a vehicle is offered under, by name. An empty list means every
+  /// module, which is the schema's own convention - see Vehicle.app_modules.
+  const moduleNamesFor = (vehicle) => {
+    const ids = Array.isArray(vehicle.app_modules) ? vehicle.app_modules.map(String) : [];
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return ids
+      .map((moduleId) => appModules.find((row) => String(row._id || row.id) === moduleId)?.name)
+      .filter(Boolean);
+  };
+
   const handleDelete = async (vehicleId) => {
     if (!window.confirm('Delete this vehicle type?')) {
       return;
@@ -750,18 +796,19 @@ const VehicleType = ({ mode: propMode }) => {
                   <th className="px-6 py-4 text-sm font-semibold text-slate-600">Vehicle</th>
                   <th className="px-6 py-4 text-sm font-semibold text-slate-600">Transport</th>
                   <th className="px-6 py-4 text-sm font-semibold text-slate-600">Dispatch</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">Active</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">Shown in</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">Shown in app</th>
                   <th className="px-6 py-4 text-right text-sm font-semibold text-slate-600">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="5" className="px-6 py-20 text-center text-sm text-slate-400">Loading vehicle types...</td>
+                    <td colSpan="6" className="px-6 py-20 text-center text-sm text-slate-400">Loading vehicle types...</td>
                   </tr>
                 ) : !vehicles.length ? (
                   <tr>
-                    <td colSpan="5" className="px-6 py-20 text-center text-sm text-slate-400">No vehicle types found.</td>
+                    <td colSpan="6" className="px-6 py-20 text-center text-sm text-slate-400">No vehicle types found.</td>
                   </tr>
                 ) : vehicles.map((vehicle) => (
                   <tr key={vehicle.id} className="border-t border-slate-100">
@@ -789,7 +836,23 @@ const VehicleType = ({ mode: propMode }) => {
                     </td>
                     <td className="px-6 py-5 text-sm font-medium text-slate-700">{vehicle.trip_dispatch_type || vehicle.dispatch_type || 'normal'}</td>
                     <td className="px-6 py-5">
-                      <StatusToggle active={vehicle.active !== false} onToggle={() => {}} />
+                      {moduleNamesFor(vehicle).length === 0 ? (
+                        <span className="text-xs font-medium text-slate-400">Every section</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {moduleNamesFor(vehicle).map((name) => (
+                            <span key={name} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-5">
+                      <StatusToggle
+                        active={vehicle.active !== false}
+                        onToggle={() => handleToggleActive(vehicle)}
+                      />
                     </td>
                     <td className="px-6 py-5">
                       <div className="flex items-center justify-end gap-2">
