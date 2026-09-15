@@ -1136,10 +1136,14 @@ export const createRideRecord = async ({
           bidStepAmount: effectiveBidStepAmount,
         })
       : safeFare;
+  // The floor has to be the fare the rider is actually starting at, not the
+  // raw quote. A quote of 159.30 is charged as 159 - every bid figure is a
+  // whole number of rupees - and a floor of 159.30 would sit fractionally
+  // above the fare it is meant to be the floor of.
   const effectiveBidFloorFare = pricingNegotiationMode === 'driver_bid'
     ? bidRideRange.driverBidFloorFare
     : pricingNegotiationMode === 'user_increment_only'
-      ? (startsAtQuotedFare ? safeFare : bidRideRange.userBidFloorFare)
+      ? (startsAtQuotedFare ? effectiveUserMaxBidFare : bidRideRange.userBidFloorFare)
       : safeFare;
   const effectiveBidCeilingMaxFare = pricingNegotiationMode === 'driver_bid'
     ? Math.min(bidRideRange.userBidCeilingFare, bidRideRange.driverBidCeilingFare)
