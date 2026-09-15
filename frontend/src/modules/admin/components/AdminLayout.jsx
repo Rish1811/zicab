@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Clock,
   FileText,
+  Gavel,
   Globe,
   Home,
   IndianRupee,
@@ -857,6 +858,7 @@ const AdminLayout = () => {
               //{ label: 'Goods Types', path: '/admin/pricing/goods-types', permission: 'goods_types.view' },
             ],
           },
+          { icon: Gavel, label: 'Bidding', path: '/admin/settings/business/bid-ride', permission: 'settings.view' },
           {
             icon: TrendingUp,
             label: 'Price Hike',
@@ -1020,7 +1022,6 @@ const AdminLayout = () => {
               { label: 'General Settings', path: '/admin/settings/business/general', permission: 'settings.view' },
               { label: 'Customization Settings', path: '/admin/settings/business/customization', permission: 'settings.view' },
               { label: 'Transport Ride Settings', path: '/admin/settings/business/transport-ride', permission: 'settings.view' },
-              { label: 'Bid Ride Settings', path: '/admin/settings/business/bid-ride', permission: 'settings.view' },
             ],
           },
           {

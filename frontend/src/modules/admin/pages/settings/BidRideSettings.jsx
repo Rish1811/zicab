@@ -7,6 +7,7 @@ import {
   Info,
   X
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
 
@@ -202,7 +203,7 @@ const BidRideSettings = () => {
         {/* Header Breadcrumb */}
         <div className="flex items-center justify-end mb-2">
            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
-             <span>Business Settings</span>
+             <span>Bidding</span>
              <ChevronRight size={14} />
              <span className="text-gray-900">Bid Ride Settings</span>
            </div>
@@ -254,7 +255,13 @@ const BidRideSettings = () => {
                  </div>
                  <p className="text-xs text-gray-500 mt-4">
                     How long a bidding ride is searched for, and the distance it is capped at,
-                    live on the Transport Ride Settings page.
+                    live on{' '}
+                    <Link
+                      to="/admin/settings/business/transport-ride"
+                      className="text-yellow-600 font-semibold hover:underline"
+                    >
+                      Transport Ride Settings
+                    </Link>.
                  </p>
               </div>
            </div>
