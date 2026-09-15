@@ -117,9 +117,16 @@ export const resolveBiddingPolicy = async ({
 
   return {
     allowed: true,
-    // An outstation trip is quoted by the drivers themselves; a city or parcel
-    // booking only lets the rider raise their own offer.
-    mode: serviceKey === 'outstation' ? 'driver_bid' : 'user_increment_only',
+    // One negotiation model, everywhere: the rider raises their own fare by
+    // the admin's step. Drivers naming their own price ('driver_bid') was only
+    // ever reachable on an outstation booking, and the client does not want
+    // it - a driver quoting a number is a different product from a rider
+    // sweetening the one they were quoted.
+    //
+    // The driver-bid path is left in the codebase rather than torn out: the
+    // RideBid model, the offer screens and the accept endpoint all still work,
+    // so bringing it back is a one-line change here rather than a rebuild.
+    mode: 'user_increment_only',
     serviceKey,
     reason: null,
     maxDistanceKm,

@@ -177,12 +177,29 @@ const BidRideSettings = () => {
   };
 
   const openInfoModal = (label) => {
-    let content = "This setting configures the bidding parameters for the ride.";
-    if (label.includes("Low Percentage")) content = "Sets the minimum percentage below the recommended fare that can be offered.";
-    if (label.includes("High Percentage")) content = "Sets the maximum percentage above the recommended fare that can be offered.";
-    if (label.includes("Increase Step") || label.includes("Increase or Decrease")) content = "The increment or decrement step amount when adjusting the bid.";
-    if (label.includes("Wait Time")) content = "How long a user must wait before they can increase their offer to find drivers.";
-    
+    let content = "This setting shapes how much a waiting rider can add to their fare.";
+    if (label.includes("Starting Fare")) {
+      content =
+        "Where a rider starts if they switch bidding on themselves before booking. " +
+        "A rider who simply books and then waits always starts at the fare they " +
+        "were quoted, whatever this says.";
+    }
+    if (label.includes("Highest Fare")) {
+      content =
+        "The ceiling. Once the fare reaches it the card stops offering more and " +
+        "says so, rather than showing a button that fails.";
+    }
+    if (label.includes("Each Tap Adds")) {
+      content =
+        "The step. The app offers four amounts built from it, so Rs 10 here gives " +
+        "the rider + Rs 10, + Rs 20, + Rs 30 and + Rs 40 in one row.";
+    }
+    if (label.includes("Wait Between")) {
+      content =
+        "How long the rider waits between one increase and the next, so the fare " +
+        "cannot be walked to the ceiling in a few seconds.";
+    }
+
     setInfoModal({ open: true, title: label, content });
   };
 
@@ -285,67 +302,14 @@ const BidRideSettings = () => {
            </div>
         </div>
 
-        {/* Driver Section */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col lg:flex-row">
-           <div className="flex-1 flex flex-col justify-between">
-              <div>
-                 <SectionHeader title="Driver settings" />
-                 <div className="p-6 space-y-6">
-                    <InputField 
-                       label="Driver Bidding Low Percentage (Least Bid Level)" 
-                       name="bidding_low_percentage" 
-                       value={settings.bidding_low_percentage} 
-                       onChange={handleChange} 
-                       type="number" 
-                       prefix="%"
-                       helpLink
-                       onHelpClick={openInfoModal}
-                    />
-                    <InputField 
-                       label="Driver Bidding High Percentage (Highest Bid Level)" 
-                       name="bidding_high_percentage" 
-                       value={settings.bidding_high_percentage} 
-                       onChange={handleChange} 
-                       type="number" 
-                       prefix="%"
-                       helpLink
-                       onHelpClick={openInfoModal}
-                    />
-                    <InputField 
-                       label="Driver Bid Range From Recommended Price" 
-                       name="bidding_amount_increase_or_decrease" 
-                       value={settings.bidding_amount_increase_or_decrease} 
-                       onChange={handleChange} 
-                       type="number" 
-                       helpLink
-                       onHelpClick={openInfoModal}
-                    />
-                 </div>
-              </div>
-              <div className="px-6 py-5 bg-gray-50/50 border-t border-gray-100 flex justify-end">
-                 <button 
-                  onClick={handleUpdate}
-                  disabled={saving}
-                  className="bg-yellow-400 text-black px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50"
-                 >
-                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                   Update Driver Settings
-                 </button>
-              </div>
-           </div>
-           <div className="lg:w-[350px]">
-              <PreviewBox label="Driver app" />
-           </div>
-        </div>
-
         {/* User Section */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col lg:flex-row">
            <div className="flex-1 flex flex-col justify-between">
               <div>
-                 <SectionHeader title="User settings" />
+                 <SectionHeader title="Fare the rider can add" />
                  <div className="p-6 space-y-6">
                     <InputField 
-                       label="User Fare Low Percentage (Starting Level)" 
+                       label="Starting Fare, % Above The Quoted Price" 
                        name="user_bidding_low_percentage" 
                        value={settings.user_bidding_low_percentage} 
                        onChange={handleChange} 
@@ -355,7 +319,7 @@ const BidRideSettings = () => {
                        onHelpClick={openInfoModal}
                     />
                     <InputField 
-                       label="User Fare High Percentage (Highest Level)" 
+                       label="Highest Fare, % Above The Quoted Price" 
                        name="user_bidding_high_percentage" 
                        value={settings.user_bidding_high_percentage} 
                        onChange={handleChange} 
@@ -365,7 +329,7 @@ const BidRideSettings = () => {
                        onHelpClick={openInfoModal}
                     />
                     <InputField 
-                       label="User Fare Increase Step From Recommended Price" 
+                       label="Amount Each Tap Adds (Rs)" 
                        name="user_bidding_amount_increase_or_decrease" 
                        value={settings.user_bidding_amount_increase_or_decrease} 
                        onChange={handleChange} 
@@ -374,7 +338,7 @@ const BidRideSettings = () => {
                        onHelpClick={openInfoModal}
                     />
                     <InputField 
-                       label="Wait Time Before User Can Increase Fare (Minutes)" 
+                       label="Wait Between Increases (Minutes)" 
                        name="user_fare_increase_wait_minutes" 
                        value={settings.user_fare_increase_wait_minutes} 
                        onChange={handleChange} 
@@ -391,7 +355,7 @@ const BidRideSettings = () => {
                   className="bg-yellow-400 text-black px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 hover:bg-yellow-500 active:scale-95 transition-all disabled:opacity-50"
                  >
                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                   Update User Settings
+                   Update Fare Settings
                  </button>
               </div>
            </div>

@@ -1075,7 +1075,6 @@ export const createRideRecord = async ({
     bidRideSettings.user_fare_increase_wait_minutes,
     2,
   );
-  const isOutstationBiddingFlow = normalizedServiceType === 'intercity';
   // Whether this booking may be negotiated is the admin's call, not the app's.
   // The policy weighs the master switch, the services bidding is switched on
   // for, whether this vehicle is marked biddable, and the distance cap - which
@@ -1109,12 +1108,10 @@ export const createRideRecord = async ({
   const startsAtQuotedFare = pricingNegotiationMode === 'user_increment_only'
     && requestedBookingMode !== 'bidding';
   const effectiveBookingMode = pricingNegotiationMode === 'driver_bid' ? 'bidding' : 'normal';
+  // One step amount now, the rider's, because the rider is the only one who
+  // ever moves the fare. The separate driver step only applied to driver bids.
   const configuredBidStepAmount = pricingNegotiationMode !== 'none'
-    ? normalizeBidStepAmount(
-        isOutstationBiddingFlow
-          ? bidRideSettings.bidding_amount_increase_or_decrease
-          : bidRideSettings.user_bidding_amount_increase_or_decrease,
-      )
+    ? normalizeBidStepAmount(bidRideSettings.user_bidding_amount_increase_or_decrease)
     : normalizeBidStepAmount(bidStepAmount);
   const effectiveBidStepAmount = configuredBidStepAmount || normalizeBidStepAmount(bidStepAmount);
   const bidRideRange = resolveBidRideRange({
