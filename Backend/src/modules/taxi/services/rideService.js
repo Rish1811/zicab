@@ -856,6 +856,46 @@ const normalizeRideTransportType = (value = 'taxi') => {
   return normalized;
 };
 
+/// Why this driver was refused, in words a driver can act on.
+///
+/// The five conditions on the accept filter all produced the same sentence,
+/// which meant a driver seeing it - and whoever they called about it - could
+/// not tell "you are offline" from "this ride is not for your vehicle". Read
+/// only when a refusal has already happened, so it costs nothing in the normal
+/// path.
+const explainWhyDriverCannotAccept = async ({ driverId, ride }) => {
+  const driver = await Driver.findById(driverId)
+    .select('isOnline isOnRide wallet.isBlocked owner_id vehicleTypeId vehicleTypeIds')
+    .lean();
+
+  if (!driver) {
+    return 'Driver account not found';
+  }
+
+  if (!driver.isOnline) {
+    return 'You are offline. Go online to accept rides';
+  }
+
+  if (driver.isOnRide) {
+    return 'You are already on a ride. Finish it before accepting another';
+  }
+
+  if (driver.wallet?.isBlocked && !driver.owner_id) {
+    return 'Your wallet is blocked. Clear the balance to accept rides';
+  }
+
+  const wanted = normalizeVehicleTypeIds(ride.dispatchVehicleTypeIds || [], ride.vehicleTypeId)
+    .map(String);
+  const mine = [driver.vehicleTypeId, ...(driver.vehicleTypeIds || [])]
+    .filter(Boolean)
+    .map(String);
+  if (wanted.length && !mine.some((id) => wanted.includes(id))) {
+    return 'This ride is for a different vehicle type than yours';
+  }
+
+  return 'Driver is unavailable to accept this ride';
+};
+
 const buildDriverVehicleAcceptFilter = async (ride) => {
   const vehicleTypeIds = normalizeVehicleTypeIds(ride.dispatchVehicleTypeIds || [], ride.vehicleTypeId);
 
@@ -880,7 +920,16 @@ const buildDriverVehicleAcceptFilter = async (ride) => {
     return clauses.length > 1 ? { $or: clauses } : clauses[0] || {};
   }
 
-  return { vehicleTypeId: { $in: vehicleTypeIds } };
+  // Both fields, because dispatch matches on both. A driver who enrolled in
+  // more than one category at onboarding keeps the extras in vehicleTypeIds
+  // and only the first in vehicleTypeId - so checking the singular alone
+  // offered them rides they were then told they could not accept.
+  return {
+    $or: [
+      { vehicleTypeId: { $in: vehicleTypeIds } },
+      { vehicleTypeIds: { $in: vehicleTypeIds } },
+    ],
+  };
 };
 
 /// Waiting charge for a parcel, applied once when the trip completes.
@@ -1779,14 +1828,19 @@ export const acceptRideAssignment = async ({ rideId, driverId }) => {
     _id: driverId,
     isOnline: true,
     isOnRide: false,
-    'wallet.isBlocked': { $ne: true },
-    ...driverVehicleFilter,
+    // Mirrors the dispatch filter. A fleet driver's wallet block is the
+    // owner's problem, not theirs, so dispatch keeps offering them rides -
+    // and accept used to refuse every one of them.
+    $and: [
+      { $or: [{ owner_id: { $ne: null } }, { 'wallet.isBlocked': { $ne: true } }] },
+      driverVehicleFilter,
+    ],
   };
 
   const driver = await Driver.findOne(driverFilter);
 
   if (!driver) {
-    throw new ApiError(409, 'Driver is unavailable to accept this ride');
+    throw new ApiError(409, await explainWhyDriverCannotAccept({ driverId, ride }));
   }
 
   const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides([driverId]);
@@ -1818,7 +1872,10 @@ export const acceptRideAssignment = async ({ rideId, driverId }) => {
   );
 
   if (!claimedDriver) {
-    throw new ApiError(409, 'Driver is unavailable to accept this ride');
+    // Losing the claim after passing the checks above means another ride took
+    // this driver in the intervening milliseconds. That is the race the filter
+    // exists to win, not a misconfiguration, so it says so plainly.
+    throw new ApiError(409, 'Another ride was accepted a moment before this one');
   }
 
   // Then claim the ride. Same idea: the filter pins it to an unassigned,
