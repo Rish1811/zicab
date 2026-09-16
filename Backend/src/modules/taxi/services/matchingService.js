@@ -85,23 +85,66 @@ const buildZoneIntersectionQuery = (coordinates) => ({
   },
 });
 
+/// Rough area of a zone's outer ring in km2 - enough to rank zones by size,
+/// which is all it is used for. Shoelace on a local equirectangular projection.
+const approximateZoneAreaKm2 = (zone) => {
+  const ring = zone?.geometry?.coordinates?.[0];
+  if (!Array.isArray(ring) || ring.length < 4) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const meanLatRadians = (ring.reduce((sum, point) => sum + Number(point[1]), 0) / ring.length) * (Math.PI / 180);
+  const kmPerDegreeLng = 111.32 * Math.cos(meanLatRadians);
+  const kmPerDegreeLat = 110.57;
+  let twiceArea = 0;
+  for (let i = 0; i < ring.length - 1; i += 1) {
+    twiceArea += (ring[i][0] * kmPerDegreeLng) * (ring[i + 1][1] * kmPerDegreeLat)
+      - (ring[i + 1][0] * kmPerDegreeLng) * (ring[i][1] * kmPerDegreeLat);
+  }
+  return Math.abs(twiceArea / 2);
+};
+
+/// The most specific zone containing a point: the smallest one.
+///
+/// Zones can nest - a city inside a state-wide catch-all - and the city is the
+/// one whose prices and drivers should apply. The previous rule was "newest
+/// wins", which made correctness depend on the order zones were created or
+/// last edited: adding a state zone would have taken every city inside it, and
+/// merely saving a city zone later would have handed it back. Newest is kept
+/// only as the tie-break between zones of the same size.
+const pickMostSpecificZone = (zones = []) => {
+  if (!zones.length) {
+    return null;
+  }
+
+  return [...zones].sort((a, b) => {
+    const byArea = approximateZoneAreaKm2(a) - approximateZoneAreaKm2(b);
+    if (byArea !== 0) {
+      return byArea;
+    }
+    return new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+  })[0];
+};
+
 export const findZoneByPickup = async (pickupCoords, options = {}) => {
   const coordinates = normalizePoint(pickupCoords, 'pickupCoords');
   const normalizedServiceLocationId = String(options?.serviceLocationId || '').trim();
 
   if (normalizedServiceLocationId) {
-    const preferredZone = await Zone.findOne({
+    const preferredZones = await Zone.find({
       ...buildZoneIntersectionQuery(coordinates),
       service_location_id: normalizedServiceLocationId,
-    }).sort({ updatedAt: -1, createdAt: -1 });
+    });
+    const preferredZone = pickMostSpecificZone(preferredZones);
 
     if (preferredZone) {
       return preferredZone;
     }
   }
 
-  // Zones are authoritative for dispatch. If polygons overlap, prefer the newest active zone.
-  return Zone.findOne(buildZoneIntersectionQuery(coordinates)).sort({ updatedAt: -1, createdAt: -1 });
+  // Zones are authoritative for dispatch. A point rarely sits in more than two
+  // or three, so fetching them all and ranking here costs next to nothing.
+  return pickMostSpecificZone(await Zone.find(buildZoneIntersectionQuery(coordinates)));
 };
 
 const toLocalMeters = (origin, target) => {
