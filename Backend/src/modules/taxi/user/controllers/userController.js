@@ -4505,8 +4505,6 @@ export const getSetPrices = asyncHandler(async (req, res) => {
     zone = await findZoneByPickup([longitude, latitude]);
   }
 
-  // The listing's own zone filter is an exact match, which would drop the
-  // service-location and global rows the cascade needs to fall back to.
   delete query.zone_id;
   // Matched exactly by the listing, which would discard every row marked
   // 'both'; ranked here instead.
@@ -4516,9 +4514,22 @@ export const getSetPrices = asyncHandler(async (req, res) => {
   delete query.latitude;
   delete query.longitude;
 
-  const data = await listSetPrices(query, null);
-
   const zoneId = zone ? String(zone._id) : (requestedZoneId || null);
+
+  // Only the rows the cascade below can use: this zone's, and the no-zone
+  // fallbacks. It used to ask for every row in every zone and let the ranking
+  // discard the rest - but the listing sorts newest first and cuts at a
+  // hundred, so once the table passed a hundred rows, adding zones pushed the
+  // oldest ones off the page. Seeding Karnataka, Bidar and Hyderabad took
+  // Bengaluru from twelve vehicles to three. Fetched this way the count of
+  // zones no longer matters.
+  const [zoneRows, fallback] = await Promise.all([
+    zoneId ? listSetPrices({ ...query, zone_id: zoneId }, null) : null,
+    listSetPrices({ ...query, zone_id: 'none' }, null),
+  ]);
+  const data = zoneRows
+    ? { ...zoneRows, results: [...(zoneRows.results || []), ...(fallback.results || [])] }
+    : fallback;
   if (!zoneId) {
     res.status(200).json({ success: true, ...data });
     return;

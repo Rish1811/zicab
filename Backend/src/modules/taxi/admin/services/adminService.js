@@ -7186,14 +7186,22 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
     }
 
     if (normalizedZoneId) {
-      const rowZoneId = String(
+      // From the real _id only. `zone.id` is built as String(zone._id) off a
+      // `zone_id || {}` fallback, so a row with no zone carries the literal
+      // string "undefined" there - which reads as a zone and made every
+      // no-zone row vanish from a zone_id=none query.
+      const rawZoneId =
         row.paginatorItem?.zone?._id ||
-        row.paginatorItem?.zone?.id ||
         row.paginatorItem?.zone_id?._id ||
-        row.paginatorItem?.zone_id ||
-        '',
-      );
-      if (rowZoneId !== normalizedZoneId) {
+        row.paginatorItem?.zone_id;
+      const rowZoneId = rawZoneId ? String(rawZoneId) : '';
+      // 'none' asks for the rows that belong to no zone - the service-location
+      // and global fallbacks the rider catalog cascades to.
+      if (normalizedZoneId === 'none') {
+        if (rowZoneId) {
+          return false;
+        }
+      } else if (rowZoneId !== normalizedZoneId) {
         return false;
       }
     }
