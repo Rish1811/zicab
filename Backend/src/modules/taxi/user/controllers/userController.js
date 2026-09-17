@@ -4516,6 +4516,25 @@ export const getSetPrices = asyncHandler(async (req, res) => {
 
   const zoneId = zone ? String(zone._id) : (requestedZoneId || null);
 
+  // No location sent, so no zone to rank for. Most requests to this endpoint
+  // arrive like this - older app builds and screens that ask before GPS is
+  // ready - and those apps choose the price themselves from the whole table.
+  // They always received the whole table; returning only the no-zone rows
+  // instead left them with a single vehicle, and Bengaluru riders with no
+  // prices. Every page is fetched, so the listing's hundred-row cut-off cannot
+  // silently drop the oldest cities' rows either.
+  if (!zoneId) {
+    const firstPage = await listSetPrices({ ...query, page: 1, limit: 100 }, null);
+    const lastPage = Number(firstPage.paginator?.last_page || 1);
+    let allRows = [...(firstPage.results || [])];
+    for (let page = 2; page <= lastPage; page += 1) {
+      const nextPage = await listSetPrices({ ...query, page, limit: 100 }, null);
+      allRows = allRows.concat(nextPage.results || []);
+    }
+    res.status(200).json({ success: true, ...firstPage, results: allRows });
+    return;
+  }
+
   // Only the rows the cascade below can use: this zone's, and the no-zone
   // fallbacks. It used to ask for every row in every zone and let the ranking
   // discard the rest - but the listing sorts newest first and cuts at a
@@ -4524,16 +4543,10 @@ export const getSetPrices = asyncHandler(async (req, res) => {
   // Bengaluru from twelve vehicles to three. Fetched this way the count of
   // zones no longer matters.
   const [zoneRows, fallback] = await Promise.all([
-    zoneId ? listSetPrices({ ...query, zone_id: zoneId }, null) : null,
+    listSetPrices({ ...query, zone_id: zoneId }, null),
     listSetPrices({ ...query, zone_id: 'none' }, null),
   ]);
-  const data = zoneRows
-    ? { ...zoneRows, results: [...(zoneRows.results || []), ...(fallback.results || [])] }
-    : fallback;
-  if (!zoneId) {
-    res.status(200).json({ success: true, ...data });
-    return;
-  }
+  const data = { ...zoneRows, results: [...(zoneRows.results || []), ...(fallback.results || [])] };
 
   const serviceLocationId = zone?.service_location_id
     ? String(zone.service_location_id._id || zone.service_location_id)
