@@ -148,11 +148,9 @@ export const LANDING_FALLBACK = {
       { label: 'Verified Drivers', count: 500, suffix: '+' },
     ],
     foundersTag: 'Leadership',
-    foundersHeading: 'Meet the Founders',
-    // Placeholders until the client supplies real details and photos.
+    foundersHeading: 'Meet the Founder',
     founders: [
-      { name: 'Founder Name', role: 'Founder & CEO', photo: '', bio: '', linkedin: '' },
-      { name: 'Co-Founder Name', role: 'Co-Founder & COO', photo: '', bio: '', linkedin: '' },
+      { name: 'Shamsher Mohammed', role: 'Founder & CEO', photo: '', bio: '', linkedin: '' },
     ],
     pillarsHeading: 'The Pillars of ZI CAB',
     pillars: [

@@ -112,12 +112,17 @@ const AboutUs = ({ openBookingModal }) => {
               <div key={i} className="founder-card">
                 <div className="avatar founder-photo">
                   {f.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
-                  <img
-                    src={f.photo}
-                    alt={f.name}
-                    loading="lazy"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
+                  {/* Only with a photo. An <img src=""> is not an error to every
+                      browser, so onError never hid it: the page drew a broken
+                      picture with the name printed across the initials. */}
+                  {f.photo && (
+                    <img
+                      src={f.photo}
+                      alt={f.name}
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  )}
                 </div>
                 <div className="founder-body">
                   <h3 className="founder-name">{f.name}</h3>
