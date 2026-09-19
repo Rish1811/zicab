@@ -84,7 +84,9 @@ export const LANDING_FALLBACK = {
   // placeholders and the QR code was an icon, so these start empty and the
   // client fills them in.
   brand: {
-    logo: '/zicab-logo.jpg',
+    // Empty: the site uses the logo from General Settings. Set this only to
+    // give the website a different logo from the rest of the product.
+    logo: '',
     wordmarkPrimary: 'ZI',
     wordmarkSecondary: 'CAB',
     tagline: 'Your Ride. Our Priority.',

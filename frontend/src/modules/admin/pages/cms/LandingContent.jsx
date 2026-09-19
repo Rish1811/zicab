@@ -134,7 +134,7 @@ const FOOTER_FIELDS = [
 ];
 
 const BRAND_FIELDS = [
-  { name: 'logo', label: 'Logo', type: 'image', wide: true, help: 'Shown in the header, footer and intro screen.' },
+  { name: 'logo', label: 'Logo', type: 'image', wide: true, help: 'Shown in the header, footer and intro screen. Leave empty to use the logo from General Settings.' },
   { name: 'wordmarkPrimary', label: 'Wordmark (first part)', placeholder: 'ZI' },
   { name: 'wordmarkSecondary', label: 'Wordmark (second part)', placeholder: 'CAB' },
   { name: 'tagline', label: 'Tagline', placeholder: 'Your Ride. Our Priority.', wide: true },
