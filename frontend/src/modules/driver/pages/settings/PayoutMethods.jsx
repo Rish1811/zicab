@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, CreditCard, Plus, HelpCircle, ArrowRight, ShieldCheck, Banknote, X, CheckSquare } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useSupportInfo } from '../../../shared/content/supportInfo';
 
 const PayoutMethods = () => {
+    const support = useSupportInfo();
     const navigate = useNavigate();
     const location = useLocation();
     const routePrefix = location.pathname.startsWith('/taxi/owner') ? '/taxi/owner' : '/taxi/driver';
@@ -13,7 +15,7 @@ const PayoutMethods = () => {
     ]);
     const [showAdd, setShowAdd] = useState(false);
 
-    const openContact = () => window.open('https://wa.me/919424100424');
+    const openContact = () => window.open(`https://wa.me/${support.whatsapp}`);
 
     return (
         <div className="min-h-screen bg-[#f8f9fb] font-sans p-6 pt-10 pb-32">

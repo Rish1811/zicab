@@ -69,13 +69,16 @@ export const defaultLandingContent = {
   ],
 
   contact: {
-    email: 'support@zicab.in',
-    whatsapp: '919876500000',
-    whatsappDisplay: '+91 98765 00000',
-    tollFree: '1800 200 9999',
+    email: 'zicabofficial@gmail.com',
+    whatsapp: '918904343123',
+    whatsappDisplay: '+91 8904343123',
+    // No toll-free line yet. Every "call us" link dials this field, so it holds
+    // the business number; tollFreeLive stays false, which keeps the toll-free
+    // IVR banner on the contact page hidden until a real line exists.
+    tollFree: '+91 8904343123',
     tollFreeLive: false,
-    address: 'Grand Majestic Mall, Gandhinagar, Bengaluru, Karnataka 560009',
-    addressShort: 'Grand Majestic Mall, Gandhinagar, Bengaluru',
+    address: 'Office No 13, Grand Majestic Mall, Gandhinagar, Bengaluru - 560009',
+    addressShort: 'Office No 13, Grand Majestic Mall, Gandhinagar, Bengaluru',
     mapsUrl:
       'https://www.google.com/maps/search/?api=1&query=Grand+Majestic+Mall+Gandhinagar+Bengaluru',
   },

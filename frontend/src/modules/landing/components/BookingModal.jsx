@@ -255,7 +255,7 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
             </p>
             <div className="driver-assign-card">
               <p>📍 Our team will call you shortly to confirm the driver and fare.</p>
-              <p>📞 24x7 Toll-Free Support: {CONTACT.tollFree}</p>
+              <p>📞 Call us: {CONTACT.tollFree}</p>
             </div>
 
             <button className="btn btn-teal w-full mt-6" onClick={handleReset}>

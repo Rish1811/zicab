@@ -37,5 +37,7 @@ export function useSupportInfo() {
     phoneHref: toDialable(contact?.tollFree) || contact?.whatsapp || toDialable(phone),
     email: contact?.email || '',
     officeAddress: contact?.address || '',
+    // wa.me format: country code, digits only.
+    whatsapp: contact?.whatsapp || '',
   };
 }

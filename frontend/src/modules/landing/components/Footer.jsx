@@ -32,7 +32,7 @@ const Footer = ({ setActiveTab }) => {
               <div className="contact-item">
                 <Phone size={16} color="#00BBA9" />
                 <span>
-                  24x7 Toll-Free: <strong>{CONTACT.tollFree}</strong>
+                  Call us: <strong>{CONTACT.tollFree}</strong>
                 </span>
               </div>
               <div className="contact-item">

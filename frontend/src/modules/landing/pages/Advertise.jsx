@@ -142,7 +142,7 @@ const Advertise = () => {
                 <a href={`mailto:${CONTACT.email}?subject=Advertising%20Enquiry`}>{CONTACT.email}</a>
               </div>
               <div className="ad-contact-item">
-                <strong>Toll-Free</strong>
+                <strong>Phone</strong>
                 <span>{CONTACT.tollFree}</span>
               </div>
               <div className="ad-contact-item">

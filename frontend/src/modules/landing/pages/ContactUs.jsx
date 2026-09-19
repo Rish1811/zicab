@@ -46,9 +46,9 @@ const ContactUs = () => {
               <div className="c-icon-wrap">
                 <Phone size={24} color="#00BBA9" />
               </div>
-              <h3>24x7 Toll-Free Support</h3>
+              <h3>Call us</h3>
               <p>{CONTACT.tollFree}</p>
-              <span>{CONTACT.tollFreeLive ? 'Free from any Indian number' : 'Number activation in progress'}</span>
+              <span>Calls and WhatsApp on the same number</span>
             </a>
 
             <a className="c-info-card" href={waLink('Hi ZI CAB, I need help with a booking.')} target="_blank" rel="noreferrer">
@@ -79,36 +79,41 @@ const ContactUs = () => {
             </a>
           </div>
 
-          {/* TOLL-FREE SUPPORT EXPLAINER */}
-          <div className="tollfree-banner mt-12" data-reveal>
-            <div className="tf-left">
-              <span className="tf-tag">Toll-Free Support</span>
-              <h2 className="tf-number">{CONTACT.tollFree}</h2>
-              <p className="tf-desc">
-                One number for bookings, live ride help, lost items, invoices and complaints —
-                free of charge from any Indian mobile or landline, 24 hours a day.
-              </p>
-              <div className="tf-points">
-                <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> IVR in English, Kannada & Hindi</div>
-                <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> Routed to the nearest city support desk</div>
-                <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> Every call recorded for safety audits</div>
-                <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> Emergency/SOS calls answered on priority</div>
+          {/* TOLL-FREE SUPPORT EXPLAINER - shown only once a real toll-free line
+              with this IVR menu exists. The contact number today is an ordinary
+              mobile: calling it free, or offering 'press 1 for a new booking',
+              would promise a phone menu nobody would reach. */}
+          {CONTACT.tollFreeLive && (
+  <div className="tollfree-banner mt-12" data-reveal>
+              <div className="tf-left">
+                <span className="tf-tag">Toll-Free Support</span>
+                <h2 className="tf-number">{CONTACT.tollFree}</h2>
+                <p className="tf-desc">
+                  One number for bookings, live ride help, lost items, invoices and complaints —
+                  free of charge from any Indian mobile or landline, 24 hours a day.
+                </p>
+                <div className="tf-points">
+                  <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> IVR in English, Kannada & Hindi</div>
+                  <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> Routed to the nearest city support desk</div>
+                  <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> Every call recorded for safety audits</div>
+                  <div className="tf-point"><CheckCircle2 size={16} color="#00BBA9" /> Emergency/SOS calls answered on priority</div>
+                </div>
+              </div>
+              <div className="tf-right">
+                <div className="tf-ivr-card">
+                  <h4>Call Menu</h4>
+                  <ol className="tf-ivr-list">
+                    <li><b>1</b> New booking / fare enquiry</li>
+                    <li><b>2</b> Track or change an ongoing ride</li>
+                    <li><b>3</b> Airport & outstation desk</li>
+                    <li><b>4</b> Corporate & partner accounts</li>
+                    <li><b>5</b> Complaint, refund or lost item</li>
+                    <li><b>9</b> Emergency — connect to a human</li>
+                  </ol>
+                </div>
               </div>
             </div>
-            <div className="tf-right">
-              <div className="tf-ivr-card">
-                <h4>Call Menu</h4>
-                <ol className="tf-ivr-list">
-                  <li><b>1</b> New booking / fare enquiry</li>
-                  <li><b>2</b> Track or change an ongoing ride</li>
-                  <li><b>3</b> Airport & outstation desk</li>
-                  <li><b>4</b> Corporate & partner accounts</li>
-                  <li><b>5</b> Complaint, refund or lost item</li>
-                  <li><b>9</b> Emergency — connect to a human</li>
-                </ol>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* OFFICE LOCATION & LAUNCH CITIES */}
           <div className="office-grid mt-12" data-reveal-stagger>
