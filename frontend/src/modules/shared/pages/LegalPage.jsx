@@ -21,7 +21,7 @@ const legalContent = {
     title: 'Terms & Conditions',
     icon: ScrollText,
     intro:
-      'These terms are shown from the latest legal document provided for ZI CAB users and include the applicable bike, package, auto, and cab clauses.',
+      'These terms apply to everyone who uses ZI CAB - riders booking rides and parcel deliveries, and drivers and vehicle owners providing them.',
     rawText: termsRawText,
   },
   privacy: {
@@ -29,7 +29,7 @@ const legalContent = {
     title: 'Privacy Policy',
     icon: ShieldCheck,
     intro:
-      'This privacy policy is shown from the latest legal document provided for ZI CAB users and explains how information is collected, used, processed, stored, and protected.',
+      'How ZI CAB collects, uses, shares, stores and protects the information of riders, drivers and website visitors.',
     rawText: privacyRawText,
   },
   refund: {
