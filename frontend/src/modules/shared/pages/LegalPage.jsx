@@ -3,6 +3,7 @@ import { ArrowLeft, FileText, IndianRupee, Mail, Phone, ReceiptText, Scale, Scro
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSupportInfo } from '../content/supportInfo';
 import useLegalContent from '../content/useLegalContent';
+import { OwnerContactCard } from '../components/OwnerContactCard';
 import termsRawText from '../content/terms-content.txt?raw';
 import privacyRawText from '../content/privacy-content.txt?raw';
 
@@ -222,6 +223,7 @@ const LegalPage = () => {
 
       <section className="px-6 py-16">
         <div className="mx-auto max-w-6xl space-y-8">
+          <OwnerContactCard />
           {content.rawText ? (
             <div className="rounded-[28px] border border-stone-200 bg-white p-8 shadow-sm">
               <div className="space-y-5 text-sm leading-8 text-slate-700 md:text-base">

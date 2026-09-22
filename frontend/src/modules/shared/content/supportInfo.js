@@ -10,8 +10,8 @@ import useLandingContent from '../../landing/useLandingContent';
  * both apps. They now come from the CMS contact section, so the admin panel is
  * the one place they are set.
  *
- * `ownerName` is deliberately gone: publishing a named individual is not
- * something to guess at, and nothing needs it.
+ * The owner is the first founder on the About page (CMS about.founders), so
+ * renaming them there updates the support and legal pages too.
  */
 
 const STATIC_DETAILS = {
@@ -25,12 +25,16 @@ const STATIC_DETAILS = {
 const toDialable = (value = '') => String(value).replace(/[^\d+]/g, '');
 
 export function useSupportInfo() {
-  const { contact } = useLandingContent();
+  const { contact, about } = useLandingContent();
 
   const phone = contact?.tollFree || contact?.whatsappDisplay || '';
+  const owner = (about?.founders || []).find((f) => f?.name) || {};
 
   return {
     ...STATIC_DETAILS,
+    ownerName: owner.name || '',
+    ownerRole: owner.role || '',
+    whatsappDisplay: contact?.whatsappDisplay || phone,
     phone,
     // wa/tel links need the punctuation stripped; fall back to the dial-format
     // WhatsApp number when no toll-free line is configured yet.
