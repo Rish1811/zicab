@@ -55,9 +55,9 @@ export const OwnerContactCard = () => {
                 </span>
               </>
             );
-            const className = 'flex items-start gap-3 rounded-2xl bg-stone-50 px-4 py-3';
+            const className = 'flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3';
             return href ? (
-              <a key={label} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer" className={`${className} transition hover:bg-stone-100`}>
+              <a key={label} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer" className={`${className} transition hover:opacity-80`}>
                 {body}
               </a>
             ) : (
