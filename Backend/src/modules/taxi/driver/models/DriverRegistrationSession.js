@@ -63,6 +63,15 @@ const driverRegistrationSessionSchema = new mongoose.Schema(
       locationId: { type: String, default: '' },
       locationName: { type: String, default: '' },
       vehicleTypeId: { type: String, default: '' },
+      // Every category the driver ticked, in the order they picked them;
+      // vehicleTypeId above is just the first of these.
+      //
+      // Without this field Mongoose dropped the list on save - silently, since
+      // schemas are strict - so a driver who chose ZI Cab AC and Non-AC
+      // finished onboarding with one type and only ever saw that one's ride
+      // requests. The apps and the dispatch matching had handled several all
+      // along; the list never survived being written down.
+      vehicleTypeIds: { type: [String], default: [] },
       rcNumber: { type: String, default: '' },
       make: { type: String, default: '' },
       model: { type: String, default: '' },
