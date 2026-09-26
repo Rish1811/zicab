@@ -8382,7 +8382,8 @@ const getLiveDashboardStats = async () => {
     const mongoState = mongoose.connection?.readyState; // 1 = connected
     const redis = getRedisStatus();
     const mapSettings = await getMapSettings().catch(() => null);
-    const mapKey = mapSettings?.map_key || mapSettings?.mapKey || mapSettings?.google_map_key;
+    const mapApis = mapSettings?.settings || {};
+    const mapKey = mapApis.google_map_key_for_web_apps || mapApis.google_map_key_for_distance_matrix;
 
     return {
       database: mongoState === 1 ? 'operational' : 'down',
