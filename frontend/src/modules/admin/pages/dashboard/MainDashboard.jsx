@@ -94,8 +94,11 @@ const MainDashboard = () => {
   const totalUsers = dashboard?.totalUsers || 0;
   const totalDrivers = dashboard?.totalDrivers?.total || 0;
   const approvedDrivers = dashboard?.totalDrivers?.approved || 0;
-  const declinedDrivers = dashboard?.totalDrivers?.declined || 0;
   const totalOwners = dashboard?.totalOwners || 0;
+
+  // Counts for right now, sent uncached by the backend. Older builds of the
+  // API do not send them, hence the empty object rather than a guess.
+  const live = dashboard?.live || {};
 
   const todayEarnings = dashboard?.todayEarnings || {};
   const overallEarnings = dashboard?.overallEarnings || {};
@@ -103,11 +106,34 @@ const MainDashboard = () => {
   const todayTrips = dashboard?.todayTrips || {};
   const overallTrips = dashboard?.overallTrips || {};
 
-  // Operational metrics calculations
+  // How much of the fleet that is actually working is carrying someone. The
+  // old version divided approved drivers by all drivers, which is an approval
+  // rate: it read 50% at 4am with nobody online.
   const fleetUtilization = useMemo(() => {
-    if (totalDrivers === 0) return 0;
-    return Math.round((approvedDrivers / totalDrivers) * 100);
-  }, [totalDrivers, approvedDrivers]);
+    const online = Number(live.onlineDrivers || 0);
+    if (online === 0) return 0;
+    return Math.round((Number(live.driversOnTrip || 0) / online) * 100);
+  }, [live.onlineDrivers, live.driversOnTrip]);
+
+  // Each dependency as the backend just found it. The API itself is listed as
+  // answering because this data arrived from it.
+  const systemChecks = useMemo(() => {
+    const health = live.systemHealth || {};
+    const label = (value, fallback) => (value ? String(value) : fallback);
+    const ok = (value) => ['operational', 'connected', 'healthy', 'active'].includes(String(value || '').toLowerCase());
+
+    return [
+      { name: 'Application API', icon: Server, status: 'Answering', healthy: true },
+      { name: 'Database', icon: Database, status: label(health.database, 'unknown'), healthy: ok(health.database) },
+      { name: 'Socket Server', icon: Activity, status: label(health.socket, 'unknown'), healthy: ok(health.socket) },
+      { name: 'Redis Cache', icon: Cpu, status: label(health.redis, 'unknown'), healthy: ok(health.redis) },
+      { name: 'Google Maps Key', icon: Map, status: label(health.maps, 'unknown'), healthy: ok(health.maps) },
+    ].map((check) => ({ ...check, color: check.healthy ? 'text-emerald-500' : 'text-rose-500' }));
+  }, [live.systemHealth]);
+
+  const topDrivers = dashboard?.topDrivers || [];
+  const driverPositions = live.driverPositions || [];
+  const sos = live.sos || {};
 
   // SVG Area Chart Points mapping for Revenue Trajectory
   const chartWidth = 500;
@@ -222,14 +248,14 @@ const MainDashboard = () => {
           {[
             { label: "Total Customers", value: totalUsers, icon: Users, cardBg: "!bg-violet-500" },
             { label: "Total Drivers", value: totalDrivers, icon: Car, cardBg: "!bg-sky-500" },
-            { label: "Active Drivers", value: approvedDrivers, icon: UserCheck, cardBg: "!bg-emerald-500" },
-            { label: "Active Vendors", value: totalOwners, icon: Building2, cardBg: "!bg-rose-500" },
-            { label: "Online Customers", value: Math.max(1, Math.round(totalUsers * 0.15)), icon: Sparkles, cardBg: "!bg-orange-500" },
-            { label: "Ongoing Trips", value: todayTrips.scheduled || 0, icon: Activity, cardBg: "!bg-blue-500" },
+            { label: "Approved Drivers", value: approvedDrivers, icon: UserCheck, cardBg: "!bg-emerald-500" },
+            { label: "Vendors", value: totalOwners, icon: Building2, cardBg: "!bg-rose-500" },
+            { label: "Online Customers", value: live.onlineCustomers ?? 0, icon: Sparkles, cardBg: "!bg-orange-500" },
+            { label: "Ongoing Trips", value: live.ongoingTrips ?? 0, icon: Activity, cardBg: "!bg-blue-500" },
             { label: "Today's Revenue", value: `₹${currency(todayEarnings.total)}`, icon: IndianRupee, cardBg: "!bg-emerald-500" },
-            { label: "Platform Uptime", value: "99.98%", icon: Server, cardBg: "!bg-violet-500" },
+            { label: "Online Drivers", value: live.onlineDrivers ?? 0, icon: Server, cardBg: "!bg-violet-500" },
             { label: "Fleet Utilization", value: `${fleetUtilization}%`, icon: TrendingUp, cardBg: "!bg-teal-500" },
-            { label: "Pending Approvals", value: declinedDrivers, icon: Clock, cardBg: "!bg-red-500" }
+            { label: "Pending Approvals", value: live.pendingApprovals ?? 0, icon: Clock, cardBg: "!bg-red-500" }
           ].map((kpi, idx) => (
             <div key={idx} className={`admin-card !p-4 border-none !text-white hover:scale-[1.02] transition-transform shadow-lg ${kpi.cardBg}`}>
               <div className="flex items-center justify-between mb-2">
@@ -409,13 +435,7 @@ const MainDashboard = () => {
             </div>
 
             <div className="space-y-2 text-[10px] text-slate-600">
-              {[
-                { name: "Application Node API", icon: Server, status: "Active", color: "text-emerald-500" },
-                { name: "Database Cluster", icon: Database, status: "Operational", color: "text-emerald-500" },
-                { name: "Socket Connection", icon: Activity, status: "Connected", color: "text-emerald-500" },
-                { name: "Redis Memory Cache", icon: Cpu, status: "Healthy", color: "text-emerald-500" },
-                { name: "Google Map Services", icon: Map, status: "Operational", color: "text-emerald-500" }
-              ].map((item, idx) => (
+              {systemChecks.map((item, idx) => (
                 <div key={idx} className="flex items-center justify-between border-b border-[#F1F5F9] pb-1.5">
                   <span className="flex items-center gap-1.5">
                     <item.icon size={11} className="text-[#64748B]" />
@@ -427,7 +447,9 @@ const MainDashboard = () => {
             </div>
 
             <div className="bg-[#F8FAFC] border border-[#E5E7EB] rounded-lg p-2 text-center text-[9px] text-[#64748B] mt-2.5">
-              🚀 All system channels operating under normal latency limits.
+              {systemChecks.every((check) => check.healthy)
+                ? 'All checks answering normally.'
+                : `Needs attention: ${systemChecks.filter((check) => !check.healthy).map((check) => check.name).join(', ')}`}
             </div>
           </div>
         </div>
@@ -444,12 +466,10 @@ const MainDashboard = () => {
               </h3>
               
               <div className="space-y-3.5">
-                {[
-                  { name: "Rydon Driver Node A", rating: "4.95", trips: 48, status: "Active", color: "bg-emerald-500" },
-                  { name: "City Fleet Partner B", rating: "4.89", trips: 42, status: "Active", color: "bg-emerald-500" },
-                  { name: "Rydon Courier Node C", rating: "4.82", trips: 36, status: "Active", color: "bg-emerald-500" },
-                  { name: "Partner Fleet Partner D", rating: "4.75", trips: 31, status: "Active", color: "bg-[#FFC400]" }
-                ].map((lead, i) => (
+                {topDrivers.length === 0 && !isLoading && (
+                  <p className="text-[11px] text-[#64748B] py-4 text-center">No completed trips yet.</p>
+                )}
+                {topDrivers.map((lead, i) => (
                   <div key={i} className="flex items-center justify-between text-xs pb-2 border-b border-[#F1F5F9] last:border-0 last:pb-0">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center font-bold text-[10px] text-[#0B1220] border">
@@ -457,7 +477,10 @@ const MainDashboard = () => {
                       </div>
                       <div>
                         <span className="font-semibold block text-[#0B1220]">{lead.name}</span>
-                        <span className="text-[9px] text-slate-400 block mt-0.5">Rating: {lead.rating} ⭐</span>
+                        <span className="text-[9px] text-slate-400 block mt-0.5">
+                          {Number(lead.rating) > 0 ? `Rating: ${Number(lead.rating).toFixed(2)} ⭐` : 'Not rated yet'}
+                          {lead.online ? ' · online' : ''}
+                        </span>
                       </div>
                     </div>
                     <span className="font-bold text-[#0B1220]">{lead.trips} trips</span>
@@ -475,7 +498,7 @@ const MainDashboard = () => {
                   <Shield size={14} className="text-rose-500" />
                   <span>SOS Response Center</span>
                 </h3>
-                {Number(notifiedSos.total || 0) > 0 && (
+                {Number(sos.active || 0) > 0 && (
                   <span className="bg-rose-100 text-rose-800 text-[8px] font-bold px-1.5 py-0.5 rounded border border-rose-200 animate-pulse">
                     ACTIVE DISTRESS
                   </span>
@@ -484,24 +507,24 @@ const MainDashboard = () => {
 
               <div className="flex items-center justify-around py-4">
                 <div className="text-center">
-                  <span className="text-3xl font-bold text-rose-500 block leading-none">{notifiedSos.total || 0}</span>
+                  <span className="text-3xl font-bold text-rose-500 block leading-none">{sos.active || 0}</span>
                   <span className="text-[9px] text-[#64748B] block mt-1.5 uppercase font-medium">Pending SOS</span>
                 </div>
                 <div className="w-[1px] h-10 bg-[#E5E7EB]" />
                 <div className="text-center">
-                  <span className="text-3xl font-bold text-[#0B1220] block leading-none">{notifiedSos.closed || 0}</span>
+                  <span className="text-3xl font-bold text-[#0B1220] block leading-none">{sos.resolved || 0}</span>
                   <span className="text-[9px] text-[#64748B] block mt-1.5 uppercase font-medium">Resolved Signals</span>
                 </div>
               </div>
 
               <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5 space-y-2 text-[10px] text-slate-600 mt-2">
                 <div className="flex justify-between">
-                  <span>Assigned Security Officers:</span>
-                  <span className="font-bold text-[#0B1220]">{notifiedSos.assigned || 0}</span>
+                  <span>Support tickets open:</span>
+                  <span className="font-bold text-[#0B1220]">{notifiedSos.total || 0}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Target Response SLA:</span>
-                  <span className="font-bold text-emerald-600">&lt; 3 mins</span>
+                  <span>Of those, assigned:</span>
+                  <span className="font-bold text-[#0B1220]">{notifiedSos.assigned || 0}</span>
                 </div>
               </div>
             </div>
@@ -515,34 +538,40 @@ const MainDashboard = () => {
             </button>
           </div>
 
-          {/* AI Insights & Anomalies Panel */}
+          {/* Right now, from the live counts */}
           <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow bg-slate-900 !text-white border-0">
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs !text-white uppercase tracking-wider flex items-center gap-1.5 font-bold">
                   <Sparkles size={14} className="text-[#FFC400]" />
-                  <span>AI Operations Insights</span>
+                  <span>Right Now</span>
                 </h3>
                 <span className="text-[8px] bg-slate-800 text-slate-300 font-bold px-1.5 py-0.5 rounded border border-slate-700">
-                  Model v4
+                  Live
                 </span>
               </div>
 
-              <div className="space-y-3 text-xs leading-relaxed text-slate-300">
-                <p>
-                  📈 <strong>Demand Surge Identified:</strong> High session traffic recorded near core metro terminals. Recommend increasing driver incentives to support utilization.
-                </p>
-                <p>
-                  🔒 <strong>Security Posture:</strong> Platform authentication score stands at 92%. Active MFA validation verified across all Sub-admin tokens.
-                </p>
+              <div className="space-y-2.5 text-xs text-slate-300">
+                {[
+                  { label: 'Drivers online', value: live.onlineDrivers ?? 0 },
+                  { label: 'Drivers on a trip', value: live.driversOnTrip ?? 0 },
+                  { label: 'Customers connected', value: live.onlineCustomers ?? 0 },
+                  { label: 'Trips in progress', value: live.ongoingTrips ?? 0 },
+                  { label: 'Drivers awaiting approval', value: live.pendingApprovals ?? 0 },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-center justify-between border-b border-slate-800 pb-2 last:border-0">
+                    <span>{row.label}</span>
+                    <span className="font-bold !text-white">{isLoading ? '...' : row.value}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
             <button
-              onClick={() => toast.success('Dispatching operational targets to city hubs.')}
+              onClick={() => navigate('/admin/driver-management/drivers')}
               className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-750 !text-white text-[10px] font-bold uppercase tracking-wider transition-all mt-4 border border-slate-700"
             >
-              Dispatch System Recommendations
+              Open Driver Management
             </button>
           </div>
         </div>
@@ -553,7 +582,11 @@ const MainDashboard = () => {
             <MapPin size={14} className="text-[#FFC400]" />
             <span>Operational Demand Distribution</span>
           </h3>
-          <p className="text-[11px] text-[#64748B] mb-4">Live fleet positions and demand distribution maps.</p>
+          <p className="text-[11px] text-[#64748B] mb-4">
+            {driverPositions.length > 0
+              ? `${driverPositions.length} driver${driverPositions.length === 1 ? '' : 's'} online right now. Green is free, amber is on a trip.`
+              : 'No drivers are online right now.'}
+          </p>
 
           <div className="w-full h-80 rounded-xl overflow-hidden border border-[#E5E7EB] bg-slate-50 flex items-center justify-center relative shadow-sm">
             {isLoaded ? (
@@ -579,8 +612,23 @@ const MainDashboard = () => {
                   ]
                 }}
               >
-                {/* Central operational coordinate */}
-                <MarkerF position={INDIA_CENTER} />
+                {driverPositions
+                  .filter((driver) => Number.isFinite(driver.lat) && Number.isFinite(driver.lng))
+                  .map((driver) => (
+                    <MarkerF
+                      key={driver.id}
+                      position={{ lat: driver.lat, lng: driver.lng }}
+                      title={`${driver.name}${driver.onTrip ? ' - on a trip' : ' - free'}`}
+                      icon={{
+                        path: window.google?.maps?.SymbolPath?.CIRCLE,
+                        scale: 6,
+                        fillColor: driver.onTrip ? '#F59E0B' : '#22C55E',
+                        fillOpacity: 1,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 2,
+                      }}
+                    />
+                  ))}
               </GoogleMap>
             ) : (
               <div className="text-center text-xs text-[#64748B] flex flex-col items-center gap-2">

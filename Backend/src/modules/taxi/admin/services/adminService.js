@@ -62,8 +62,12 @@ import { RIDE_LIVE_STATUS, RIDE_STATUS, VEHICLE_TYPES } from '../../constants/in
 import {
   cancelRideByAdmin,
   emitToDriver,
+  getSocketServer,
   notifyUserAccountDeleted,
 } from '../../services/dispatchService.js';
+import { getSupportRoleRoom } from '../../chat/services/supportChatService.js';
+import { SafetyAlert } from '../../common/models/SafetyAlert.js';
+import { getRedisStatus } from '../../../../infrastructure/redis/redisClient.js';
 import { buildRentalTrackingSnapshot, listActiveRentalTrackingBookings } from '../../services/rentalTrackingService.js';
 import { sendEmail } from '../../services/mailService.js';
 import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
@@ -8358,9 +8362,110 @@ export const getAdminEarnings = async (query = {}) => {
   };
 };
 
+/**
+ * The numbers on the dashboard that describe this moment rather than the day.
+ *
+ * Kept out of the 60-second snapshot cache: a minute-old count of who is
+ * online is not a live count, and these are four cheap counts.
+ *
+ * Riders are counted from their socket connections, since - unlike drivers -
+ * a rider has no online flag to read. Every socket joins a room named after
+ * its owner, so counting distinct participant rooms counts people rather than
+ * open tabs. fetchSockets() goes through the Redis adapter, so it sees all
+ * four API processes, not just the one answering this request.
+ */
+const getLiveDashboardStats = async () => {
+  // Whether each dependency is actually answering, rather than a panel of
+  // hardcoded green "Operational" labels that stayed green during an outage.
+  const checkSystemHealth = async () => {
+    const io = getSocketServer();
+    const mongoState = mongoose.connection?.readyState; // 1 = connected
+    const redis = getRedisStatus();
+    const mapSettings = await getMapSettings().catch(() => null);
+    const mapKey = mapSettings?.map_key || mapSettings?.mapKey || mapSettings?.google_map_key;
+
+    return {
+      database: mongoState === 1 ? 'operational' : 'down',
+      socket: io ? 'connected' : 'down',
+      redis: !redis.configured ? 'not configured' : redis.ready ? 'healthy' : 'down',
+      maps: mapKey ? 'operational' : 'not configured',
+    };
+  };
+
+  const countConnectedRiders = async () => {
+    const io = getSocketServer();
+    if (!io) return 0;
+
+    const sockets = await io.in(getSupportRoleRoom('user')).fetchSockets();
+    const riders = new Set();
+
+    for (const socket of sockets) {
+      for (const room of socket.rooms) {
+        if (String(room).startsWith('chat:participant:user:')) riders.add(room);
+      }
+    }
+
+    return riders.size;
+  };
+
+  const [
+    onlineCustomers,
+    onlineDrivers,
+    driversOnTrip,
+    ongoingTrips,
+    pendingApprovals,
+    systemHealth,
+    sosActive,
+    sosResolved,
+    driverPositions,
+  ] = await Promise.all([
+    countConnectedRiders().catch(() => 0),
+    Driver.countDocuments({ isOnline: true }),
+    Driver.countDocuments({ isOnRide: true }),
+    // A trip someone is sitting in right now: a driver is assigned and it has
+    // neither finished nor been called off. 'searching' is not one - nobody
+    // has accepted it yet.
+    Ride.countDocuments({ status: { $in: [RIDE_STATUS.ACCEPTED, RIDE_STATUS.ONGOING] } }),
+    // There is no 'rejected' state for a driver: approve is false until an
+    // admin approves them, so these are the ones still waiting.
+    Driver.countDocuments({ approve: false }),
+    checkSystemHealth().catch(() => ({})),
+    // The real SOS button, from the safety module. The panel used to show
+    // support-ticket counts under an "SOS Response Center" heading.
+    SafetyAlert.countDocuments({ status: 'active' }),
+    SafetyAlert.countDocuments({ status: 'resolved' }),
+    // Where the online drivers actually are, for the map that claimed to show
+    // "live fleet positions" while dropping a single pin on the middle of India.
+    Driver.find(
+      { isOnline: true, 'location.coordinates.0': { $exists: true } },
+      { name: 1, isOnRide: 1, vehicleType: 1, location: 1 },
+    ).limit(500).lean(),
+  ]);
+
+  return {
+    onlineCustomers,
+    onlineDrivers,
+    driversOnTrip,
+    ongoingTrips,
+    pendingApprovals,
+    systemHealth,
+    sos: { active: sosActive, resolved: sosResolved },
+    driverPositions: driverPositions.map((driver) => ({
+      id: String(driver._id),
+      name: driver.name || 'Driver',
+      onTrip: Boolean(driver.isOnRide),
+      vehicleType: driver.vehicleType || '',
+      lng: driver.location?.coordinates?.[0],
+      lat: driver.location?.coordinates?.[1],
+    })),
+  };
+};
+
 export const getDashboardData = async () => {
+  const live = await getLiveDashboardStats();
+
   if (dashboardCache.value && dashboardCache.expiresAt > Date.now()) {
-    return dashboardCache.value;
+    return { ...dashboardCache.value, live };
   }
 
   const [totalUsers, totalDrivers, totalOwners, approvedDrivers, rides, supportTicketStats] = await Promise.all([
@@ -8583,6 +8688,40 @@ export const getDashboardData = async () => {
       noDriver: cancelledRides.filter((ride) => !ride?.driverId).length,
       chart: cancelChartSeries,
     },
+    // The drivers who actually completed the most trips, for the leaderboard
+    // that used to list four invented partners ("Rydon Driver Node A").
+    topDrivers: await (async () => {
+      const tripsByDriver = new Map();
+
+      for (const ride of completedRides) {
+        if (!ride?.driverId) continue;
+        const key = String(ride.driverId);
+        tripsByDriver.set(key, (tripsByDriver.get(key) || 0) + 1);
+      }
+
+      const ranked = [...tripsByDriver.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+      if (ranked.length === 0) return [];
+
+      const drivers = await Driver.find(
+        { _id: { $in: ranked.map(([id]) => id) } },
+        { name: 1, rating: 1, isOnline: 1 },
+      ).lean();
+      const byId = new Map(drivers.map((driver) => [String(driver._id), driver]));
+
+      return ranked
+        .map(([id, trips]) => {
+          const driver = byId.get(id);
+          if (!driver) return null;
+          return {
+            id,
+            name: driver.name || 'Driver',
+            rating: Number(driver.rating || 0),
+            trips,
+            online: Boolean(driver.isOnline),
+          };
+        })
+        .filter(Boolean);
+    })(),
     performance_index: rides.length
       ? Number((((completedRides.length || 0) / rides.length) * 100).toFixed(1))
       : 0,
@@ -8593,7 +8732,7 @@ export const getDashboardData = async () => {
     value: snapshot,
   };
 
-  return snapshot;
+  return { ...snapshot, live };
 };
 
 export const getOverallEarnings = async () => (await getDashboardData()).overallEarnings;
