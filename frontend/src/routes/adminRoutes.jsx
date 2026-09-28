@@ -7,6 +7,7 @@ import {
   AdminAirportManagement,
   AdminBannerImage,
   AdminBidRideSettings,
+  AdminDriverSubscriptionSettings,
   AdminBlockedFleetDrivers,
   AdminBusBookingManager,
   AdminChat,
@@ -396,6 +397,7 @@ const adminRoutes = (
       <Route path="settings/business/customization" element={<AdminCustomizationSettings />} />
       <Route path="settings/business/transport-ride" element={<AdminTransportRideSettings />} />
       <Route path="settings/business/bid-ride" element={<AdminBidRideSettings />} />
+      <Route path="settings/business/driver-subscription" element={<AdminDriverSubscriptionSettings />} />
 
       <Route path="settings/app/wallet" element={<AdminWalletSettings />} />
       <Route path="settings/app/tip" element={<AdminTipSettings />} />

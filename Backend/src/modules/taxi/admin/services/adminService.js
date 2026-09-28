@@ -36,6 +36,7 @@ import { ServiceCenterStaff } from '../models/ServiceCenterStaff.js';
 import { ServiceStore } from '../models/ServiceStore.js';
 import { Vehicle } from '../models/Vehicle.js';
 import { Driver } from '../../driver/models/Driver.js';
+import { DriverSubscription } from '../../driver/models/DriverSubscription.js';
 import { BusDriver } from '../../driver/models/BusDriver.js';
 import { Zone } from '../../driver/models/Zone.js';
 import { Ride } from '../../user/models/Ride.js';
@@ -5656,6 +5657,11 @@ export const getReferralDashboard = async () => {
 
 export const listSubscriptionPlans = async () =>
   SubscriptionPlan.find({ audience: 'driver' }).sort({ createdAt: -1 }).populate('vehicle_type_id').lean();
+const normalizeVehicleClasses = (value) => {
+  const list = Array.isArray(value) ? value : String(value || '').split(',');
+  return [...new Set(list.map((item) => String(item).trim().toLowerCase()).filter(Boolean))];
+};
+
 export const createSubscriptionPlan = async (payload) => {
   if (!String(payload?.name || '').trim()) {
     throw new ApiError(400, 'Subscription name is required');
@@ -5665,12 +5671,87 @@ export const createSubscriptionPlan = async (payload) => {
     ...payload,
     audience: 'driver',
     amount: Number(payload.amount || 0),
-    duration: Number(payload.duration || 0),
+    // A daily pass is one day. Anything else the admin types is respected,
+    // so a weekly pass remains possible without another code change.
+    duration: Number(payload.duration || 1),
+    vehicle_classes: normalizeVehicleClasses(payload.vehicle_classes),
     benefit_type: 'standard',
     ride_limit: 0,
-    active: true,
+    active: payload.active === undefined ? true : Boolean(payload.active),
   });
   return plan.toObject();
+};
+
+export const updateSubscriptionPlan = async (id, payload = {}) => {
+  const update = { ...payload };
+  if (payload.amount !== undefined) update.amount = Number(payload.amount || 0);
+  if (payload.duration !== undefined) update.duration = Number(payload.duration || 1);
+  if (payload.vehicle_classes !== undefined) update.vehicle_classes = normalizeVehicleClasses(payload.vehicle_classes);
+
+  const plan = await SubscriptionPlan.findOneAndUpdate(
+    { _id: id, audience: 'driver' },
+    { $set: update },
+    { returnDocument: 'after' },
+  ).lean();
+
+  if (!plan) throw new ApiError(404, 'Subscription plan not found');
+  return plan;
+};
+
+export const deleteSubscriptionPlan = async (id) => {
+  const plan = await SubscriptionPlan.findOneAndDelete({ _id: id, audience: 'driver' }).lean();
+  if (!plan) throw new ApiError(404, 'Subscription plan not found');
+  return plan;
+};
+
+/** Every pass drivers have paid for, newest first - the payment history. */
+export const listDriverSubscriptionPayments = async ({ page = 1, limit = 25, driverId = '', status = '' } = {}) => {
+  const query = { paidAt: { $ne: null } };
+  if (driverId) query.driverId = driverId;
+  if (status === 'active') {
+    query.status = 'active';
+    query.expiresAt = { $gt: new Date() };
+  } else if (status === 'expired') {
+    query.expiresAt = { $lte: new Date() };
+  }
+
+  const pageNumber = Math.max(1, Number(page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(limit) || 25));
+
+  const [rows, total] = await Promise.all([
+    DriverSubscription.find(query)
+      .sort({ paidAt: -1 })
+      .skip((pageNumber - 1) * pageSize)
+      .limit(pageSize)
+      .populate('driverId', 'name phone')
+      .lean(),
+    DriverSubscription.countDocuments(query),
+  ]);
+
+  const now = Date.now();
+
+  return {
+    results: rows.map((row) => ({
+      id: String(row._id),
+      driverName: row.driverId?.name || 'Driver',
+      driverPhone: row.driverId?.phone || '',
+      planName: row.planName,
+      amount: row.amount,
+      paymentMethod: row.paymentMethod,
+      paidAt: row.paidAt,
+      startsAt: row.startsAt,
+      expiresAt: row.expiresAt,
+      active: row.status === 'active' && new Date(row.expiresAt).getTime() > now,
+      tripsCovered: row.tripsCovered,
+      commissionWaived: row.commissionWaived,
+    })),
+    total,
+    page: pageNumber,
+    limit: pageSize,
+    // What the passes brought in for the filtered set, since that is the first
+    // question anyone opening this page has.
+    collected: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+  };
 };
 
 export const listCustomerSubscriptionPlans = async () =>
@@ -11327,6 +11408,7 @@ const businessSettingsCategoryMap = {
   customize: 'customization',
   'transport-ride': 'transport_ride',
   'bid-ride': 'bid_ride',
+  'driver-subscription': 'driver_subscription',
   general: 'general',
   'user-home-management': 'user_home_settings',
 };

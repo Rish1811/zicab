@@ -6,7 +6,12 @@ import { Vehicle } from '../../admin/models/Vehicle.js';
 import { Driver } from '../models/Driver.js';
 import { WalletTransaction } from '../models/WalletTransaction.js';
 import { Ride } from '../../user/models/Ride.js';
+import { DriverSubscription } from '../models/DriverSubscription.js';
 import { getWalletSettings } from '../../services/appSettingsService.js';
+import {
+  getActiveDriverSubscription,
+  resolveDriverSubscriptionSettings,
+} from './driverSubscriptionService.js';
 
 const normalizeAmount = (value, fieldName = 'amount') => {
   const amount = Number(value);
@@ -191,7 +196,17 @@ export const ensureDriverWalletCanAcceptRide = async (driverOrId, { session } = 
 
   const wallet = await getWalletSnapshot(driver);
   const isBelowMinimumBalance = wallet.balance < wallet.minimumBalanceForOrders;
-  const isBlocked = wallet.isBlocked || !wallet.rules.isWalletEnabled || isBelowMinimumBalance;
+
+  // A driver on a daily pass has already paid for the day, so the wallet
+  // minimum is not asked of them - that is most of what they bought. An
+  // admin-disabled wallet still blocks, since that is not about balance.
+  const subscriptionSettings = await resolveDriverSubscriptionSettings();
+  const subscription = subscriptionSettings.waiveWalletMinimum
+    ? await getActiveDriverSubscription(driver._id, { session })
+    : null;
+  const balanceWaived = Boolean(subscription);
+
+  const isBlocked = wallet.isBlocked || !wallet.rules.isWalletEnabled || (isBelowMinimumBalance && !balanceWaived);
 
   if (isBlocked) {
     await Driver.findByIdAndUpdate(driver._id, {
@@ -386,7 +401,28 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
     // every ride booked by an app that doesn't charge one, so those settle
     // exactly as before. Read here, before the snapshot is replaced below.
     const platformFee = Math.min(Math.max(0, Number(ride.pricingSnapshot?.rider_platform_fee) || 0), fare);
-    const commissionAmount = Math.min(Math.round((tripCommission + platformFee) * 100) / 100, fare);
+
+    // A driver on a daily pass keeps the fare: the pass is what ZI CAB earned
+    // from them today. The rider's platform fee is still not theirs, so it is
+    // the one part that survives the waiver.
+    //
+    // Read against the ride's completion rather than now, so a trip finished
+    // at 5:55am is settled under the pass that covered it even if settlement
+    // runs after 6am.
+    const subscriptionSettings = await resolveDriverSubscriptionSettings();
+    const coveringSubscription = subscriptionSettings.waiveCommission
+      ? await DriverSubscription.findOne({
+        driverId: ride.driverId,
+        status: 'active',
+        paidAt: { $ne: null },
+        startsAt: { $lte: ride.completedAt || ride.updatedAt || new Date() },
+        expiresAt: { $gt: ride.completedAt || ride.updatedAt || new Date() },
+      }).session(session).lean()
+      : null;
+
+    const waivedCommission = coveringSubscription ? tripCommission : 0;
+    const chargeableCommission = coveringSubscription ? 0 : tripCommission;
+    const commissionAmount = Math.min(Math.round((chargeableCommission + platformFee) * 100) / 100, fare);
     const paymentMethod = normalizePaymentMethod(ride.paymentMethod);
     const driverEarnings = Math.max(Math.round((fare - commissionAmount) * 100) / 100, 0);
     const amount = paymentMethod === 'cash' ? -commissionAmount : driverEarnings;
@@ -403,6 +439,16 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
       resolvedAt: ride.pricingSnapshot?.resolvedAt || new Date(),
     };
     await ride.save({ session });
+
+    // What the pass was worth today, for the driver's own screen and the
+    // admin history. Counted per settled ride, so it cannot double-count.
+    if (coveringSubscription) {
+      await DriverSubscription.updateOne(
+        { _id: coveringSubscription._id },
+        { $inc: { tripsCovered: 1, commissionWaived: Math.round(waivedCommission * 100) / 100 } },
+        { session },
+      );
+    }
 
     if (!amount) {
       await session.commitTransaction();
@@ -427,6 +473,8 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
         commissionValue: Number(commissionConfig.value || 0),
         tripCommission,
         platformFee,
+        subscriptionId: coveringSubscription ? String(coveringSubscription._id) : null,
+        commissionWaived: waivedCommission,
       },
       session,
     });

@@ -598,6 +598,15 @@ export const getSubscriptionPlans = asyncHandler(async (_req, res) =>
 export const createSubscriptionPlan = asyncHandler(async (req, res) =>
   ok(res, await adminService.createSubscriptionPlan(req.body)),
 );
+export const updateSubscriptionPlan = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateSubscriptionPlan(req.params.id, req.body)),
+);
+export const deleteSubscriptionPlan = asyncHandler(async (req, res) =>
+  ok(res, await adminService.deleteSubscriptionPlan(req.params.id)),
+);
+export const getDriverSubscriptionPayments = asyncHandler(async (req, res) =>
+  ok(res, await adminService.listDriverSubscriptionPayments(req.query)),
+);
 export const getCustomerSubscriptionPlans = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listCustomerSubscriptionPlans() }),
 );

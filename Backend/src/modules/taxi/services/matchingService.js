@@ -4,6 +4,8 @@ import { DISPATCH_TOP_DRIVERS } from '../constants/index.js';
 import { Vehicle } from '../admin/models/Vehicle.js';
 import { Driver } from '../driver/models/Driver.js';
 import { Zone } from '../driver/models/Zone.js';
+import { DriverSubscription } from '../driver/models/DriverSubscription.js';
+import { resolveDriverSubscriptionSettings } from '../driver/services/driverSubscriptionService.js';
 import { getDriverIdsBlockedByUpcomingScheduledRides } from './rideService.js';
 
 const EARTH_RADIUS_METERS = 6371000;
@@ -30,6 +32,25 @@ const normalizeVehicleTypeIds = (vehicleTypeIds = [], vehicleTypeId = null) => {
   }
 
   return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+};
+
+/**
+ * A filter limiting dispatch to drivers holding a paid pass, or {} when the
+ * settings do not require one.
+ */
+const buildSubscriptionDriverFilter = async () => {
+  const settings = await resolveDriverSubscriptionSettings();
+  const requiresPass =
+    settings.mode === 'subscription_only' || (settings.mode === 'both' && settings.onExpiry === 'block');
+
+  if (!requiresPass) return {};
+
+  const subscribed = await DriverSubscription.find(
+    { status: 'active', paidAt: { $ne: null }, expiresAt: { $gt: new Date() } },
+    { driverId: 1 },
+  ).lean();
+
+  return { _id: { $in: subscribed.map((row) => row.driverId) } };
 };
 
 const buildDriverMatchFilters = ({ zoneId, serviceLocationId, vehicleTypeId, vehicleTypeIds, vehicleTypeKeys }) => {
@@ -343,12 +364,19 @@ const findDriversForZone = async ({
   vehicleTypeKeys,
   strictZoneOnly = false,
 }) => {
-  const commonFilters = buildDriverMatchFilters({
-    zoneId,
-    serviceLocationId,
-    vehicleTypeIds: normalizedVehicleTypeIds,
-    vehicleTypeKeys,
-  });
+  const commonFilters = {
+    ...buildDriverMatchFilters({
+      zoneId,
+      serviceLocationId,
+      vehicleTypeIds: normalizedVehicleTypeIds,
+      vehicleTypeKeys,
+    }),
+    // When a daily pass is required - either as the only model, or because an
+    // expired pass is set to stop rides - drivers without one are not offered
+    // work. Off entirely unless an admin has switched it on, and the id list
+    // is small: it is one day's paying drivers.
+    ...(await buildSubscriptionDriverFilter()),
+  };
   const selectedFields =
     'name phone socketId vehicleTypeId vehicleTypeIds vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId service_location_id isOnline isOnRide routeBooking';
 

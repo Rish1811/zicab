@@ -1,4 +1,9 @@
 import { Router } from "express";
+import {
+  buySubscription,
+  getMySubscription,
+  getMySubscriptionHistory,
+} from "../controllers/driverSubscriptionController.js";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
 import { getPendingRideOffers } from "../controllers/rideOfferController.js";
@@ -610,6 +615,11 @@ driverRouter.get(
   "/onboarding/session/:registrationId",
   asyncHandler(getOnboardingSession),
 );
+// The daily pass: what it costs, buying it, and what has been paid before.
+driverRouter.get("/subscription", authenticate(["driver"]), asyncHandler(getMySubscription));
+driverRouter.post("/subscription/purchase", authenticate(["driver"]), asyncHandler(buySubscription));
+driverRouter.get("/subscription/history", authenticate(["driver"]), asyncHandler(getMySubscriptionHistory));
+
 driverRouter.patch("/online", authenticate(["driver"]), asyncHandler(goOnline));
 driverRouter.patch(
   "/offline",

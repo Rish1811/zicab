@@ -36,6 +36,9 @@ import {
   createRentalVehicleType,
   createSetPrice,
   createSubscriptionPlan,
+  updateSubscriptionPlan,
+  deleteSubscriptionPlan,
+  getDriverSubscriptionPayments,
   createCustomerSubscriptionPlan,
   createUser,
   createZone,
@@ -334,6 +337,9 @@ adminRouter.get('/admin/driver-ratings/:id', authenticate(['admin']), getDriverR
 
 adminRouter.get('/admin/driver-subscriptions/plans/list', getSubscriptionPlans);
 adminRouter.post('/admin/driver-subscriptions/plans/create', createSubscriptionPlan);
+adminRouter.patch('/admin/driver-subscriptions/plans/:id', updateSubscriptionPlan);
+adminRouter.delete('/admin/driver-subscriptions/plans/:id', deleteSubscriptionPlan);
+adminRouter.get('/admin/driver-subscriptions/payments', getDriverSubscriptionPayments);
 adminRouter.get('/admin/driver-subscriptions/settings', getSubscriptionSettings);
 adminRouter.post('/admin/driver-subscriptions/settings', updateSubscriptionSettings);
 adminRouter.get('/admin/user-subscriptions/plans/list', getCustomerSubscriptionPlans);

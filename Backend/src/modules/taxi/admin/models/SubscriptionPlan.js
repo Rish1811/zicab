@@ -13,6 +13,10 @@ const subscriptionPlanSchema = new mongoose.Schema({
   duration: Number, // in days
   transport_type: String,
   vehicle_type_id: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxiVehicle' },
+  // Driver plans are priced per class of vehicle rather than per catalog
+  // entry - one ₹29 pass for bike and auto, one ₹49 pass for cars - so a new
+  // vehicle type does not need its own plan on the day it is added.
+  vehicle_classes: { type: [String], default: [] },
   benefit_type: {
     type: String,
     enum: ['standard', 'limited', 'unlimited'],

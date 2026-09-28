@@ -859,6 +859,7 @@ const AdminLayout = () => {
             ],
           },
           { icon: Gavel, label: 'Bidding', path: '/admin/settings/business/bid-ride', permission: 'settings.view' },
+          { icon: IndianRupee, label: 'Driver Subscription', path: '/admin/settings/business/driver-subscription', permission: 'settings.view' },
           {
             icon: TrendingUp,
             label: 'Price Hike',

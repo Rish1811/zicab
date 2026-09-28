@@ -4,6 +4,7 @@ import { getOrLoadCachedValue } from '../../../utils/cache.js';
 
 const defaultTransportRideSettings = createDefaultBusinessSettings().transport_ride || {};
 const defaultBidRideSettings = createDefaultBusinessSettings().bid_ride || {};
+const defaultDriverSubscriptionSettings = createDefaultBusinessSettings().driver_subscription || {};
 const SETTINGS_CACHE_TTL_MS = 30_000;
 
 const toPositiveNumber = (value, fallback) => {
@@ -24,6 +25,25 @@ export const getTransportRideSettings = async () => {
         return {
           ...defaultTransportRideSettings,
           ...(businessSettings?.transport_ride || {}),
+        };
+      },
+    },
+  );
+};
+
+export const getDriverSubscriptionSettings = async () => {
+  return getOrLoadCachedValue(
+    'cache:settings:driver_subscription',
+    {
+      ttlMs: SETTINGS_CACHE_TTL_MS,
+      load: async () => {
+        const businessSettings = await AdminBusinessSetting.findOne({ scope: 'default' })
+          .select('driver_subscription')
+          .lean();
+
+        return {
+          ...defaultDriverSubscriptionSettings,
+          ...(businessSettings?.driver_subscription || {}),
         };
       },
     },
