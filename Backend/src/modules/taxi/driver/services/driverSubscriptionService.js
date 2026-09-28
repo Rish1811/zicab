@@ -5,6 +5,16 @@ import { DriverSubscription } from '../models/DriverSubscription.js';
 import { SubscriptionPlan } from '../../admin/models/SubscriptionPlan.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { getDriverSubscriptionSettings } from '../../services/transportSettingsService.js';
+// Imported lazily inside purchaseDriverSubscription (not at module load) to
+// avoid a circular import: walletService.js itself imports
+// getActiveDriverSubscription/resolveDriverSubscriptionSettings from this file.
+let applyDriverWalletAdjustmentPromise = null;
+const getApplyDriverWalletAdjustment = async () => {
+  if (!applyDriverWalletAdjustmentPromise) {
+    applyDriverWalletAdjustmentPromise = import('./walletService.js').then((mod) => mod.applyDriverWalletAdjustment);
+  }
+  return applyDriverWalletAdjustmentPromise;
+};
 
 const isOn = (value, fallback = false) => {
   if (value === undefined || value === null || value === '') return fallback;
@@ -254,24 +264,35 @@ export const purchaseDriverSubscription = async ({ driverId, planId, paymentMeth
     return { subscription: created.toObject(), requiresPayment: true, amount };
   }
 
+  const applyDriverWalletAdjustment = await getApplyDriverWalletAdjustment();
   const session = await mongoose.startSession();
 
   try {
     let created = null;
 
     await session.withTransaction(async () => {
-      const funded = await Driver.findOneAndUpdate(
-        { _id: driver._id, 'wallet.balance': { $gte: amount } },
-        { $inc: { 'wallet.balance': -amount } },
-        { returnDocument: 'after', session },
+      const currentBalance = Number(
+        (await Driver.findById(driver._id).select('wallet.balance').session(session))?.wallet?.balance || 0,
       );
 
-      if (!funded) {
+      if (currentBalance < amount) {
         throw new ApiError(400, 'Not enough wallet balance for this subscription');
       }
 
       const [row] = await DriverSubscription.create([{ ...record, paidAt: new Date() }], { session });
       created = row;
+
+      // Debited (and left) as a normal wallet transaction, not a silent
+      // balance edit, so the driver sees exactly why the money left —
+      // same helper every other wallet debit/credit goes through.
+      await applyDriverWalletAdjustment({
+        driverId: driver._id,
+        amount: -amount,
+        type: 'subscription_purchase',
+        description: `Daily Subscription purchased - ${plan.name || 'Daily Pass'}`,
+        metadata: { subscriptionId: row._id, planId: plan._id, planName: plan.name },
+        session,
+      });
     });
 
     return { subscription: created?.toObject(), requiresPayment: false, amount };

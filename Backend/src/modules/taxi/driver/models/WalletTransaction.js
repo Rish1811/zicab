@@ -16,7 +16,7 @@ const walletTransactionSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['ride_earning', 'commission_deduction', 'top_up', 'adjustment'],
+      enum: ['ride_earning', 'commission_deduction', 'top_up', 'adjustment', 'subscription_purchase'],
       required: true,
       index: true,
     },

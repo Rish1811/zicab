@@ -3302,7 +3302,11 @@ export const saveDriverFcmToken = async (req, res) => {
     platform: req.body?.platform,
   });
 
-  await entity.save();
+  // validateModifiedOnly: this save must not be blocked by unrelated legacy
+  // fields already on the document (e.g. a driver's `vehicleType` recorded
+  // before the current enum) — only the token field just assigned needs to
+  // be valid, not the entire document.
+  await entity.save({ validateModifiedOnly: true });
 
   res.json({
     success: true,
@@ -7359,6 +7363,7 @@ const getGenericVehicleType = (vehicle = {}) => {
 export const updateDriverVehicle = async (req, res) => {
   const {
     vehicleTypeId,
+    vehicleTypeIds,
     vehicleNumber,
     vehicleColor,
     vehicleMake,
@@ -7366,19 +7371,39 @@ export const updateDriverVehicle = async (req, res) => {
     vehicleImage,
   } = req.body;
 
-  let selectedVehicle = null;
+  // A driver can be enrolled in more than one vehicle category post-signup
+  // too (e.g. adding ZI Cab Non-AC to an existing ZI Cab AC enrollment) —
+  // mirrors the onboarding vehicle step, which already accepts this shape.
+  // The legacy singular `vehicleTypeId` is folded in too, de-duplicated, so
+  // older app builds that only ever send that keep working.
+  const requestedVehicleTypeIds = [
+    ...new Set(
+      [...(Array.isArray(vehicleTypeIds) ? vehicleTypeIds : []), vehicleTypeId]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean),
+    ),
+  ];
 
-  if (vehicleTypeId) {
-    selectedVehicle = await Vehicle.findById(vehicleTypeId);
+  let orderedSelectedVehicles = [];
 
-    if (
-      !selectedVehicle ||
-      selectedVehicle.active === false ||
-      Number(selectedVehicle.status) === 0
-    ) {
+  if (requestedVehicleTypeIds.length) {
+    const foundVehicles = await Vehicle.find({ _id: { $in: requestedVehicleTypeIds } });
+    // Preserve the order the driver picked them in — the first one stays the
+    // "primary" vehicleType/vehicleTypeId, same convention as onboarding.
+    orderedSelectedVehicles = requestedVehicleTypeIds
+      .map((id) => foundVehicles.find((vehicle) => String(vehicle._id) === String(id)))
+      .filter(Boolean);
+
+    const hasInactiveVehicle = orderedSelectedVehicles.some(
+      (vehicle) => vehicle.active === false || Number(vehicle.status) === 0,
+    );
+
+    if (orderedSelectedVehicles.length !== requestedVehicleTypeIds.length || hasInactiveVehicle) {
       throw new ApiError(404, "Active vehicle type not found");
     }
   }
+
+  const selectedVehicle = orderedSelectedVehicles[0] || null;
 
   const driver = await Driver.findById(req.auth.sub);
 
@@ -7392,15 +7417,23 @@ export const updateDriverVehicle = async (req, res) => {
   if (selectedVehicle) {
     const nextVehicleType = getGenericVehicleType(selectedVehicle);
     const nextVehicleIconType = selectedVehicle.icon_types || nextVehicleType;
+    const nextVehicleTypeIds = orderedSelectedVehicles.map((vehicle) => vehicle._id);
 
     update.vehicleTypeId = selectedVehicle._id;
+    update.vehicleTypeIds = nextVehicleTypeIds;
     update.vehicleType = nextVehicleType;
     update.vehicleIconType = nextVehicleIconType;
+
+    const existingVehicleTypeIds = (driver.vehicleTypeIds || []).map((id) => String(id));
+    const sameVehicleTypeIds =
+      existingVehicleTypeIds.length === nextVehicleTypeIds.length &&
+      existingVehicleTypeIds.every((id, index) => id === String(nextVehicleTypeIds[index]));
 
     if (
       String(driver.vehicleTypeId || "") !== String(selectedVehicle._id || "") ||
       String(driver.vehicleType || "") !== String(nextVehicleType) ||
-      String(driver.vehicleIconType || "") !== String(nextVehicleIconType)
+      String(driver.vehicleIconType || "") !== String(nextVehicleIconType) ||
+      !sameVehicleTypeIds
     ) {
       vehicleChanged = true;
     }
@@ -7467,6 +7500,7 @@ export const updateDriverVehicle = async (req, res) => {
       phone: updatedDriver.phone,
       vehicleType: updatedDriver.vehicleType,
       vehicleTypeId: updatedDriver.vehicleTypeId,
+      vehicleTypeIds: updatedDriver.vehicleTypeIds,
       vehicleIconType: updatedDriver.vehicleIconType,
       vehicleIconUrl,
       vehicleMake: updatedDriver.vehicleMake,
