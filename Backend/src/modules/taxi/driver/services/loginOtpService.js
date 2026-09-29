@@ -64,6 +64,12 @@ const getVisibleOtp = (otp) => (process.env.NODE_ENV !== 'production' ? String(o
 const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
 const TEST_LOGIN_OTP_PHONE = '6268423925';
 const TEST_LOGIN_OTP_CODE = '0000';
+// Specific driver phones that always log in with a fixed OTP, independent of
+// the single staticOtpPhone/Code env pair above - e.g. a number that can't
+// reliably receive SMS.
+const FIXED_OTP_BY_PHONE = {
+  '7470311228': '1234',
+};
 const getStaticDriverOtpConfig = () => ({
   phone: normalizePhone(env.sms?.staticOtpPhone || TEST_LOGIN_OTP_PHONE),
   otp: String(env.sms?.staticOtpCode || TEST_LOGIN_OTP_CODE).trim(),
@@ -83,6 +89,13 @@ const resolveDriverLoginOtpForPhone = (phone) => {
   if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
     return {
       otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
+
+  if (FIXED_OTP_BY_PHONE[normalizedPhone]) {
+    return {
+      otp: FIXED_OTP_BY_PHONE[normalizedPhone],
       isStatic: true,
     };
   }
