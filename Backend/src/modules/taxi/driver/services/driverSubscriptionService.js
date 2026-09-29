@@ -301,6 +301,99 @@ export const purchaseDriverSubscription = async ({ driverId, planId, paymentMeth
   }
 };
 
+/**
+ * Spends a driver's one-time joining bonus on their first pass instead of
+ * leaving it sitting in the wallet. Called once, right after
+ * grantDriverJoiningBonus credits the bonus on approval.
+ *
+ * Buys as many whole days of the driver's own plan (bike/auto/car each price
+ * differently) as the bonus covers; any remainder is left in the wallet as
+ * ordinary balance rather than forced to zero. A driver with no matching
+ * plan, an unaffordable one, or subscriptions turned off simply keeps the
+ * bonus as cash - nothing here is forced.
+ *
+ * Recorded with paymentMethod 'bonus' (never reused after this call) so the
+ * driver's next pass always goes through wallet/UPI like everyone else's.
+ */
+export const purchaseDriverSubscriptionFromJoiningBonus = async ({ driverId, bonusAmount }) => {
+  const amount = Number(bonusAmount || 0);
+  if (!amount || amount <= 0) return null;
+
+  const settings = await resolveDriverSubscriptionSettings();
+  if (!isSubscriptionEnabled(settings)) return null;
+  if (!settings.paymentMethods.includes('wallet')) return null;
+
+  const driver = await Driver.findById(driverId);
+  if (!driver) return null;
+
+  if (await getActiveDriverSubscription(driverId)) return null;
+
+  const { plans } = await listPlansForDriver(driver.toObject());
+  // Plans sort cheapest-first; with no vehicle picked yet to disambiguate,
+  // the cheapest plan the bonus can afford covers the most days.
+  const plan = plans[0];
+  if (!plan) return null;
+
+  const amountPerDay = Number(plan.amount || 0);
+  if (!amountPerDay || amountPerDay <= 0) return null;
+
+  const days = Math.floor(amount / amountPerDay);
+  if (days < 1) return null;
+
+  const spend = Math.round(amountPerDay * days * 100) / 100;
+  const { startsAt } = getCycleWindow(settings);
+  const expiresAt = new Date(startsAt.getTime() + days * 24 * 60 * 60 * 1000);
+
+  const applyDriverWalletAdjustment = await getApplyDriverWalletAdjustment();
+  const session = await mongoose.startSession();
+
+  try {
+    let created = null;
+
+    await session.withTransaction(async () => {
+      const currentBalance = Number(
+        (await Driver.findById(driver._id).select('wallet.balance').session(session))?.wallet?.balance || 0,
+      );
+
+      // Should not happen right after the bonus credit, but a driver whose
+      // wallet moved in between (e.g. a debit from elsewhere) just keeps the
+      // bonus as cash rather than being forced into a pass they can't afford.
+      if (currentBalance < spend) return;
+
+      const [row] = await DriverSubscription.create(
+        [
+          {
+            driverId: driver._id,
+            planId: plan._id,
+            planName: plan.name || 'Daily Subscription',
+            amount: spend,
+            vehicleClasses: (plan.vehicle_classes || []).map((value) => String(value).toLowerCase()),
+            startsAt,
+            expiresAt,
+            paymentMethod: 'bonus',
+            paidAt: new Date(),
+          },
+        ],
+        { session },
+      );
+      created = row;
+
+      await applyDriverWalletAdjustment({
+        driverId: driver._id,
+        amount: -spend,
+        type: 'subscription_purchase',
+        description: `${days}-day Daily Subscription auto-purchased from your joining bonus - ${plan.name || 'Daily Pass'}`,
+        metadata: { subscriptionId: row._id, planId: plan._id, planName: plan.name, days, source: 'joining_bonus' },
+        session,
+      });
+    });
+
+    return created ? { subscription: created.toObject(), days, amount: spend } : null;
+  } finally {
+    await session.endSession();
+  }
+};
+
 /** Called once a gateway payment is verified. */
 export const activateDriverSubscription = async ({ subscriptionId, paymentReference = '' }) => {
   const updated = await DriverSubscription.findOneAndUpdate(

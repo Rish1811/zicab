@@ -43,7 +43,7 @@ const driverSubscriptionSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ['wallet', 'razorpay', 'phonepe', 'admin'],
+      enum: ['wallet', 'razorpay', 'phonepe', 'admin', 'bonus'],
       required: true,
     },
     // Gateway order/payment id, or the wallet transaction id.

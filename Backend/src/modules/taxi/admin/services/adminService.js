@@ -59,6 +59,7 @@ import { grantDriverJoiningBonus,
   applyDriverWalletAdjustment,
   serializeDriverWallet,
 } from '../../driver/services/walletService.js';
+import { purchaseDriverSubscriptionFromJoiningBonus } from '../../driver/services/driverSubscriptionService.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS, VEHICLE_TYPES } from '../../constants/index.js';
 import {
   cancelRideByAdmin,
@@ -5391,8 +5392,20 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
   // failed when it did not. grantDriverJoiningBonus releases its claim on error,
   // so the credit is retried the next time approval is saved.
   if (update.approve === true) {
-    await grantDriverJoiningBonus({ driverId: driver._id, grantedBy: currentAdmin?._id || null })
-      .catch((error) => console.error('Driver joining bonus failed', driver._id, error.message));
+    const bonusResult = await grantDriverJoiningBonus({ driverId: driver._id, grantedBy: currentAdmin?._id || null })
+      .catch((error) => {
+        console.error('Driver joining bonus failed', driver._id, error.message);
+        return null;
+      });
+
+    // First pass ever is paid from the bonus that was just credited, not
+    // left sitting in the wallet. Same fire-and-forget reasoning as above -
+    // the approval already succeeded.
+    const bonusAmount = Number(bonusResult?.transaction?.amount || 0);
+    if (bonusAmount > 0) {
+      await purchaseDriverSubscriptionFromJoiningBonus({ driverId: driver._id, bonusAmount })
+        .catch((error) => console.error('Driver joining bonus auto-subscription failed', driver._id, error.message));
+    }
   }
 
   return serializeDriver(driver);
