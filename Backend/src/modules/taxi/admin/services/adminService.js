@@ -5450,6 +5450,69 @@ export const getDriverById = async (id, currentAdmin = null) => {
   return serializeDriver(driver);
 };
 
+/**
+ * The admin-configured name for each stored document key.
+ *
+ * A driver's documents are stored under the key the app uploaded them with -
+ * `panCard`, `nocFront` - while the admin names the document type separately.
+ * Those two drifted apart: the type named "Insurance" is configured with the
+ * key `panCard`, and "RC" with `nocFront`. Showing the raw key therefore
+ * labelled an insurance paper "Pan Card" on the screen an admin approves
+ * drivers from.
+ *
+ * Built from the configured types, so renaming a document type in the admin
+ * renames it everywhere it is shown.
+ */
+const buildDriverDocumentLabelMap = async () => {
+  const templates = await DriverNeededDocument.find({}, { name: 1, key: 1, front_key: 1, back_key: 1, verification_type: 1 }).lean();
+  const map = new Map();
+
+  for (const template of templates) {
+    const name = String(template.name || '').trim();
+    if (!name) continue;
+
+    for (const key of [template.key, template.front_key, template.back_key]) {
+      const normalized = String(key || '').trim();
+      if (!normalized) continue;
+      // Front and back of the same document are told apart, so a two-sided
+      // document does not show as the same title twice.
+      const isBack = normalized === String(template.back_key || '').trim() && normalized !== String(template.key || '').trim();
+      const isFront = normalized === String(template.front_key || '').trim() && normalized !== String(template.key || '').trim();
+      map.set(normalized.toLowerCase(), {
+        label: isBack ? `${name} (back)` : isFront ? `${name} (front)` : name,
+        // Sent so the screen stops inferring the kind of check from the key:
+        // `panCard` holds the insurance paper here, and guessing made it say
+        // "PAN Verify".
+        verificationType: String(template.verification_type || 'none').trim().toLowerCase(),
+      });
+    }
+  }
+
+  return map;
+};
+
+const labelDriverDocuments = (documents, labels) => {
+  if (!documents || typeof documents !== 'object') return documents;
+
+  const withLabel = (key, value) => {
+    if (!value || typeof value !== 'object') return value;
+    const template = labels.get(String(key || '').trim().toLowerCase());
+    if (!template) return value;
+    return { ...value, label: template.label, verification_type: template.verificationType, hasTemplate: true };
+  };
+
+  if (Array.isArray(documents)) {
+    return documents.map((doc) => withLabel(doc?.fileName || doc?.name, doc));
+  }
+
+  return Object.fromEntries(
+    Object.entries(documents).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value.map((doc) => withLabel(key, doc)) : withLabel(key, value),
+    ]),
+  );
+};
+
 export const getDriverProfile = async (id) => {
   const driver = await Driver.findById(id).lean();
   if (!driver) {
@@ -5516,8 +5579,11 @@ export const getDriverProfile = async (id) => {
   const [lng, lat] = coordinates;
   const hasValidLocation = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
 
+  const documentLabels = await buildDriverDocumentLabelMap();
+
   return {
     ...serializeDriver(driver),
+    documents: labelDriverDocuments(driver.documents || {}, documentLabels),
     joined_at: driver.createdAt ? new Date(driver.createdAt).toLocaleString('en-IN') : 'N/A',
     vehicle: {
       type: driver.vehicleType || driver.registerFor || '',

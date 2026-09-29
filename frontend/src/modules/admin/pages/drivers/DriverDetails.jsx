@@ -130,6 +130,15 @@ const getDocumentVerificationType = (doc = {}, fallbackKey = '') => {
     return explicitType;
   }
 
+  // The admin configured this document type and said it needs no external
+  // check, so stop here. Guessing from the key below is only for documents
+  // with no configured type, and it reads the storage key rather than the
+  // document: the insurance paper is stored under `panCard`, which made the
+  // page announce "PAN Verify" over a photo of an insurance certificate.
+  if (doc?.hasTemplate) {
+    return 'none';
+  }
+
   const haystack = [
     doc?.sourceKey,
     fallbackKey,
@@ -413,9 +422,13 @@ const normalizeDocumentEntry = (doc = {}, fallbackKey = '') => {
 
   return {
     sourceKey: doc?.key || doc?.documentKey || doc?.type || fallbackKey || doc?.name || '',
+    // What the admin calls this document type, when the backend matched it to
+    // one. Preferred over the storage key everywhere it is shown.
+    label: doc?.label || '',
+    hasTemplate: Boolean(doc?.hasTemplate),
     name:
-      doc?.name ||
       doc?.label ||
+      doc?.name ||
       humanizeDocumentKey(doc?.key || doc?.documentKey || doc?.type || fallbackKey) ||
       doc?.fileName ||
       'Document',
@@ -1061,7 +1074,7 @@ const DriverDetails = () => {
                       {/* Header */}
                       <div className="px-5 py-3 border-b border-gray-100 bg-white flex flex-col md:flex-row md:items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
-                          <h4 className="text-sm font-semibold text-gray-900">{toTitleCase(doc.verificationLabel || doc.name)}</h4>
+                          <h4 className="text-sm font-semibold text-gray-900">{doc.label || toTitleCase(doc.verificationLabel || doc.name)}</h4>
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${
                             String(doc.status || '').toLowerCase() === 'approved' 
                               ? 'bg-emerald-50 text-emerald-700' 
