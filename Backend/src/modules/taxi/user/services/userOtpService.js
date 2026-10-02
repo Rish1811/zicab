@@ -5,6 +5,7 @@ import { UserAuthSession } from '../models/UserAuthSession.js';
 import { User } from '../models/User.js';
 import { signAccessToken } from './authService.js';
 import { sendOtpSms } from '../../services/smsService.js';
+import { resolveDemoOtpForPhone } from '../../services/demoLoginService.js';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const VERIFIED_SESSION_TTL_MS = 10 * 60 * 1000;
@@ -46,6 +47,15 @@ const resolveUserOtpForPhone = (phone) => {
   if (staticOtpConfig.phone && staticOtpConfig.otp && normalizedPhone === staticOtpConfig.phone) {
     return {
       otp: staticOtpConfig.otp,
+      isStatic: true,
+    };
+  }
+
+  // Review and demo numbers from DEMO_LOGIN_PHONES, shared with the driver app.
+  const demoOtp = resolveDemoOtpForPhone(normalizedPhone);
+  if (demoOtp) {
+    return {
+      otp: demoOtp,
       isStatic: true,
     };
   }

@@ -88,6 +88,13 @@ export const env = {
     useDefaultOtp: process.env.USE_DEFAULT_OTP || 'false',
     staticOtpPhone: readEnv('STATIC_OTP_PHONE'),
     staticOtpCode: readEnv('STATIC_OTP_CODE'),
+    // Numbers that always accept a fixed OTP, as "phone:otp,phone:otp".
+    //
+    // The pair above holds one number and is shared by the rider and driver
+    // apps, which is not enough for app-store review: Google needs a demo
+    // login that works without receiving an SMS, and a second one is wanted
+    // for the driver app at the same time.
+    demoLoginPhones: readEnv('DEMO_LOGIN_PHONES'),
     otpExpiryMinutes:
       Number.isFinite(Number(process.env.OTP_EXPIRY_MINUTES)) && Number(process.env.OTP_EXPIRY_MINUTES) > 0
         ? Number(process.env.OTP_EXPIRY_MINUTES)

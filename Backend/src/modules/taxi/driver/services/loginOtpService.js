@@ -10,6 +10,7 @@ import { BusDriver } from '../models/BusDriver.js';
 import { DriverLoginSession } from '../models/DriverLoginSession.js';
 import { signAccessToken } from './authService.js';
 import { sendOtpSms } from '../../services/smsService.js';
+import { resolveDemoOtpForPhone } from '../../services/demoLoginService.js';
 
 const LOGIN_OTP_TTL_MS = 10 * 60 * 1000;
 
@@ -96,6 +97,16 @@ const resolveDriverLoginOtpForPhone = (phone) => {
   if (FIXED_OTP_BY_PHONE[normalizedPhone]) {
     return {
       otp: FIXED_OTP_BY_PHONE[normalizedPhone],
+      isStatic: true,
+    };
+  }
+
+  // Review and demo numbers from DEMO_LOGIN_PHONES, shared with the rider app
+  // so one number can open both for an app-store reviewer.
+  const demoOtp = resolveDemoOtpForPhone(normalizedPhone);
+  if (demoOtp) {
+    return {
+      otp: demoOtp,
       isStatic: true,
     };
   }
