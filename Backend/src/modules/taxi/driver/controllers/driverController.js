@@ -6297,6 +6297,96 @@ export const topUpMyWallet = async (req, res) => {
   });
 };
 
+// Basic UPI VPA validation: handle@bank. Lenient on the handle, strict enough
+// to reject obvious garbage (spaces, missing @, missing bank suffix).
+const UPI_ID_REGEX = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+
+const sanitizeDriverPaymentUpi = (value) => String(value ?? "").trim();
+
+// GET /api/drivers/me/payment-upi — current driver's saved UPI + QR + status.
+export const getDriverPaymentUpi = async (req, res) => {
+  const driver = await Driver.findById(req.auth.sub).select("bankDetails");
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const bank = driver.bankDetails || {};
+
+  res.json({
+    success: true,
+    data: {
+      upiId: bank.upiId || "",
+      qrCodeImage: bank.qrCodeImage || "",
+      verificationStatus: bank.upiVerificationStatus || "pending",
+      verifiedName: bank.upiVerifiedName || "",
+    },
+  });
+};
+
+// PUT /api/drivers/me/payment-upi — driver saves their OWN static UPI handle and
+// (optionally) a QR image. Any change resets verification to 'pending' so admin
+// re-checks it before it is exposed to riders. The uploaded QR image is a
+// convenience/fallback; riders generate a scannable QR from upiId directly.
+export const saveDriverPaymentUpi = async (req, res) => {
+  const upiId = sanitizeDriverPaymentUpi(req.body.upiId);
+  const qrImage = String(req.body.qrImage ?? req.body.qrCodeImage ?? "").trim();
+
+  if (!upiId) {
+    throw new ApiError(400, "upiId is required");
+  }
+
+  if (!UPI_ID_REGEX.test(upiId)) {
+    throw new ApiError(400, "Enter a valid UPI ID (e.g. name@bank)");
+  }
+
+  const driver = await Driver.findById(req.auth.sub);
+
+  if (!driver) {
+    throw new ApiError(404, "Driver not found");
+  }
+
+  const previous = driver.bankDetails || {};
+  const nextBank = { ...(previous.toObject ? previous.toObject() : previous) };
+
+  const upiChanged = sanitizeDriverPaymentUpi(previous.upiId) !== upiId;
+  nextBank.upiId = upiId;
+
+  // Only upload when a fresh data URL is supplied; an http(s) URL means the
+  // client sent back the already-stored image, so keep it as-is.
+  let qrChanged = false;
+  if (qrImage.startsWith("data:")) {
+    const uploaded = await uploadDataUrl({
+      dataUrl: qrImage,
+      folder: "driver-upi-qr",
+      publicIdPrefix: `driver-upi-${driver._id}`,
+    });
+    nextBank.qrCodeImage = uploaded.secureUrl;
+    qrChanged = true;
+  }
+
+  // A changed handle or QR must be re-verified by admin before riders see it.
+  if (upiChanged || qrChanged) {
+    nextBank.upiVerificationStatus = "pending";
+    nextBank.upiVerifiedName = "";
+    nextBank.upiVerifiedAt = null;
+  }
+
+  nextBank.updatedAt = new Date();
+  driver.bankDetails = nextBank;
+  driver.markModified("bankDetails");
+  await driver.save();
+
+  res.json({
+    success: true,
+    data: {
+      upiId: nextBank.upiId || "",
+      qrCodeImage: nextBank.qrCodeImage || "",
+      verificationStatus: nextBank.upiVerificationStatus || "pending",
+    },
+  });
+};
+
 export const createDriverPaymentQr = async (req, res) => {
   const amountInPaise = normalizePaymentAmount(req.body.amount);
   const rideId = String(req.body.rideId || "").trim();
