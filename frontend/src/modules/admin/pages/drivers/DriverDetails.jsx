@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
+import { uploadService } from '../../../../shared/services/uploadService';
 import { DELHI_CENTER, HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../utils/googleMaps';
 import BikeIcon from '@/assets/icons/bike.png';
 import CarIcon from '@/assets/icons/car.png';
@@ -461,6 +462,96 @@ const DriverDetails = () => {
   const [error, setError] = useState('');
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [documentActionKey, setDocumentActionKey] = useState('');
+  // The document card being edited, and its unsaved values. Only one card is
+  // open at a time so a save can never carry another card's draft with it.
+  const [editingDocKey, setEditingDocKey] = useState('');
+  const [docDraft, setDocDraft] = useState({ identify_number: '', expiry_date: '', image: '', fileName: '' });
+
+  const startEditingDocument = (doc) => {
+    const expiry = String(doc.expiry_date || '');
+    setEditingDocKey(doc.sourceKey);
+    setDocDraft({
+      identify_number: doc.identify_number || '',
+      // A date input only takes YYYY-MM-DD; anything else starts blank rather
+      // than showing a value the input would silently drop.
+      expiry_date: /^\d{4}-\d{2}-\d{2}/.test(expiry) ? expiry.slice(0, 10) : '',
+      image: '',
+      fileName: '',
+    });
+  };
+
+  const pickReplacementDocument = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      window.alert('Only image files can be uploaded as a document.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setDocDraft((draft) => ({ ...draft, image: reader.result, fileName: file.name }));
+    reader.onerror = () => window.alert('Could not read that file.');
+    reader.readAsDataURL(file);
+  };
+
+  /// Saves the admin's corrections to one document. The review status is left
+  /// as it was: fixing a typo in a number is not an approval or a rejection.
+  const saveDocumentEdit = async (doc) => {
+    if (!doc.sourceKey) return;
+
+    try {
+      setDocumentActionKey(`${doc.sourceKey}:edit`);
+      const existing = profile?.documents?.[doc.sourceKey] || {};
+      let images = doc.images || existing.images || [];
+      let fileNames = doc.fileNames || existing.fileNames || [];
+
+      if (docDraft.image) {
+        const uploaded = await uploadService.uploadImage(docDraft.image, 'driver-documents');
+        const url = uploaded?.url || uploaded?.data?.url || uploaded?.secureUrl;
+        if (!url) throw new Error('Upload finished but returned no file link');
+        images = [url];
+        fileNames = [docDraft.fileName || doc.name || doc.sourceKey];
+      }
+
+      const token = localStorage.getItem('adminToken');
+      const nextDocuments = {
+        ...(profile?.documents || {}),
+        [doc.sourceKey]: {
+          ...existing,
+          key: doc.sourceKey,
+          name: doc.name,
+          status: existing.status || doc.status || 'pending',
+          fileName: fileNames[0] || doc.name || doc.sourceKey,
+          previewUrl: images[0] || existing.previewUrl || '',
+          secureUrl: images[0] || existing.secureUrl || '',
+          images,
+          fileNames,
+          identify_number: String(docDraft.identify_number || '').trim(),
+          expiry_date: docDraft.expiry_date || '',
+          ...(docDraft.image ? { uploadedAt: new Date().toISOString() } : {}),
+        },
+      };
+
+      const response = await fetch(
+        `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ documents: nextDocuments }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok || !data?.success) throw new Error(data?.message || 'Unable to save document');
+
+      setEditingDocKey('');
+      await fetchProfile();
+    } catch (err) {
+      window.alert(err?.message || 'Unable to save document');
+    } finally {
+      setDocumentActionKey('');
+    }
+  };
 
   const tabs = [
     'Driver Profile',
@@ -1093,6 +1184,58 @@ const DriverDetails = () => {
                         {/* Column 1: Document Details */}
                         <div>
                           <h5 className="text-sm font-semibold text-gray-900 mb-4">Document details</h5>
+                          {editingDocKey === doc.sourceKey ? (
+                            <div className="space-y-3">
+                              <label className="block text-sm">
+                                <span className="text-gray-500 font-medium">Identify number</span>
+                                <input
+                                  type="text"
+                                  value={docDraft.identify_number}
+                                  onChange={(e) => setDocDraft((draft) => ({ ...draft, identify_number: e.target.value }))}
+                                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-indigo-400 focus:outline-none"
+                                />
+                              </label>
+                              <label className="block text-sm">
+                                <span className="text-gray-500 font-medium">Expiry date</span>
+                                <input
+                                  type="date"
+                                  value={docDraft.expiry_date}
+                                  onChange={(e) => setDocDraft((draft) => ({ ...draft, expiry_date: e.target.value }))}
+                                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-indigo-400 focus:outline-none"
+                                />
+                              </label>
+                              <label className="block text-sm">
+                                <span className="text-gray-500 font-medium">Replace document image (optional)</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => pickReplacementDocument(e.target.files?.[0])}
+                                  className="mt-1 block w-full text-xs text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-gray-700 hover:file:bg-gray-200"
+                                />
+                                {docDraft.image && (
+                                  <img src={docDraft.image} alt="New document preview" className="mt-2 h-24 rounded-md border border-gray-200 object-contain" />
+                                )}
+                              </label>
+                              <div className="flex gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => saveDocumentEdit(doc)}
+                                  disabled={documentActionKey.length > 0}
+                                  className="flex-1 py-2 text-xs font-semibold rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                  {documentActionKey === `${doc.sourceKey}:edit` ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingDocKey('')}
+                                  disabled={documentActionKey.length > 0}
+                                  className="flex-1 py-2 text-xs font-semibold rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
                           <div className="space-y-3">
                             <div className="flex justify-between items-start text-sm border-b border-gray-50 pb-2">
                               <span className="text-gray-500 font-medium">Identify number</span>
@@ -1135,6 +1278,7 @@ const DriverDetails = () => {
                               </div>
                             )}
                           </div>
+                          )}
                         </div>
 
                         {/* Column 2: Verification Data */}
@@ -1219,6 +1363,14 @@ const DriverDetails = () => {
                                 className="flex-1 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
                             >
                                 View doc
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => startEditingDocument(doc)}
+                              disabled={documentActionKey.length > 0 || !doc.sourceKey || editingDocKey === doc.sourceKey}
+                              className="flex-1 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors disabled:opacity-50"
+                            >
+                              Edit
                             </button>
                             <button
                               type="button"
