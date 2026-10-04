@@ -1,0 +1,24 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "feat/driver-upi-qr",
+    "main",
+    "origin",
+    "server-state-2026-08-24",
+    "server-work-2026-08-24-restored"
+  ],
+  "parent": {
+    "feat/driver-upi-qr": "main",
+    "main": null,
+    "origin": "main",
+    "server-state-2026-08-24": "main",
+    "server-work-2026-08-24-restored": "main"
+  },
+  "order": [
+    "main",
+    "feat/driver-upi-qr",
+    "origin",
+    "server-state-2026-08-24",
+    "server-work-2026-08-24-restored"
+  ]
+}

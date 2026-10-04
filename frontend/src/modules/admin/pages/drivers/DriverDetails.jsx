@@ -456,6 +456,7 @@ const DriverDetails = () => {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('Driver Profile');
   const [profile, setProfile] = useState(null);
+  const [upiActionBusy, setUpiActionBusy] = useState(false);
   const [walletForm, setWalletForm] = useState({ amount: '', operation: 'set', description: '', isSubmitting: false });
   const [walletHistory, setWalletHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1153,6 +1154,100 @@ const DriverDetails = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Payment UPI / QR — the driver's own handle shown to riders at
+                  ride-end. Admin verifies it here before it is exposed. */}
+              {(() => {
+                const pay = profile?.paymentUpi || {};
+                const status = String(pay.verificationStatus || 'pending').toLowerCase();
+                const hasUpi = Boolean(pay.upiId);
+                const resolveUrl = (u) =>
+                  !u ? '' : (u.startsWith('http') ? u : `${globalThis.__LEGACY_BACKEND_ORIGIN__}${u}`);
+                const setUpiStatus = async (next) => {
+                  try {
+                    setUpiActionBusy(true);
+                    const token = localStorage.getItem('adminToken');
+                    const response = await fetch(
+                      `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}`,
+                      {
+                        method: 'PATCH',
+                        headers: {
+                          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ paymentUpiVerificationStatus: next }),
+                      },
+                    );
+                    const data = await response.json();
+                    if (!response.ok || !data?.success) throw new Error(data?.message || 'Unable to update');
+                    await fetchProfile();
+                  } catch (err) {
+                    window.alert(err?.message || 'Unable to update');
+                  } finally {
+                    setUpiActionBusy(false);
+                  }
+                };
+                const badge =
+                  status === 'verified'
+                    ? 'bg-green-100 text-green-700'
+                    : status === 'rejected'
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-amber-100 text-amber-700';
+                return (
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-base text-gray-900 font-bold">Payment UPI / QR</h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Shown to riders at ride-end for direct payment. Verify before it goes live.
+                        </p>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${badge}`}>{status}</span>
+                    </div>
+                    {hasUpi ? (
+                      <div className="mt-5 flex flex-col gap-5 md:flex-row md:items-start">
+                        <div className="flex-1 space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">UPI ID</p>
+                          <p className="text-sm font-semibold text-gray-900 break-all">{pay.upiId}</p>
+                          {pay.verifiedName ? (
+                            <p className="text-xs text-gray-500">Name: {pay.verifiedName}</p>
+                          ) : null}
+                          {pay.verifiedAt ? (
+                            <p className="text-xs text-gray-500">Verified: {formatDateTime(pay.verifiedAt)}</p>
+                          ) : null}
+                          <div className="flex gap-3 pt-3">
+                            <button
+                              type="button"
+                              disabled={upiActionBusy || status === 'verified'}
+                              onClick={() => setUpiStatus('verified')}
+                              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
+                            >
+                              <CheckCircle2 size={15} /> Verify
+                            </button>
+                            <button
+                              type="button"
+                              disabled={upiActionBusy || status === 'rejected'}
+                              onClick={() => setUpiStatus('rejected')}
+                              className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                        {pay.qrCodeImage ? (
+                          <img
+                            src={resolveUrl(pay.qrCodeImage)}
+                            alt="Driver UPI QR"
+                            className="h-40 w-40 rounded-lg border border-gray-200 object-contain bg-white"
+                          />
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="mt-5 text-sm text-gray-400">Driver has not added a payment UPI yet.</div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="space-y-4">
                 {documents.length === 0 ? (

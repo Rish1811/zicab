@@ -19,6 +19,8 @@ import {
   createOwnerBusService,
   cancelOwnerBusBookingSeats,
   createDriverPaymentQr,
+  getDriverPaymentUpi,
+  saveDriverPaymentUpi,
   handleDriverRazorpayWalletTopupCallback,
   createServiceCenterStaffMember,
   enrollServiceCenterStaffBiometric,
@@ -377,6 +379,16 @@ driverRouter.post(
   asyncHandler(createDriverWithdrawalRequest),
 );
 
+driverRouter.get(
+  "/me/payment-upi",
+  authenticate(["driver"]),
+  asyncHandler(getDriverPaymentUpi),
+);
+driverRouter.patch(
+  "/me/payment-upi",
+  authenticate(["driver"]),
+  asyncHandler(saveDriverPaymentUpi),
+);
 driverRouter.post(
   "/payments/qr",
   authenticate(["driver"]),

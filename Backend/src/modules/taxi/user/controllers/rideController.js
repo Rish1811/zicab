@@ -461,6 +461,7 @@ export const updateRideStatus = async (req, res) => {
     driverId: req.auth.sub,
     nextStatus,
     paymentMethod: req.body.paymentMethod,
+    collectedVia: req.body.collectedVia,
   });
 
   try {
