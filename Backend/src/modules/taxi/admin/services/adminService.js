@@ -2699,6 +2699,15 @@ const serializeDriver = (driver) => ({
     updatedAt: driver.wallet?.updatedAt || null,
   },
   wallet_balance: Number(driver.wallet?.balance || 0),
+  // Driver's own payment UPI/QR shown to riders at ride-end. Only the UPI
+  // subfields are surfaced here — never the bank account number / IFSC.
+  paymentUpi: {
+    upiId: driver.bankDetails?.upiId || '',
+    qrCodeImage: driver.bankDetails?.qrCodeImage || '',
+    verificationStatus: driver.bankDetails?.upiVerificationStatus || 'pending',
+    verifiedName: driver.bankDetails?.upiVerifiedName || '',
+    verifiedAt: driver.bankDetails?.upiVerifiedAt || null,
+  },
   createdAt: driver.createdAt,
   updatedAt: driver.updatedAt,
 });
@@ -5377,6 +5386,18 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
 
   if (payload.documents !== undefined) {
     update.documents = payload.documents;
+  }
+
+  // Admin verification of the driver's OWN payment UPI/QR (the one shown to
+  // riders at ride-end). Accepts 'verified' | 'rejected' | 'pending'. Dot-paths
+  // ensure only these subfields change — account number / IFSC stay untouched.
+  if (payload.paymentUpiVerificationStatus !== undefined) {
+    const upiStatus = String(payload.paymentUpiVerificationStatus || '').trim().toLowerCase();
+    if (!['verified', 'rejected', 'pending', ''].includes(upiStatus)) {
+      throw new ApiError(400, 'paymentUpiVerificationStatus must be verified, rejected, or pending');
+    }
+    update['bankDetails.upiVerificationStatus'] = upiStatus;
+    update['bankDetails.upiVerifiedAt'] = upiStatus === 'verified' ? new Date() : null;
   }
 
   if (payload.onboarding !== undefined) {

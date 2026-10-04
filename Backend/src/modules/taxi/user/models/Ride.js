@@ -375,6 +375,17 @@ const rideSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    // How the driver actually collected the fare at ride end. Both 'cash' and
+    // 'upi' mean the money reached the driver directly (not the platform), so
+    // settlement treats them identically (cash-like). This field only records
+    // the tender type for reporting; it does not change commission handling.
+    collectedVia: {
+      type: String,
+      enum: ['cash', 'upi'],
+      default: 'cash',
+      lowercase: true,
+      trim: true,
+    },
     otp: {
       type: String,
       trim: true,

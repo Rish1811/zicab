@@ -1458,7 +1458,7 @@ export const getRideDetails = async (rideId) => {
   const ride = await Ride.findById(rideId)
     .populate('deliveryId')
     .populate('userId', 'name phone')
-    .populate('driverId', 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating');
+    .populate('driverId', 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating bankDetails.upiId bankDetails.qrCodeImage bankDetails.upiVerificationStatus bankDetails.upiVerifiedName');
 
   if (!ride) {
     throw new ApiError(404, 'Ride not found');
@@ -1475,7 +1475,7 @@ const populateRideRealtime = async (rideId) =>
   Ride.findById(rideId)
     .populate('deliveryId')
     .populate('userId', 'name phone')
-    .populate('driverId', 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating');
+    .populate('driverId', 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating bankDetails.upiId bankDetails.qrCodeImage bankDetails.upiVerificationStatus bankDetails.upiVerifiedName');
 
 export const serializeRideRealtime = (ride) => ({
   rideId: String(ride._id),
@@ -1510,6 +1510,20 @@ export const serializeRideRealtime = (ride) => ({
       }
     : null,
   paymentMethod: ride.paymentMethod,
+  collectedVia: ride.collectedVia || 'cash',
+  // Driver's own static UPI handle + QR, exposed to the rider ONLY once admin
+  // has verified it. The rider app uses this at ride-end to render a scannable
+  // QR and a upi:// deep link. Never includes bank account number / IFSC.
+  driverPayment: (() => {
+    const bank = ride.driverId?.bankDetails;
+    if (!bank || bank.upiVerificationStatus !== 'verified') return null;
+    if (!bank.upiId && !bank.qrCodeImage) return null;
+    return {
+      upiId: bank.upiId || '',
+      qrCodeImage: bank.qrCodeImage || '',
+      payeeName: ride.driverId?.name || '',
+    };
+  })(),
   subscriptionUsage: ride.subscriptionUsage?.covered
     ? {
         covered: true,
@@ -1638,7 +1652,7 @@ export const getActiveRideForIdentity = async ({ role, entityId }) => {
     })
       .sort({ updatedAt: -1 })
       .populate('userId', 'name phone')
-      .populate('driverId', 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating');
+      .populate('driverId', 'name phone profileImage vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel vehicleImage rating bankDetails.upiId bankDetails.qrCodeImage bankDetails.upiVerificationStatus bankDetails.upiVerifiedName');
 
     return rides.find((ride) => !isRideScheduledForFuture(ride)) || null;
   }
@@ -1987,7 +2001,7 @@ export const saveParcelProof = async ({ rideId, driverId, stage, imageUrl }) => 
   return ride;
 };
 
-export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymentMethod }) => {
+export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymentMethod, collectedVia }) => {
   const config = rideStatusConfig[nextStatus];
 
   if (!config) {
@@ -2021,7 +2035,19 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     ride.startedAt = new Date();
   }
 
-  if (paymentMethod !== undefined && paymentMethod !== null && String(paymentMethod).trim()) {
+  const normalizedCollectedVia = collectedVia !== undefined && collectedVia !== null
+    ? String(collectedVia).trim().toLowerCase()
+    : '';
+
+  if (['cash', 'upi'].includes(normalizedCollectedVia)) {
+    // Driver collected the fare directly — cash in hand, or into their own UPI
+    // via their personal QR. Either way the money never reached the platform,
+    // so settlement must be cash-like (commission deducted from the driver's
+    // wallet). We record the real tender in collectedVia but force
+    // paymentMethod to 'cash' so settleCompletedRideWallet treats it correctly.
+    ride.collectedVia = normalizedCollectedVia;
+    ride.paymentMethod = 'cash';
+  } else if (paymentMethod !== undefined && paymentMethod !== null && String(paymentMethod).trim()) {
     ride.paymentMethod = normalizeRidePaymentMethod(paymentMethod);
   }
 
