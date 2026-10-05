@@ -788,6 +788,7 @@ const emitRideRequestToDrivers = async ({
       vehicleIconUrl: ride.vehicleIconUrl || '',
       fare: ride.fare,
       baseFare: Number(ride.baseFare || ride.fare || 0),
+      surgeMultiplier: Number(ride.surge?.multiplier || 1),
       bookingMode: ride.bookingMode || 'normal',
       pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
       biddingStatus: ride.biddingStatus || 'none',

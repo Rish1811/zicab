@@ -382,6 +382,7 @@ const createScheduledRidePreview = (ride) => ({
     raw: {
         fare: ride.fare,
         baseFare: ride.baseFare,
+        surgeMultiplier: Number(ride.surgeMultiplier || ride.surge?.multiplier || 1),
         bookingMode: ride.bookingMode || 'normal',
         parcel: ride.parcel || null,
         intercity: ride.intercity || null,

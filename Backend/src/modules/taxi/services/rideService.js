@@ -18,6 +18,7 @@ import { User } from '../user/models/User.js';
 import { UserWallet } from '../user/models/UserWallet.js';
 import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
+import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt } from './surgeService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
 import { resolveBiddingPolicy } from './biddingPolicyService.js';
@@ -1076,6 +1077,7 @@ export const createRideRecord = async ({
   userMaxBidFare,
   bidStepAmount,
   platformFee,
+  surgeMultiplier,
 }) => {
   const user = await User.findById(userId);
 
@@ -1270,6 +1272,22 @@ export const createRideRecord = async ({
     resolvedAt: pricingRule ? new Date() : null,
   };
 
+  // The surge this fare was quoted under, kept on the ride so the driver's
+  // offer can say "1.2x surge ride" and reports can separate surge income. The
+  // fare already includes it. A current app sends the multiplier it priced
+  // with; otherwise the pickup's surge now is the best record there is.
+  const pickupSurge = await getSurgeAt(pickupCoords?.[1], pickupCoords?.[0]).catch(() => null);
+  const quotedSurge = Number(surgeMultiplier);
+  const rideSurgeMultiplier = Math.min(
+    ABSOLUTE_MAX_MULTIPLIER,
+    Math.max(1, Number.isFinite(quotedSurge) && quotedSurge >= 1 ? quotedSurge : Number(pickupSurge?.multiplier) || 1),
+  );
+  const rideSurge = {
+    multiplier: Math.round(rideSurgeMultiplier * 100) / 100,
+    source: rideSurgeMultiplier > 1 ? 'automatic' : 'none',
+    hex: pickupSurge?.hex || '',
+  };
+
   const promoCode = typeof promo_code === 'string' ? promo_code.trim() : '';
   const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
   const applicableSubscription = primaryVehicleTypeId
@@ -1381,6 +1399,7 @@ export const createRideRecord = async ({
       service_location_id: resolvedServiceLocationId,
       transport_type: normalizedTransportType,
       pricingSnapshot,
+      surge: rideSurge,
       parcel: normalizeParcelPayload(parcel),
       intercity: normalizeIntercityPayload(intercity),
       scheduledAt: normalizedScheduledAt,
@@ -1443,6 +1462,7 @@ export const createRideRecord = async ({
             service_location_id: resolvedServiceLocationId,
             transport_type: normalizedTransportType,
             pricingSnapshot,
+            surge: rideSurge,
             parcel: normalizeParcelPayload(parcel),
             intercity: normalizeIntercityPayload(intercity),
             scheduledAt: normalizedScheduledAt,

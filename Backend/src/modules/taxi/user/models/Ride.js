@@ -519,6 +519,23 @@ const rideSchema = new mongoose.Schema(
       default: 'taxi',
       trim: true,
     },
+    // Surge the fare was quoted under; the fare already includes it.
+    surge: {
+      multiplier: {
+        type: Number,
+        default: 1,
+      },
+      source: {
+        type: String,
+        default: 'none',
+        trim: true,
+      },
+      hex: {
+        type: String,
+        default: '',
+        trim: true,
+      },
+    },
     pricingSnapshot: {
       setPriceId: {
         type: mongoose.Schema.Types.ObjectId,

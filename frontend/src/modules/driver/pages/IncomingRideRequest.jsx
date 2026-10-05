@@ -279,6 +279,11 @@ const IncomingRideRequest = ({
                   <p className={`text-[9px] font-extrabold uppercase tracking-wider ${accentText}`}>Earnings</p>
                 </div>
                 <p className={`text-[21px] font-black leading-none ${accentText}`}>{data.fare || 'Rs 0'}</p>
+                {Number(data.raw?.surgeMultiplier) > 1 ? (
+                  <span className="mt-1 rounded bg-emerald-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">
+                    {Number(data.raw.surgeMultiplier).toFixed(2)}x surge
+                  </span>
+                ) : null}
               </div>
 
               <div className="flex flex-col items-center justify-center p-3 text-center">
