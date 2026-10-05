@@ -1833,3 +1833,10 @@ export const deletePriceHike = asyncHandler(async (req, res) => {
   await adminService.deletePriceHike(req.params.id, req.auth?.admin);
   ok(res, { deleted: true });
 });
+
+export const getAutomaticSurge = asyncHandler(async (req, res) =>
+  ok(res, await adminService.getAutomaticSurge(req.auth?.admin)),
+);
+export const updateAutomaticSurge = asyncHandler(async (req, res) =>
+  ok(res, await adminService.updateAutomaticSurge(req.body, req.auth?.admin)),
+);

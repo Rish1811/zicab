@@ -126,6 +126,7 @@ import {
   uploadPoolingOnboardingImageRequest,
 } from "../controllers/driverController.js";
 import { triggerDriverSosAlert } from '../../safety/controllers/safetyController.js';
+import { listActiveSurges } from '../../services/surgeService.js';
 
 export const driverRouter = Router();
 
@@ -633,6 +634,19 @@ driverRouter.post("/subscription/purchase", authenticate(["driver"]), asyncHandl
 driverRouter.get("/subscription/history", authenticate(["driver"]), asyncHandler(getMySubscriptionHistory));
 
 driverRouter.patch("/online", authenticate(["driver"]), asyncHandler(goOnline));
+// Surge hexagons near the driver, for the "Surge Fare Area" map: each carries
+// its outline, multiplier and minutes left, so the app can draw it without H3.
+driverRouter.get(
+  "/surge-map",
+  authenticate(["driver"]),
+  asyncHandler(async (req, res) => {
+    const lat = Number(req.query.lat ?? req.query.latitude);
+    const lng = Number(req.query.lng ?? req.query.longitude);
+    const radiusKm = Math.min(50, Math.max(1, Number(req.query.radius_km) || 15));
+    const results = await listActiveSurges({ lat, lng, radiusKm });
+    res.json({ success: true, data: { results, refreshed_at: new Date().toISOString() } });
+  }),
+);
 driverRouter.patch(
   "/offline",
   authenticate(["driver"]),

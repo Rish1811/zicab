@@ -30,6 +30,8 @@ import toast from 'react-hot-toast';
 import MapGrid from '../../../assets/premium_grid_map.png';
 import DriverBottomNav from '../../shared/components/DriverBottomNav';
 import IncomingRideRequest from './IncomingRideRequest';
+import { DriverSurgeCard, DriverSurgeLayer } from '../components/DriverSurgeLayer';
+import { useDriverSurges } from '../components/useDriverSurges';
 import api from '../../../shared/api/axiosInstance';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { uploadService } from '../../../shared/services/uploadService';
@@ -690,6 +692,8 @@ const DriverHome = () => {
         emittedAt: 0,
     });
     const driverPosition = useMemo(() => toLatLng(driverCoords || DEFAULT_MAP_COORDS), [driverCoords]);
+    // Surge areas near the driver, only while online - the map Rapido drivers use to chase demand.
+    const surgeAreas = useDriverSurges(driverCoords ? driverPosition : null, isOnline);
     const mapVehicleIcon = useMemo(
         () => getMapIconForVehicle(vehicleIconUrl || vehicleIconType),
         [vehicleIconType, vehicleIconUrl],
@@ -2455,6 +2459,7 @@ const DriverHome = () => {
                                 anchor: new window.google.maps.Point(20, 20)
                             }} 
                         />
+                        <DriverSurgeLayer areas={surgeAreas} />
                     </GoogleMap>
                 ) : (
                     <div className="w-full h-full bg-slate-200 flex items-center justify-center">
@@ -2479,6 +2484,11 @@ const DriverHome = () => {
 
             {/* --- BOTTOM FLOATING UI --- */}
             <div className="fixed bottom-20 left-0 right-0 p-6 pb-4 z-[60] flex flex-col max-w-md mx-auto">
+                {isOnline && surgeAreas.length > 0 ? (
+                    <div className="mb-3">
+                        <DriverSurgeCard areas={surgeAreas} />
+                    </div>
+                ) : null}
                 <AnimatePresence>
                     {statusMessage ? (
                         <motion.div

@@ -75,6 +75,7 @@ import { sendEmail } from '../../services/mailService.js';
 import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
 import { signAccessToken } from '../../services/tokenService.js';
 import { applyPriceHikeToSetPrice, getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
+import { getSurgeSettings, listActiveSurges, updateSurgeSettings } from '../../services/surgeService.js';
 import { getBidRideSettings } from '../../services/transportSettingsService.js';
 import { resolveCatalogDispatchType } from '../../services/biddingPolicyService.js';
 import { PriceHike } from '../models/PriceHike.js';
@@ -7138,7 +7139,9 @@ export const deleteVehicleType = async (id) => {
   return true;
 };
 
-export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
+/// `options.hikeMultiplier` overrides the scheduled Price Hike windows - the
+/// rider catalog passes the larger of those and the pickup's automatic surge.
+export const listSetPrices = async (queryArgs = {}, currentAdmin = null, options = {}) => {
   const scope = String(queryArgs.scope || '').trim();
   const query = scope ? { pricing_scope: scope } : {};
   const safePage = Math.max(1, Number(queryArgs.page || queryArgs.current_page || 1) || 1);
@@ -7438,7 +7441,9 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
   // bills the fare the app quoted (it uses the tariff row only for commission
   // and waiting charges). So the quote is the charge, and scaling the quote is
   // what makes the Price Hike page take effect, for installed app builds too.
-  const hikeMultiplier = await getActivePriceHikeMultiplier();
+  const hikeMultiplier = Number(options.hikeMultiplier) > 0
+    ? Number(options.hikeMultiplier)
+    : await getActivePriceHikeMultiplier();
   const quotedResults = currentAdmin
     ? pagedRows.map((row) => row.result)
     : pagedRows.map((row) => applyPriceHikeToSetPrice(row.result, hikeMultiplier));
@@ -12021,4 +12026,28 @@ export const deletePriceHike = async (id, currentAdmin = null) => {
   }
 
   return { id: String(id) };
+};
+
+/// Automatic surge settings and the hexagons surging right now, for the
+/// Price Hike page.
+export const getAutomaticSurge = async (currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'price hikes');
+  }
+
+  return {
+    settings: await getSurgeSettings({ fresh: true }),
+    active: await listActiveSurges({ radiusKm: Infinity }),
+  };
+};
+
+export const updateAutomaticSurge = async (payload, currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'price hikes');
+  }
+
+  return {
+    settings: await updateSurgeSettings(payload || {}),
+    active: await listActiveSurges({ radiusKm: Infinity }),
+  };
 };

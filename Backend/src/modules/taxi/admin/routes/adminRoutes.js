@@ -80,6 +80,8 @@ import {
   getAdminEarnings,
   getAirports,
   getPriceHikes,
+  getAutomaticSurge,
+  updateAutomaticSurge,
   createPriceHike,
   updatePriceHike,
   deletePriceHike,
@@ -554,6 +556,8 @@ adminRouter.use('/', promotionsRouter);
 
 // Price hike (surge). Sits under the authenticate(['admin']) mount above.
 adminRouter.get('/admin/price-hikes', getPriceHikes);
+adminRouter.get('/admin/surge', getAutomaticSurge);
+adminRouter.patch('/admin/surge', updateAutomaticSurge);
 adminRouter.post('/admin/price-hikes', createPriceHike);
 adminRouter.patch('/admin/price-hikes/:id', updatePriceHike);
 adminRouter.delete('/admin/price-hikes/:id', deletePriceHike);

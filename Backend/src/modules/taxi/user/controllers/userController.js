@@ -36,6 +36,9 @@ import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../ser
 import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
 import { listServiceStores, listSetPrices, listZones } from '../../admin/services/adminService.js';
 import { findZoneByPickup } from '../../services/matchingService.js';
+import { getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
+import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, recordSurgeDemand } from '../../services/surgeService.js';
+import { verifyAccessToken } from '../../services/tokenService.js';
 import { resolveRouteCached } from '../../services/routeService.js';
 import {
   findActiveEmployeeByCode,
@@ -4470,6 +4473,22 @@ const pickTariffPerVehicle = (rows, zoneId, serviceLocationId, transportType) =>
   return [...best.values()].map((entry) => entry.row);
 };
 
+/// Who is asking for a price, for counting distinct riders in surge demand.
+/// The route is public, so the token is read if present but never required.
+const surgeRequester = (req) => {
+  const [, token] = String(req.headers.authorization || '').split(' ');
+  if (token) {
+    try {
+      const payload = verifyAccessToken(token);
+      if (payload?.sub) return `u:${payload.sub}`;
+    } catch {
+      // Expired or foreign token: fall back to the address.
+    }
+  }
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return `ip:${forwarded || req.ip || 'unknown'}`;
+};
+
 /// Tariff catalog for the rider apps.
 ///
 /// Two things separate this from the admin listing, and both were mispricing
@@ -4542,9 +4561,21 @@ export const getSetPrices = asyncHandler(async (req, res) => {
   // oldest ones off the page. Seeding Karnataka, Bidar and Hyderabad took
   // Bengaluru from twelve vehicles to three. Fetched this way the count of
   // zones no longer matters.
+  // Every located quote is a rider wanting a ride here: it is the demand the
+  // automatic surge measures, and the pickup's hexagon sets its multiplier.
+  // The larger of that and any scheduled Price Hike window applies.
+  let surge = { multiplier: 1, ends_at: null, hex: null };
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    recordSurgeDemand({ lat: latitude, lng: longitude, requester: surgeRequester(req) })
+      .catch((error) => console.error('Surge demand not recorded', error.message));
+    surge = await getSurgeAt(latitude, longitude).catch(() => surge);
+  }
+  const scheduledMultiplier = await getActivePriceHikeMultiplier();
+  const hikeMultiplier = Math.min(ABSOLUTE_MAX_MULTIPLIER, Math.max(scheduledMultiplier, surge.multiplier));
+
   const [zoneRows, fallback] = await Promise.all([
-    listSetPrices({ ...query, zone_id: zoneId }, null),
-    listSetPrices({ ...query, zone_id: 'none' }, null),
+    listSetPrices({ ...query, zone_id: zoneId }, null, { hikeMultiplier }),
+    listSetPrices({ ...query, zone_id: 'none' }, null, { hikeMultiplier }),
   ]);
   const data = { ...zoneRows, results: [...(zoneRows.results || []), ...(fallback.results || [])] };
 
@@ -4560,6 +4591,13 @@ export const getSetPrices = asyncHandler(async (req, res) => {
     results,
     zone_id: zoneId,
     zone_name: zone?.name || null,
+    price_hike_multiplier: hikeMultiplier,
+    // For a "1.10x surge" label and its countdown in the apps.
+    surge: {
+      multiplier: hikeMultiplier,
+      source: hikeMultiplier <= 1 ? 'none' : (surge.multiplier >= scheduledMultiplier ? 'automatic' : 'scheduled'),
+      ends_at: surge.multiplier >= scheduledMultiplier ? surge.ends_at : null,
+    },
   });
 });
 

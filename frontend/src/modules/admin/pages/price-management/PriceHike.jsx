@@ -3,6 +3,7 @@ import { Plus, Trash2, Loader2, TrendingUp, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../../shared/api/axiosInstance';
 import toast from 'react-hot-toast';
+import AutomaticSurgePanel from './AutomaticSurgePanel';
 
 const inputClass =
   'w-full border border-gray-200 rounded-md px-2 py-1 text-xs text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors shadow-sm';
@@ -174,6 +175,9 @@ const PriceHike = () => {
         </div>
       </div>
 
+      <AutomaticSurgePanel />
+
+      <h2 className="text-sm font-bold text-[#1E293B] mb-1">Scheduled time slots</h2>
       <p className="text-[11px] text-gray-500 mb-3">
         While a slot is active, every vehicle&apos;s base fare, per-km rate and per-minute rate are
         multiplied. Distance and time allowances, taxes and commissions are not changed. Times are
