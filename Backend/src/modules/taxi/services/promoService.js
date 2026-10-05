@@ -41,8 +41,13 @@ export const computePromoDiscount = ({ fare, promo, userCounter }) => {
   }
 
   const discountPercentage = clamp(Number(promo?.discount_percentage || 0), 0, 100);
-  const rawDiscount = safeFare * (discountPercentage / 100);
   const maximumDiscountAmount = Math.max(0, Number(promo?.maximum_discount_amount || 0));
+  // The admin form accepts a percentage or an amount. With no percentage the
+  // amount is the discount itself - read only as a cap, a 0% code took nothing
+  // off and was refused at every booking.
+  const rawDiscount = discountPercentage > 0
+    ? safeFare * (discountPercentage / 100)
+    : Math.min(safeFare, maximumDiscountAmount);
 
   const cappedDiscount = maximumDiscountAmount > 0 ? Math.min(rawDiscount, maximumDiscountAmount) : rawDiscount;
 
