@@ -1,4 +1,4 @@
-import { ApiError } from '../../../../utils/ApiError.js';
+import { resolveServiceLocationIdForPickup } from '../../services/rideService.js';
 import { listAvailablePromosForUser, validatePromoForContext } from '../../services/promoService.js';
 
 export const validatePromo = async (req, res) => {
@@ -16,10 +16,15 @@ export const validatePromo = async (req, res) => {
 };
 
 export const getAvailablePromos = async (req, res) => {
-  const serviceLocationId = req.query.service_location_id;
-  if (!serviceLocationId) {
-    throw new ApiError(400, 'service_location_id is required');
-  }
+  // The rider app sends no location here; a pickup, when given, narrows the
+  // list to that city.
+  const latitude = Number(req.query.lat ?? req.query.latitude);
+  const longitude = Number(req.query.lng ?? req.query.longitude);
+  const serviceLocationId =
+    req.query.service_location_id ||
+    (Number.isFinite(latitude) && Number.isFinite(longitude)
+      ? await resolveServiceLocationIdForPickup([longitude, latitude])
+      : null);
 
   const result = await listAvailablePromosForUser({
     userId: req.auth?.sub,

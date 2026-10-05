@@ -1030,6 +1030,19 @@ const syncDeliveryWithRide = async (ride) => {
   return delivery;
 };
 
+/// Service location of the zone a pickup sits in, or null outside every zone.
+/// Imported lazily: matchingService already imports this module.
+export const resolveServiceLocationIdForPickup = async (pickupCoords) => {
+  try {
+    const { findZoneByPickup } = await import('./matchingService.js');
+    const zone = await findZoneByPickup(pickupCoords);
+    const id = zone?.service_location_id?._id || zone?.service_location_id;
+    return id ? String(id) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const createRideRecord = async ({
   userId,
   pickupCoords,
@@ -1365,6 +1378,13 @@ export const createRideRecord = async ({
     return ride;
   }
 
+  // The rider app never sends a service location, and the promo is scoped by
+  // one, so every booking with a coupon was refused outright. Work it out from
+  // the pickup when the request leaves it out. Resolved before the transaction
+  // so the zone lookup does not hold it open.
+  const promoServiceLocationId =
+    service_location_id || (await resolveServiceLocationIdForPickup(pickupCoords));
+
   let lastError = null;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1428,7 +1448,7 @@ export const createRideRecord = async ({
         userId,
         code: promoCode,
         fare: safeFare,
-        service_location_id,
+        service_location_id: promoServiceLocationId,
         transport_type: transport_type || 'taxi',
       });
 
