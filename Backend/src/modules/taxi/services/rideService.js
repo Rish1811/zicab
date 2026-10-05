@@ -1030,18 +1030,25 @@ const syncDeliveryWithRide = async (ride) => {
   return delivery;
 };
 
-/// Service location of the zone a pickup sits in, or null outside every zone.
+/// Zone and service location a pickup sits in, or nulls outside every zone.
 /// Imported lazily: matchingService already imports this module.
-export const resolveServiceLocationIdForPickup = async (pickupCoords) => {
+export const resolveZoneForPickup = async (pickupCoords) => {
   try {
     const { findZoneByPickup } = await import('./matchingService.js');
     const zone = await findZoneByPickup(pickupCoords);
-    const id = zone?.service_location_id?._id || zone?.service_location_id;
-    return id ? String(id) : null;
+    const serviceLocationId = zone?.service_location_id?._id || zone?.service_location_id;
+    return {
+      zoneId: zone?._id ? String(zone._id) : null,
+      serviceLocationId: serviceLocationId ? String(serviceLocationId) : null,
+    };
   } catch {
-    return null;
+    return { zoneId: null, serviceLocationId: null };
   }
 };
+
+/// Service location of the zone a pickup sits in, or null outside every zone.
+export const resolveServiceLocationIdForPickup = async (pickupCoords) =>
+  (await resolveZoneForPickup(pickupCoords)).serviceLocationId;
 
 export const createRideRecord = async ({
   userId,
@@ -1112,14 +1119,24 @@ export const createRideRecord = async ({
     '',
   ).trim();
   const normalizedTransportType = normalizeRideTransportType(transport_type);
-  const resolvedZoneId =
-    zone_id && mongoose.Types.ObjectId.isValid(zone_id)
-      ? new mongoose.Types.ObjectId(zone_id)
-      : null;
-  const resolvedServiceLocationId =
+  // The rider app sends neither id, so every ride was stored without a zone
+  // or city and priced its commission and waiting charge from a fallback
+  // tariff row instead of the pickup zone's. Taken from the pickup when absent.
+  const pickupZone =
+    (zone_id && mongoose.Types.ObjectId.isValid(zone_id)) &&
+    (service_location_id && mongoose.Types.ObjectId.isValid(service_location_id))
+      ? null
+      : await resolveZoneForPickup(pickupCoords);
+  const zoneIdInput =
+    zone_id && mongoose.Types.ObjectId.isValid(zone_id) ? zone_id : pickupZone?.zoneId;
+  const serviceLocationIdInput =
     service_location_id && mongoose.Types.ObjectId.isValid(service_location_id)
-      ? new mongoose.Types.ObjectId(service_location_id)
-      : null;
+      ? service_location_id
+      : pickupZone?.serviceLocationId;
+  const resolvedZoneId = zoneIdInput ? new mongoose.Types.ObjectId(zoneIdInput) : null;
+  const resolvedServiceLocationId = serviceLocationIdInput
+    ? new mongoose.Types.ObjectId(serviceLocationIdInput)
+    : null;
   const { pricingRule, allowedPaymentMethods } = await getAllowedRidePaymentMethodsForPricing({
     zoneId: resolvedZoneId,
     serviceLocationId: resolvedServiceLocationId,
@@ -1382,8 +1399,7 @@ export const createRideRecord = async ({
   // one, so every booking with a coupon was refused outright. Work it out from
   // the pickup when the request leaves it out. Resolved before the transaction
   // so the zone lookup does not hold it open.
-  const promoServiceLocationId =
-    service_location_id || (await resolveServiceLocationIdForPickup(pickupCoords));
+  const promoServiceLocationId = resolvedServiceLocationId ? String(resolvedServiceLocationId) : null;
 
   let lastError = null;
 

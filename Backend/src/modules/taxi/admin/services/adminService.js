@@ -74,7 +74,7 @@ import { buildRentalTrackingSnapshot, listActiveRentalTrackingBookings } from '.
 import { sendEmail } from '../../services/mailService.js';
 import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
 import { signAccessToken } from '../../services/tokenService.js';
-import { getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
+import { applyPriceHikeToSetPrice, getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
 import { getBidRideSettings } from '../../services/transportSettingsService.js';
 import { resolveCatalogDispatchType } from '../../services/biddingPolicyService.js';
 import { PriceHike } from '../models/PriceHike.js';
@@ -7430,22 +7430,21 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null) => {
   const from = total === 0 ? 0 : (safePage - 1) * safeLimit + 1;
   const to = total === 0 ? 0 : Math.min((safePage - 1) * safeLimit + pagedRows.length, total);
 
-  // The active hike is reported here but deliberately not applied.
+  // The active hike is applied to the rows riders are quoted from, and only
+  // to those: admins (currentAdmin set) see and edit the base tariff.
   //
-  // It used to be multiplied into these rows for every non-admin caller, on
-  // the reasoning that clients price the fare from them. But the fare a rider
-  // is actually charged comes from resolveSetPriceForRide, which never applied
-  // it — so the 2x hike configured in production doubled every quote in the
-  // app while the trip still billed at the base tariff. Quote and charge have
-  // to come from the same number, and the base tariff is the one that settles
-  // the bill.
-  //
-  // Wiring the hike into the fare path is what would make surge pricing real.
-  // Until that happens, applying it here only misquotes the rider.
+  // This was switched off on 10 Sep on the belief that the trip is billed from
+  // the base tariff via resolveSetPriceForRide. It is not - createRideRecord
+  // bills the fare the app quoted (it uses the tariff row only for commission
+  // and waiting charges). So the quote is the charge, and scaling the quote is
+  // what makes the Price Hike page take effect, for installed app builds too.
   const hikeMultiplier = await getActivePriceHikeMultiplier();
+  const quotedResults = currentAdmin
+    ? pagedRows.map((row) => row.result)
+    : pagedRows.map((row) => applyPriceHikeToSetPrice(row.result, hikeMultiplier));
 
   return {
-    results: pagedRows.map((row) => row.result),
+    results: quotedResults,
     price_hike_multiplier: hikeMultiplier,
     paginator: {
       ...paginated.paginator,
