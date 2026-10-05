@@ -7433,17 +7433,14 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null, options
   const from = total === 0 ? 0 : (safePage - 1) * safeLimit + 1;
   const to = total === 0 ? 0 : Math.min((safePage - 1) * safeLimit + pagedRows.length, total);
 
-  // The active hike is applied to the rows riders are quoted from, and only
-  // to those: admins (currentAdmin set) see and edit the base tariff.
+  // Surge is applied to the rows riders are quoted from, and only to those:
+  // admins (currentAdmin set) see and edit the base tariff. The quote is what
+  // createRideRecord bills, so scaling it scales the charge.
   //
-  // This was switched off on 10 Sep on the belief that the trip is billed from
-  // the base tariff via resolveSetPriceForRide. It is not - createRideRecord
-  // bills the fare the app quoted (it uses the tariff row only for commission
-  // and waiting charges). So the quote is the charge, and scaling the quote is
-  // what makes the Price Hike page take effect, for installed app builds too.
-  const hikeMultiplier = Number(options.hikeMultiplier) > 0
-    ? Number(options.hikeMultiplier)
-    : await getActivePriceHikeMultiplier();
+  // The multiplier is the pickup hexagon's automatic surge, passed in by the
+  // rider catalog. A request with no pickup has no area to surge, so 1. The
+  // scheduled Price Hike time slots are retired - surge follows demand only.
+  const hikeMultiplier = Number(options.hikeMultiplier) > 0 ? Number(options.hikeMultiplier) : 1;
   const quotedResults = currentAdmin
     ? pagedRows.map((row) => row.result)
     : pagedRows.map((row) => applyPriceHikeToSetPrice(row.result, hikeMultiplier));

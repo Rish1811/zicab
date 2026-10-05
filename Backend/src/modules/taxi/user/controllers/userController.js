@@ -36,7 +36,6 @@ import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../ser
 import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
 import { listServiceStores, listSetPrices, listZones } from '../../admin/services/adminService.js';
 import { findZoneByPickup } from '../../services/matchingService.js';
-import { getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
 import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, recordSurgeDemand } from '../../services/surgeService.js';
 import { verifyAccessToken } from '../../services/tokenService.js';
 import { resolveRouteCached } from '../../services/routeService.js';
@@ -4563,15 +4562,13 @@ export const getSetPrices = asyncHandler(async (req, res) => {
   // zones no longer matters.
   // Every located quote is a rider wanting a ride here: it is the demand the
   // automatic surge measures, and the pickup's hexagon sets its multiplier.
-  // The larger of that and any scheduled Price Hike window applies.
   let surge = { multiplier: 1, ends_at: null, hex: null };
   if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
     recordSurgeDemand({ lat: latitude, lng: longitude, requester: surgeRequester(req) })
       .catch((error) => console.error('Surge demand not recorded', error.message));
     surge = await getSurgeAt(latitude, longitude).catch(() => surge);
   }
-  const scheduledMultiplier = await getActivePriceHikeMultiplier();
-  const hikeMultiplier = Math.min(ABSOLUTE_MAX_MULTIPLIER, Math.max(scheduledMultiplier, surge.multiplier));
+  const hikeMultiplier = Math.min(ABSOLUTE_MAX_MULTIPLIER, Math.max(1, surge.multiplier));
 
   const [zoneRows, fallback] = await Promise.all([
     listSetPrices({ ...query, zone_id: zoneId }, null, { hikeMultiplier }),
@@ -4595,8 +4592,8 @@ export const getSetPrices = asyncHandler(async (req, res) => {
     // For a "1.10x surge" label and its countdown in the apps.
     surge: {
       multiplier: hikeMultiplier,
-      source: hikeMultiplier <= 1 ? 'none' : (surge.multiplier >= scheduledMultiplier ? 'automatic' : 'scheduled'),
-      ends_at: surge.multiplier >= scheduledMultiplier ? surge.ends_at : null,
+      source: hikeMultiplier > 1 ? 'automatic' : 'none',
+      ends_at: hikeMultiplier > 1 ? surge.ends_at : null,
     },
   });
 });

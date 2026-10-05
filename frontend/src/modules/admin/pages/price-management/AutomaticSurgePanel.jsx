@@ -107,8 +107,7 @@ const AutomaticSurgePanel = () => {
           <p className="text-[11px] text-gray-500 mt-0.5 max-w-3xl">
             Like Rapido and Uber: the city is split into hexagons, and every minute each one compares the
             riders asking for a price there with the free drivers nearby. Busy areas get a small surge
-            that holds for a while, then eases off. When both an automatic surge and a time slot below
-            apply, the higher one is used.
+            that holds for a while, then eases off. While this is off, fares never surge.
           </p>
         </div>
         <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 shrink-0 cursor-pointer">
