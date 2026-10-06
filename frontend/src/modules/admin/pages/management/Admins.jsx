@@ -295,7 +295,12 @@ const Admins = () => {
       rateLabel: cur.loginSuccessRate === null || cur.loginSuccessRate === undefined ? '—' : `${cur.loginSuccessRate}%`,
       signInsText: signIns > 0 ? `${cur.loginSuccess} of ${signIns} sign-ins, 30 days` : 'No sign-ins recorded yet',
       signedInToday: activity?.signedInLast24h ?? 0,
-      created30: cur.created || 0,
+      // From each account's creation date, which goes back further than the
+      // activity record does.
+      created30: admins.filter((a) => {
+        const at = new Date(a.createdAt || a.created_at || 0).getTime();
+        return at > Date.now() - 30 * 24 * 60 * 60 * 1000;
+      }).length,
       resets30: cur.passwordResets || 0,
       resetsTrend: versus(cur.passwordResets, prev.passwordResets),
       permissionChanges30: cur.permissionChanges || 0,
