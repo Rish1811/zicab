@@ -34,8 +34,15 @@
   --font-heading: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* Page content fade-up on load */
-  animation: adminFadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  /* Page content fade-up on load.
+     `backwards`, not `forwards`: forwards keeps the last keyframe applied for
+     good, and that keyframe has a transform. Any element with a transform
+     becomes the box that position:fixed children are placed against, so every
+     modal inside an admin page was positioned against the page instead of the
+     window - the Create Admin form opened half below the screen with its Save
+     button out of reach. The end frame is no movement and full opacity, which
+     is how the element looks without the animation anyway. */
+  animation: adminFadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards !important;
 }
 
 @keyframes adminFadeUp {
