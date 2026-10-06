@@ -41,7 +41,9 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminService } from '../../services/adminService';
-import { ADMIN_PERMISSION_GROUPS } from '../../constants/adminAccess';
+import { createPortal } from 'react-dom';
+import { expandMenuPermissions, menuKeysForAdmin } from '../../constants/adminAccess';
+import AdminAccountForm from './AdminAccountForm';
 
 const Admins = () => {
   const navigate = useNavigate();
@@ -357,20 +359,6 @@ const Admins = () => {
     return Math.max(0, Math.min(100, Math.round(score)));
   }, [stats]);
 
-  // Form Field Updater
-  const setField = (key, value) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  };
-
-  // Toggle permissions
-  const togglePermission = (key) => {
-    setForm((current) => {
-      const next = current.permissions.includes(key)
-        ? current.permissions.filter((p) => p !== key)
-        : [...current.permissions, key];
-      return { ...current, permissions: next };
-    });
-  };
 
   // Checkbox handlers
   const handleSelectAllRows = (e) => {
@@ -402,6 +390,20 @@ const Admins = () => {
       toast.error('Passwords do not match');
       return;
     }
+    if (form.password.length < 5) {
+      toast.error('Password must be at least 5 characters');
+      return;
+    }
+    // The backend refuses both of these; say so here instead of after the
+    // round trip with a vaguer message.
+    if (form.admin_type !== 'superadmin' && form.permissions.length === 0) {
+      toast.error('Tick at least one menu this admin can access');
+      return;
+    }
+    if (form.admin_type !== 'superadmin' && form.service_location_ids.length === 0) {
+      toast.error('Choose at least one service location');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -411,10 +413,14 @@ const Admins = () => {
         phone: form.phone.trim(),
         role: form.admin_type === 'superadmin' ? 'superadmin' : form.role,
         admin_type: form.admin_type,
-        permissions: form.admin_type === 'superadmin' ? ['*'] : form.permissions,
+        // Menu keys plus the API permission each menu's page needs.
+        permissions: form.admin_type === 'superadmin' ? ['*'] : expandMenuPermissions(form.permissions),
         service_location_ids: form.service_location_ids,
         zone_ids: form.zone_ids,
         password: form.password,
+        // The backend rejects a new account without this, and the page never
+        // sent it - every admin creation failed with "Passwords do not match".
+        password_confirmation: form.passwordConfirmation,
         active: form.active,
         employeeId: form.employeeId,
         department: form.department,
@@ -445,9 +451,9 @@ const Admins = () => {
       phone: admin.phone || '',
       role: admin.role || 'Operations Subadmin',
       admin_type: admin.admin_type || 'subadmin',
-      permissions: admin.permissions || [],
-      service_location_ids: admin.service_location_ids || [],
-      zone_ids: admin.zone_ids || [],
+      permissions: admin.admin_type === 'superadmin' ? [] : menuKeysForAdmin(admin.permissions || []),
+      service_location_ids: (admin.service_location_ids || []).map(String),
+      zone_ids: (admin.zone_ids || []).map(String),
       password: '',
       passwordConfirmation: '',
       active: admin.active !== false,
@@ -480,7 +486,7 @@ const Admins = () => {
         phone: form.phone.trim(),
         role: form.admin_type === 'superadmin' ? 'superadmin' : form.role,
         admin_type: form.admin_type,
-        permissions: form.admin_type === 'superadmin' ? ['*'] : form.permissions,
+        permissions: form.admin_type === 'superadmin' ? ['*'] : expandMenuPermissions(form.permissions),
         service_location_ids: form.service_location_ids,
         zone_ids: form.zone_ids,
         active: form.active,
@@ -493,6 +499,7 @@ const Admins = () => {
 
       if (form.password) {
         payload.password = form.password;
+        payload.password_confirmation = form.passwordConfirmation;
       }
 
       await adminService.updateAdminAccount(form.id, payload);
@@ -1433,161 +1440,18 @@ const Admins = () => {
                                 </button>
                               </div>
 
-                              <form onSubmit={handleEditSubmit} className="p-5 space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Full Name</label>
-                                    <input
-                                      required
-                                      value={form.name}
-                                      onChange={(e) => setField('name', e.target.value)}
-                                      placeholder="e.g. Marcus Aurelius"
-                                      className="admin-input"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Email Identity</label>
-                                    <input
-                                      type="email"
-                                      required
-                                      value={form.email}
-                                      onChange={(e) => setField('email', e.target.value)}
-                                      placeholder="e.g. admin@rydon.com"
-                                      className="admin-input"
-                                    />
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Phone Number</label>
-                                    <input
-                                      value={form.phone}
-                                      onChange={(e) => setField('phone', e.target.value)}
-                                      placeholder="e.g. +1 555-0199"
-                                      className="admin-input"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Admin Role</label>
-                                    <select
-                                      value={form.role}
-                                      onChange={(e) => setField('role', e.target.value)}
-                                      className="admin-input"
-                                    >
-                                      <option value="Operations Subadmin">Operations Subadmin</option>
-                                      <option value="Billing Subadmin">Billing Subadmin</option>
-                                      <option value="Support Staff">Support Staff</option>
-                                    </select>
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Admin Type</label>
-                                    <select
-                                      value={form.admin_type}
-                                      onChange={(e) => {
-                                        setField('admin_type', e.target.value);
-                                        if (e.target.value === 'superadmin') {
-                                          setField('role', 'superadmin');
-                                        } else {
-                                          setField('role', 'Operations Subadmin');
-                                        }
-                                      }}
-                                      className="admin-input"
-                                    >
-                                      <option value="subadmin">Sub-Admin (Scoped Rights)</option>
-                                      <option value="superadmin">Super Admin (Unrestricted)</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Status</label>
-                                    <select
-                                      value={form.active ? 'active' : 'inactive'}
-                                      onChange={(e) => setField('active', e.target.value === 'active')}
-                                      className="admin-input"
-                                    >
-                                      <option value="active">Active</option>
-                                      <option value="inactive">Suspended</option>
-                                    </select>
-                                  </div>
-                                </div>
-
-                                {form.admin_type !== 'superadmin' && (
-                                  <div>
-                                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Cryptographic Module Access</label>
-                                    <div className="border border-[#E5E7EB] rounded-lg p-3 max-h-36 overflow-y-auto grid grid-cols-2 gap-2 bg-[#F8FAFC]">
-                                      {ADMIN_PERMISSION_GROUPS.flatMap(g => g.items).map((perm) => (
-                                        <label key={perm.key} className="flex items-center gap-2 text-xs text-[#0B1220] cursor-pointer">
-                                          <input
-                                            type="checkbox"
-                                            checked={form.permissions.includes(perm.key)}
-                                            onChange={() => togglePermission(perm.key)}
-                                            className="rounded border-[#E5E7EB] text-[#FFC400] focus:ring-[#FFC400] h-4 w-4"
-                                          />
-                                          <span>{perm.label}</span>
-                                        </label>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">New Password (Optional)</label>
-                                    <input
-                                      type="password"
-                                      value={form.password}
-                                      onChange={(e) => setField('password', e.target.value)}
-                                      placeholder="Leave blank to retain current"
-                                      className="admin-input"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Confirm New Password</label>
-                                    <input
-                                      type="password"
-                                      value={form.passwordConfirmation}
-                                      onChange={(e) => setField('passwordConfirmation', e.target.value)}
-                                      placeholder="Confirm new password"
-                                      className="admin-input"
-                                    />
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-3">
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`mfa-edit-${id}`}
-                                      checked={form.mfaEnabled}
-                                      onChange={(e) => setField('mfaEnabled', e.target.checked)}
-                                      className="rounded border-[#E5E7EB] text-[#FFC400] focus:ring-[#FFC400] h-4 w-4"
-                                    />
-                                    <label htmlFor={`mfa-edit-${id}`} className="text-xs font-semibold text-[#0B1220] cursor-pointer">Require Multi-Factor Authentication</label>
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Administrative Notes</label>
-                                  <textarea
-                                    value={form.notes}
-                                    onChange={(e) => setField('notes', e.target.value)}
-                                    placeholder="Enter special access notes..."
-                                    className="admin-input min-h-[60px]"
-                                  />
-                                </div>
-
-                                <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E5E7EB]">
-                                  <button type="button" onClick={() => setIsEditOpen(false)} className="admin-btn-secondary h-10">
-                                    Cancel
-                                  </button>
-                                  <button type="submit" disabled={saving} className="admin-btn-primary h-10 min-w-[120px] !bg-[#FFC400] !text-[#0B1220]">
-                                    {saving ? <Loader2 size={16} className="animate-spin" /> : 'Save Changes'}
-                                  </button>
-                                </div>
-                              </form>
+                              <div className="p-5">
+                                <AdminAccountForm
+                                  mode="edit"
+                                  form={form}
+                                  setForm={setForm}
+                                  serviceLocations={serviceLocations}
+                                  zones={zones}
+                                  saving={saving}
+                                  onSubmit={handleEditSubmit}
+                                  onCancel={() => setIsEditOpen(false)}
+                                />
+                              </div>
                             </motion.div>
                           </td>
                         </tr>
@@ -1619,191 +1483,52 @@ const Admins = () => {
 
       </div>
 
-      {/* CREATE MODAL */}
-      <AnimatePresence>
-        {isCreateOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsCreateOpen(false)}
-              className="admin-modal-overlay"
-            />
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="fixed inset-0 m-auto w-full max-w-lg h-fit max-h-[85vh] bg-white rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden"
-            >
-              <div className="p-5 border-b border-[#E5E7EB] flex items-center justify-between">
-                <h3 className="text-xs font-bold text-[#0B1220] uppercase tracking-wider">Initialize Admin Token</h3>
-                <button onClick={() => setIsCreateOpen(false)} className="text-slate-400 hover:text-slate-600">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Full Name</label>
-                    <input
-                      required
-                      value={form.name}
-                      onChange={(e) => setField('name', e.target.value)}
-                      placeholder="e.g. Marcus Aurelius"
-                      className="admin-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Email Identity</label>
-                    <input
-                      type="email"
-                      required
-                      value={form.email}
-                      onChange={(e) => setField('email', e.target.value)}
-                      placeholder="e.g. admin@rydon.com"
-                      className="admin-input"
-                    />
-                  </div>
+      {/* CREATE MODAL
+          Rendered at the page root: inside the animated page wrapper a
+          "fixed" element is placed relative to that wrapper, not the window,
+          which is why this form opened half off the bottom of the screen with
+          its Save button out of reach. */}
+      {createPortal(
+        <AnimatePresence>
+          {isCreateOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.5 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsCreateOpen(false)}
+                className="fixed inset-0 bg-black z-[60]"
+              />
+              <motion.div
+                initial={{ scale: 0.97, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.97, opacity: 0 }}
+                className="fixed inset-0 m-auto w-[calc(100%-32px)] max-w-2xl h-fit max-h-[90vh] bg-white rounded-xl shadow-2xl z-[61] flex flex-col overflow-hidden"
+              >
+                <div className="p-5 border-b border-[#E5E7EB] flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-[#0B1220]">Create admin</h3>
+                  <button onClick={() => setIsCreateOpen(false)} className="text-slate-400 hover:text-slate-600" aria-label="Close">
+                    <X size={18} />
+                  </button>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Phone Number</label>
-                    <input
-                      value={form.phone}
-                      onChange={(e) => setField('phone', e.target.value)}
-                      placeholder="e.g. +1 555-0199"
-                      className="admin-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Admin Role</label>
-                    <select
-                      value={form.role}
-                      onChange={(e) => setField('role', e.target.value)}
-                      className="admin-input"
-                    >
-                      <option value="Operations Subadmin">Operations Subadmin</option>
-                      <option value="Billing Subadmin">Billing Subadmin</option>
-                      <option value="Support Staff">Support Staff</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Admin Type</label>
-                    <select
-                      value={form.admin_type}
-                      onChange={(e) => {
-                        setField('admin_type', e.target.value);
-                        if (e.target.value === 'superadmin') {
-                          setField('role', 'superadmin');
-                        } else {
-                          setField('role', 'Operations Subadmin');
-                        }
-                      }}
-                      className="admin-input"
-                    >
-                      <option value="subadmin">Sub-Admin (Scoped Rights)</option>
-                      <option value="superadmin">Super Admin (Unrestricted)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Status</label>
-                    <select
-                      value={form.active ? 'active' : 'inactive'}
-                      onChange={(e) => setField('active', e.target.value === 'active')}
-                      className="admin-input"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Suspended</option>
-                    </select>
-                  </div>
-                </div>
-
-                {form.admin_type !== 'superadmin' && (
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Cryptographic Module Access</label>
-                    <div className="border border-[#E5E7EB] rounded-lg p-3 max-h-36 overflow-y-auto grid grid-cols-2 gap-2 bg-[#F8FAFC]">
-                      {ADMIN_PERMISSION_GROUPS.flatMap(g => g.items).map((perm) => (
-                        <label key={perm.key} className="flex items-center gap-2 text-xs text-[#0B1220] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={form.permissions.includes(perm.key)}
-                            onChange={() => togglePermission(perm.key)}
-                            className="rounded border-[#E5E7EB] text-[#FFC400] focus:ring-[#FFC400] h-4 w-4"
-                          />
-                          <span>{perm.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={form.password}
-                      onChange={(e) => setField('password', e.target.value)}
-                      placeholder="Minimum 8 characters"
-                      className="admin-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Confirm Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={form.passwordConfirmation}
-                      onChange={(e) => setField('passwordConfirmation', e.target.value)}
-                      placeholder="Re-type password"
-                      className="admin-input"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="mfa"
-                      checked={form.mfaEnabled}
-                      onChange={(e) => setField('mfaEnabled', e.target.checked)}
-                      className="rounded border-[#E5E7EB] text-[#FFC400] focus:ring-[#FFC400] h-4 w-4"
-                    />
-                    <label htmlFor="mfa" className="text-xs font-semibold text-[#0B1220] cursor-pointer">Require Multi-Factor Authentication</label>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-semibold text-[#64748B] uppercase mb-1">Administrative Notes</label>
-                  <textarea
-                    value={form.notes}
-                    onChange={(e) => setField('notes', e.target.value)}
-                    placeholder="Enter special access notes..."
-                    className="admin-input min-h-[60px]"
+                <div className="flex-1 overflow-y-auto p-5">
+                  <AdminAccountForm
+                    mode="create"
+                    form={form}
+                    setForm={setForm}
+                    serviceLocations={serviceLocations}
+                    zones={zones}
+                    saving={saving}
+                    onSubmit={handleCreateSubmit}
+                    onCancel={() => setIsCreateOpen(false)}
                   />
                 </div>
-
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E5E7EB]">
-                  <button type="button" onClick={() => setIsCreateOpen(false)} className="admin-btn-secondary h-10">
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={saving} className="admin-btn-primary h-10 min-w-[120px] !bg-[#FFC400] !text-[#0B1220]">
-                    {saving ? <Loader2 size={16} className="animate-spin" /> : 'Save Node'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
 
       {/* DELETE CONFIRMATION MODAL */}
       <AnimatePresence>
