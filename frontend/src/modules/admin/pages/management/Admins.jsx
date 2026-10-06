@@ -1489,6 +1489,9 @@ const Admins = () => {
           which is why this form opened half off the bottom of the screen with
           its Save button out of reach. */}
       {createPortal(
+        // The admin theme is scoped to .redigo-admin-root; outside it the
+        // inputs lose their borders and look like plain text.
+        <div className="redigo-admin-root">
         <AnimatePresence>
           {isCreateOpen && (
             <>
@@ -1526,7 +1529,8 @@ const Admins = () => {
               </motion.div>
             </>
           )}
-        </AnimatePresence>,
+        </AnimatePresence>
+        </div>,
         document.body,
       )}
 
