@@ -18,6 +18,7 @@ import { Airport } from '../models/Airport.js';
 import { Employee } from '../models/Employee.js';
 import { BusService } from '../models/BusService.js';
 import { DriverNeededDocument } from '../models/DriverNeededDocument.js';
+import { AdminActivity } from '../models/AdminActivity.js';
 import { GoodsType } from '../models/GoodsType.js';
 import { OwnerNeededDocument } from '../models/OwnerNeededDocument.js';
 import { OwnerBooking } from '../models/OwnerBooking.js';
@@ -3407,10 +3408,29 @@ export const getAdminModuleInfo = async () => {
   };
 };
 
-export const loginAdmin = async ({ email, password }) => {
-  const admin = await Admin.findOne({ email: email?.trim().toLowerCase() }).select('+password');
+/**
+ * Notes something an admin did, for the Admin Management page.
+ *
+ * Never allowed to break what it records: a failed write is logged and
+ * dropped, so signing in or saving an admin works even if this does not.
+ */
+const recordAdminActivity = (entry) => {
+  AdminActivity.create(entry).catch((error) => {
+    console.error('[admin-activity] not recorded', entry?.type, error?.message);
+  });
+};
+
+const actorOf = (admin) => ({
+  actorId: admin?._id || admin?.id || null,
+  actorName: String(admin?.name || admin?.email || ''),
+});
+
+export const loginAdmin = async ({ email, password, ip = '' }) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const admin = await Admin.findOne({ email: normalizedEmail }).select('+password');
 
   if (!admin) {
+    recordAdminActivity({ type: 'login_failed', email: normalizedEmail, ip });
     throw new ApiError(401, 'Invalid admin credentials');
   }
 
@@ -3419,12 +3439,16 @@ export const loginAdmin = async ({ email, password }) => {
     : admin.password === password;
 
   if (!passwordMatches) {
+    recordAdminActivity({ type: 'login_failed', ...actorOf(admin), email: normalizedEmail, ip });
     throw new ApiError(401, 'Invalid admin credentials');
   }
 
   if (admin.active === false || String(admin.status || '').toLowerCase() === 'inactive') {
+    recordAdminActivity({ type: 'login_failed', ...actorOf(admin), email: normalizedEmail, ip });
     throw new ApiError(403, 'Admin account is inactive');
   }
+
+  recordAdminActivity({ type: 'login_success', ...actorOf(admin), email: normalizedEmail, ip });
 
   const [serializedAdmin] = await enrichAdminSummaries([admin]);
 
@@ -3544,6 +3568,14 @@ export const createAdminAccount = async (currentAdmin, payload = {}) => {
     password: await hashPassword(password),
   });
 
+  recordAdminActivity({
+    type: 'admin_created',
+    ...actorOf(currentAdmin),
+    targetId: created._id,
+    targetName: created.name,
+    email: created.email,
+  });
+
   const [serializedAdmin] = await enrichAdminSummaries([created]);
   return serializedAdmin;
 };
@@ -3561,6 +3593,16 @@ export const updateAdminAccount = async (currentAdmin, id, payload = {}) => {
   }
 
   const validated = await validateSubadminPayload(payload, admin._id);
+
+  const before = {
+    permissions: [...(admin.permissions || [])].map(String).sort().join(','),
+    active: admin.active !== false,
+  };
+  const after = {
+    permissions: [...(validated.permissions || [])].map(String).sort().join(','),
+    active: validated.active !== false,
+  };
+
   Object.assign(admin, validated);
 
   if (payload.password) {
@@ -3576,6 +3618,18 @@ export const updateAdminAccount = async (currentAdmin, id, payload = {}) => {
   }
 
   await admin.save();
+
+  const target = { targetId: admin._id, targetName: admin.name, email: admin.email };
+  if (before.active !== after.active) {
+    recordAdminActivity({ type: after.active ? 'admin_reactivated' : 'admin_suspended', ...actorOf(currentAdmin), ...target });
+  }
+  if (before.permissions !== after.permissions) {
+    recordAdminActivity({ type: 'permissions_changed', ...actorOf(currentAdmin), ...target });
+  }
+  if (before.active === after.active && before.permissions === after.permissions) {
+    recordAdminActivity({ type: 'admin_updated', ...actorOf(currentAdmin), ...target });
+  }
+
   const [serializedAdmin] = await enrichAdminSummaries([admin]);
   return serializedAdmin;
 };
@@ -3593,7 +3647,84 @@ export const deleteAdminAccount = async (currentAdmin, id) => {
   }
 
   await Admin.deleteOne({ _id: admin._id });
+  recordAdminActivity({
+    type: 'admin_deleted',
+    ...actorOf(currentAdmin),
+    targetId: admin._id,
+    targetName: admin.name,
+    email: admin.email,
+  });
   return { deleted: true };
+};
+
+/**
+ * The numbers on the Admin Management page, counted from what was recorded.
+ *
+ * Compared against the 30 days before, so the cards can say whether a number
+ * went up or down - the page used to print trends like "+2 from last month"
+ * as fixed text.
+ */
+export const getAdminActivitySummary = async (currentAdmin) => {
+  assertAdminPermission(currentAdmin, 'subadmins.manage', 'subadmins');
+
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const last30 = new Date(now - 30 * day);
+  const prev30 = new Date(now - 60 * day);
+
+  const countByType = async (from, to) => {
+    const rows = await AdminActivity.aggregate([
+      { $match: { createdAt: { $gte: from, $lt: to } } },
+      { $group: { _id: '$type', count: { $sum: 1 } } },
+    ]);
+    return Object.fromEntries(rows.map((row) => [row._id, row.count]));
+  };
+
+  const [current, previous, signedInToday, failedLast7d, recent, lastSignIns, firstRecord] = await Promise.all([
+    countByType(last30, new Date(now + 1)),
+    countByType(prev30, last30),
+    AdminActivity.distinct('actorId', { type: 'login_success', createdAt: { $gte: new Date(now - day) } }),
+    AdminActivity.countDocuments({ type: 'login_failed', createdAt: { $gte: new Date(now - 7 * day) } }),
+    AdminActivity.find().sort({ createdAt: -1 }).limit(8).lean(),
+    AdminActivity.aggregate([
+      { $match: { type: 'login_success', actorId: { $ne: null } } },
+      { $group: { _id: '$actorId', at: { $max: '$createdAt' } } },
+    ]),
+    AdminActivity.findOne().sort({ createdAt: 1 }).select('createdAt').lean(),
+  ]);
+
+  const summarize = (counts) => {
+    const success = counts.login_success || 0;
+    const failed = counts.login_failed || 0;
+    return {
+      loginSuccess: success,
+      loginFailed: failed,
+      loginSuccessRate: success + failed > 0 ? Math.round((success / (success + failed)) * 1000) / 10 : null,
+      passwordResets: counts.password_reset || 0,
+      permissionChanges: counts.permissions_changed || 0,
+      created: counts.admin_created || 0,
+      suspended: counts.admin_suspended || 0,
+    };
+  };
+
+  return {
+    last30Days: summarize(current),
+    previous30Days: summarize(previous),
+    signedInLast24h: signedInToday.filter(Boolean).length,
+    failedLoginsLast7d: failedLast7d,
+    // When the record starts, so the page can say "since ..." instead of
+    // implying it knows about sign-ins from before it existed.
+    trackingSince: firstRecord?.createdAt || null,
+    lastSignInByAdmin: Object.fromEntries(lastSignIns.map((row) => [String(row._id), row.at])),
+    recent: recent.map((row) => ({
+      id: String(row._id),
+      type: row.type,
+      actorName: row.actorName || '',
+      targetName: row.targetName || '',
+      email: row.email || '',
+      at: row.createdAt,
+    })),
+  };
 };
 
 export const forgotPassword = async (email) => {
@@ -3660,6 +3791,8 @@ export const resetPassword = async ({ email, otp, password }) => {
   admin.resetPasswordOtp = undefined;
   admin.resetPasswordExpires = undefined;
   await admin.save();
+
+  recordAdminActivity({ type: 'password_reset', ...actorOf(admin), email: admin.email });
 
   return { success: true, message: 'Password reset successful' };
 };

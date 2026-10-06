@@ -42,14 +42,20 @@ import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminService } from '../../services/adminService';
 import { createPortal } from 'react-dom';
-import { expandMenuPermissions, menuKeysForAdmin } from '../../constants/adminAccess';
+import { buildMenuPermissionTree, expandMenuPermissions, menuKeysForAdmin } from '../../constants/adminAccess';
 import AdminAccountForm from './AdminAccountForm';
+
+const BAR_COLORS = ['bg-[#FFC400]', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-pink-500', 'bg-slate-400'];
 
 const Admins = () => {
   const navigate = useNavigate();
   
   // Data State
   const [admins, setAdmins] = useState([]);
+  // Counted on the server from recorded sign-ins and admin changes. Null
+  // until it loads, or if the request fails - the page then says so rather
+  // than showing invented figures.
+  const [activity, setActivity] = useState(null);
   const [serviceLocations, setServiceLocations] = useState([]);
   const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -114,11 +120,14 @@ const Admins = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [adminsResponse, locationsResponse, zonesResponse] = await Promise.all([
+      const [adminsResponse, locationsResponse, zonesResponse, activityResponse] = await Promise.all([
         adminService.getAdmins(),
         adminService.getServiceLocations().catch(() => ({ data: [] })),
-        adminService.getZones().catch(() => ({ data: { results: [] } }))
+        adminService.getZones().catch(() => ({ data: { results: [] } })),
+        adminService.getAdminActivitySummary().catch(() => null),
       ]);
+
+      setActivity(activityResponse?.data?.data || activityResponse?.data || null);
 
       setAdmins(Array.isArray(adminsResponse?.data?.results) ? adminsResponse.data.results : []);
       
@@ -266,6 +275,96 @@ const Admins = () => {
     };
   }, [admins]);
 
+  // Real figures for the cards and panels, from the activity summary.
+  const recorded = useMemo(() => {
+    const cur = activity?.last30Days || {};
+    const prev = activity?.previous30Days || {};
+    const versus = (now, before) => {
+      if (!activity) return 'Not available';
+      const diff = (now || 0) - (before || 0);
+      if (diff === 0) return 'Same as previous 30 days';
+      return `${diff > 0 ? '↑' : '↓'} ${Math.abs(diff)} vs previous 30 days`;
+    };
+    const signIns = (cur.loginSuccess || 0) + (cur.loginFailed || 0);
+    const lastSignIn = activity?.lastSignInByAdmin || {};
+    const neverSignedIn = admins.filter((a) => !lastSignIn[String(a.id || a._id)]).length;
+
+    return {
+      available: Boolean(activity),
+      rate: cur.loginSuccessRate,
+      rateLabel: cur.loginSuccessRate === null || cur.loginSuccessRate === undefined ? '—' : `${cur.loginSuccessRate}%`,
+      signInsText: signIns > 0 ? `${cur.loginSuccess} of ${signIns} sign-ins, 30 days` : 'No sign-ins recorded yet',
+      signedInToday: activity?.signedInLast24h ?? 0,
+      created30: cur.created || 0,
+      resets30: cur.passwordResets || 0,
+      resetsTrend: versus(cur.passwordResets, prev.passwordResets),
+      permissionChanges30: cur.permissionChanges || 0,
+      permissionTrend: versus(cur.permissionChanges, prev.permissionChanges),
+      suspended30: cur.suspended || 0,
+      failed7d: activity?.failedLoginsLast7d ?? 0,
+      neverSignedIn,
+      trackingSince: activity?.trackingSince ? new Date(activity.trackingSince) : null,
+      recent: activity?.recent || [],
+      lastSignIn,
+    };
+  }, [activity, admins]);
+
+  // Roles as they are actually set on the accounts. This panel used to list
+  // six made-up departments with made-up head counts.
+  const roleCounts = useMemo(() => {
+    const counts = {};
+    admins.forEach((admin) => {
+      const role = admin.admin_type === 'superadmin' ? 'Super Admin' : String(admin.role || 'Sub-admin').trim() || 'Sub-admin';
+      counts[role] = (counts[role] || 0) + 1;
+    });
+    const max = Math.max(1, ...Object.values(counts));
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, count], i) => ({ label, count, percent: Math.round((count / max) * 100), color: BAR_COLORS[i % BAR_COLORS.length] }));
+  }, [admins]);
+
+  // How many sub-admins can open each sidebar menu - previously fixed
+  // percentages. Super admins are left out: they can open everything.
+  const moduleAccess = useMemo(() => {
+    const subs = admins.filter((a) => a.admin_type !== 'superadmin');
+    if (subs.length === 0) return [];
+    const keysByAdmin = subs.map((a) => new Set(menuKeysForAdmin(a.permissions || [])));
+    return buildMenuPermissionTree()
+      .flatMap((section) => section.groups)
+      .map((group) => {
+        const withAccess = keysByAdmin.filter((keys) => group.leaves.some((leaf) => keys.has(leaf.key))).length;
+        return { label: group.label, percent: Math.round((withAccess / subs.length) * 100), count: withAccess };
+      })
+      .filter((row) => row.count > 0)
+      .sort((a, b) => b.percent - a.percent)
+      .slice(0, 6)
+      .map((row, i) => ({ ...row, color: BAR_COLORS[i % BAR_COLORS.length] }));
+  }, [admins]);
+
+  const describeActivity = (row) => {
+    const who = row.actorName || row.email || 'Someone';
+    const whom = row.targetName || row.email || 'an admin';
+    switch (row.type) {
+      case 'login_success': return { title: who, desc: 'Signed in' };
+      case 'login_failed': return { title: row.email || who, desc: 'Failed sign-in attempt' };
+      case 'password_reset': return { title: who, desc: 'Reset their password' };
+      case 'admin_created': return { title: who, desc: `Created admin ${whom}` };
+      case 'permissions_changed': return { title: who, desc: `Changed menu access for ${whom}` };
+      case 'admin_suspended': return { title: who, desc: `Suspended ${whom}` };
+      case 'admin_reactivated': return { title: who, desc: `Reactivated ${whom}` };
+      case 'admin_deleted': return { title: who, desc: `Deleted admin ${whom}` };
+      default: return { title: who, desc: `Updated ${whom}` };
+    }
+  };
+
+  const timeAgo = (at) => {
+    const seconds = Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 1000));
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`;
+    return new Date(at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  };
+
   // Role distribution calculation for donut chart
   const roleDistribution = useMemo(() => {
     if (admins.length === 0) return [];
@@ -350,14 +449,6 @@ const Admins = () => {
     });
   }, [admins, growthFilter]);
 
-  // Security score
-  const securityScore = useMemo(() => {
-    if (stats.total === 0) return 0;
-    const mfaRatio = stats.mfaEnabled / stats.total;
-    const activeRatio = stats.active / stats.total;
-    let score = 55 + (mfaRatio * 25) + (activeRatio * 20);
-    return Math.max(0, Math.min(100, Math.round(score)));
-  }, [stats]);
 
 
   // Checkbox handlers
@@ -655,12 +746,12 @@ const Admins = () => {
         {/* KPI CARDS ROW */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           {[
-            { label: "Total Admins", value: stats.total, icon: Users, cardBg: "!bg-violet-500", trend: "+2 from last month", isTrendPositive: true },
-            { label: "Login Success Rate", value: "98.6%", icon: CheckCircle, cardBg: "!bg-emerald-500", trend: "↑ 1.3% from last month", isTrendPositive: true },
-            { label: "Active Sessions", value: stats.active, icon: Laptop, cardBg: "!bg-blue-500", trend: "↑ 2 active now", isTrendPositive: true },
-            { label: "Password Resets", value: "4", icon: KeyRound, cardBg: "!bg-fuchsia-500", trend: "— 0% from last month", isTrendPositive: false },
-            { label: "Permission Changes", value: "12", icon: Info, cardBg: "!bg-orange-500", trend: "↑ 33% from last month", isTrendPositive: true },
-            { label: "Suspended Today", value: stats.suspended, icon: UserMinus, cardBg: "!bg-rose-500", trend: "↑ 1 from last month", isTrendPositive: false }
+            { label: "Total Admins", value: stats.total, icon: Users, cardBg: "!bg-violet-500", trend: `${recorded.created30} added in last 30 days`, isTrendPositive: true },
+            { label: "Login Success Rate", value: recorded.rateLabel, icon: CheckCircle, cardBg: "!bg-emerald-500", trend: recorded.signInsText, isTrendPositive: true },
+            { label: "Signed In Today", value: recorded.signedInToday, icon: Laptop, cardBg: "!bg-blue-500", trend: `${stats.active} active accounts`, isTrendPositive: true },
+            { label: "Password Resets", value: recorded.resets30, icon: KeyRound, cardBg: "!bg-fuchsia-500", trend: recorded.resetsTrend, isTrendPositive: false },
+            { label: "Permission Changes", value: recorded.permissionChanges30, icon: Info, cardBg: "!bg-orange-500", trend: recorded.permissionTrend, isTrendPositive: true },
+            { label: "Suspended", value: stats.suspended, icon: UserMinus, cardBg: "!bg-rose-500", trend: `${recorded.suspended30} suspended in last 30 days`, isTrendPositive: false }
           ].map((insight, idx) => (
             <motion.div
               key={idx}
@@ -853,7 +944,9 @@ const Admins = () => {
                 <h3 className="text-xs text-[#0B1220] uppercase tracking-wider font-bold">Security Health</h3>
                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               </div>
-              <p className="text-[11px] text-[#64748B] mb-3">Real-time authentication scoring.</p>
+              <p className="text-[11px] text-[#64748B] mb-3">
+                Sign-in success, last 30 days{recorded.trackingSince ? ` (recorded since ${recorded.trackingSince.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})` : ''}.
+              </p>
             </div>
 
             {/* Gauge */}
@@ -862,43 +955,36 @@ const Admins = () => {
                 <circle cx="40" cy="40" r="33" stroke="#E5E7EB" strokeWidth="5" fill="transparent" />
                 <circle cx="40" cy="40" r="33" stroke="#22C55E" strokeWidth="5" fill="transparent"
                   strokeDasharray={207.2}
-                  strokeDashoffset={207.2 - (207.2 * securityScore) / 100}
+                  strokeDashoffset={207.2 - (207.2 * (recorded.rate ?? 0)) / 100}
                 />
               </svg>
               <div className="absolute text-center">
-                <span className="text-sm font-bold text-[#0B1220] block leading-none">{securityScore}%</span>
-                <span className="text-[8px] text-emerald-600 font-bold block mt-0.5">Good</span>
+                <span className="text-sm font-bold text-[#0B1220] block leading-none">{recorded.rateLabel}</span>
+                <span className="text-[8px] text-slate-500 font-bold block mt-0.5">Sign-ins</span>
               </div>
             </div>
 
             {/* Metrics List */}
             <div className="space-y-1.5 text-[10px] text-slate-600 pt-2.5 border-t border-[#E5E7EB] mt-2">
               <div className="flex justify-between">
-                <span className="flex items-center gap-1"><Lock size={10} className="text-[#64748B]" /> MFA Enabled</span>
-                <span className="font-semibold text-[#0B1220]">{stats.mfaEnabled} / {stats.total}</span>
+                <span className="flex items-center gap-1"><Lock size={10} className="text-[#64748B]" /> Super admins</span>
+                <span className="font-semibold text-[#0B1220]">{stats.superadmins} / {stats.total}</span>
               </div>
               <div className="flex justify-between">
-                <span className="flex items-center gap-1"><AlertTriangle size={10} className="text-[#64748B]" /> Locked Accounts</span>
-                <span className="font-semibold text-[#0B1220]">{stats.locked}</span>
+                <span className="flex items-center gap-1"><AlertTriangle size={10} className="text-[#64748B]" /> Suspended accounts</span>
+                <span className="font-semibold text-[#0B1220]">{stats.suspended}</span>
               </div>
               <div className="flex justify-between">
-                <span className="flex items-center gap-1"><ShieldCheck size={10} className="text-[#64748B]" /> Failed Logins</span>
-                <span className="font-semibold text-[#0B1220]">2</span>
+                <span className="flex items-center gap-1"><ShieldCheck size={10} className="text-[#64748B]" /> Failed sign-ins (7 days)</span>
+                <span className="font-semibold text-[#0B1220]">{recorded.failed7d}</span>
               </div>
               <div className="flex justify-between">
-                <span className="flex items-center gap-1"><Clock size={10} className="text-[#64748B]" /> Password Expiring</span>
-                <span className="font-semibold text-[#0B1220]">1</span>
+                <span className="flex items-center gap-1"><Clock size={10} className="text-[#64748B]" /> No sign-in recorded</span>
+                <span className="font-semibold text-[#0B1220]">{recorded.neverSignedIn}</span>
               </div>
             </div>
 
-            <button
-              onClick={() => toast.success('Security reports are up to date.')}
-              className="admin-btn-secondary w-full text-[10px] h-8 justify-center gap-1.5 mt-3"
-            >
-              <FileText size={12} />
-              <span>View Full Security Report</span>
-              <ChevronRight size={10} />
-            </button>
+            {/* A "security report" button used to sit here; it only showed a toast. */}
           </div>
         </motion.div>
 
@@ -914,16 +1000,14 @@ const Admins = () => {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs text-[#0B1220] uppercase tracking-wider font-bold">Recent Activity</h3>
-                <span className="text-[9px] text-[#64748B] hover:underline cursor-pointer">View All</span>
               </div>
               <div className="space-y-3.5 max-h-[160px] overflow-y-auto pr-1">
-                {[
-                  { title: "Rydon Superadmin", desc: "Super Admin logged in", time: "Just now", type: "login" },
-                  { title: "Finance Admin", desc: "Updated pricing permissions", time: "12 mins ago", type: "role" },
-                  { title: "Support Admin", desc: "Created new admin account", time: "28 mins ago", type: "create" },
-                  { title: "Operations Admin", desc: "Reset password for admin@test.com", time: "45 mins ago", type: "reset" },
-                  { title: "Security Admin", desc: "Enabled MFA for 3 admins", time: "1 hour ago", type: "mfa" }
-                ].map((act, idx) => (
+                {recorded.recent.length === 0 && (
+                  <p className="text-[11px] text-slate-400">
+                    {recorded.available ? 'Nothing recorded yet. Sign-ins and admin changes will appear here.' : 'Activity is not available right now.'}
+                  </p>
+                )}
+                {recorded.recent.map((row) => ({ ...describeActivity(row), time: timeAgo(row.at) })).map((act, idx) => (
                   <div key={idx} className="flex items-start gap-2.5 text-[11px] border-l border-[#E5E7EB] pl-3 relative ml-1.5">
                     <div className="absolute -left-[3.5px] top-1 w-1.5 h-1.5 rounded-full bg-[#FFC400]" />
                     <div className="flex-1">
@@ -942,12 +1026,12 @@ const Admins = () => {
               <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-3 font-bold">Quick Insights</h3>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: "New Admins", value: "2", desc: "This week" },
-                  { label: "Total Admins", value: stats.total, desc: "Nodes" },
-                  { label: "Active Sessions", value: stats.active, desc: "Now" },
-                  { label: "Login Success", value: "98.6%", desc: "Rate" },
-                  { label: "Password Resets", value: "4", desc: "Completed" },
-                  { label: "Permission Changes", value: "12", desc: "Logs" }
+                  { label: "New Admins", value: recorded.created30, desc: "Last 30 days" },
+                  { label: "Total Admins", value: stats.total, desc: "Accounts" },
+                  { label: "Signed In", value: recorded.signedInToday, desc: "Last 24 hours" },
+                  { label: "Login Success", value: recorded.rateLabel, desc: "Last 30 days" },
+                  { label: "Password Resets", value: recorded.resets30, desc: "Last 30 days" },
+                  { label: "Permission Changes", value: recorded.permissionChanges30, desc: "Last 30 days" }
                 ].map((qi, i) => (
                   <div key={i} className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-center">
                     <span className="text-[8px] text-[#64748B] block truncate">{qi.label}</span>
@@ -962,16 +1046,10 @@ const Admins = () => {
           {/* Top Departments */}
           <div className="admin-card flex flex-col justify-between hover:shadow-md transition-shadow">
             <div>
-              <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-3 font-bold">Top Departments</h3>
+              <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-3 font-bold">Admins by Role</h3>
               <div className="space-y-3">
-                {[
-                  { label: "Operations", count: 5, color: "bg-[#FFC400]", percent: 80 },
-                  { label: "Finance", count: 3, color: "bg-blue-500", percent: 55 },
-                  { label: "Support", count: 2, color: "bg-emerald-500", percent: 35 },
-                  { label: "Engineering", count: 2, color: "bg-purple-500", percent: 35 },
-                  { label: "HR", count: 1, color: "bg-pink-500", percent: 15 },
-                  { label: "Marketing", count: 1, color: "bg-slate-400", percent: 15 }
-                ].map((dept, i) => (
+                {roleCounts.length === 0 && <p className="text-[11px] text-slate-400">No admins yet.</p>}
+                {roleCounts.map((dept, i) => (
                   <div key={i} className="text-[10px]">
                     <div className="flex justify-between mb-1 text-slate-600">
                       <span>{dept.label}</span>
@@ -991,13 +1069,8 @@ const Admins = () => {
             <div>
               <h3 className="text-xs text-[#0B1220] uppercase tracking-wider mb-3 font-bold">Access by Module</h3>
               <div className="space-y-3">
-                {[
-                  { label: "Dashboard", percent: 100, color: "bg-indigo-500" },
-                  { label: "Users", percent: 92, color: "bg-blue-500" },
-                  { label: "Bookings", percent: 85, color: "bg-emerald-500" },
-                  { label: "Finance", percent: 70, color: "bg-purple-500" },
-                  { label: "Drivers", percent: 63, color: "bg-pink-500" }
-                ].map((mod, i) => (
+                {moduleAccess.length === 0 && <p className="text-[11px] text-slate-400">No sub-admins yet.</p>}
+                {moduleAccess.map((mod, i) => (
                   <div key={i} className="text-[10px]">
                     <div className="flex justify-between mb-1 text-slate-600">
                       <span>{mod.label}</span>
@@ -1252,7 +1325,7 @@ const Admins = () => {
                         {/* Permissions */}
                         <td>
                           <span className="text-xs text-[#64748B] font-medium">
-                            {isSuper ? '18 Modules' : `${(admin.permissions || []).length} Modules`}
+                            {isSuper ? 'All menus' : `${menuKeysForAdmin(admin.permissions || []).length} menus`}
                           </span>
                         </td>
 

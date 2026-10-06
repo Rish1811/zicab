@@ -357,7 +357,7 @@ export const getAdminStatus = asyncHandler(async (_req, res) =>
   ok(res, await adminService.getAdminModuleInfo()),
 );
 export const loginAdmin = asyncHandler(async (req, res) =>
-  ok(res, await adminService.loginAdmin(req.body)),
+  ok(res, await adminService.loginAdmin({ ...req.body, ip: req.ip || '' })),
 );
 export const forgotPassword = asyncHandler(async (req, res) =>
   ok(res, await adminService.forgotPassword(req.body.email)),
@@ -379,6 +379,9 @@ export const createAdminAccount = asyncHandler(async (req, res) =>
 );
 export const updateAdminAccount = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateAdminAccount(req.auth?.admin, req.params.id, req.body)),
+);
+export const getAdminActivitySummary = asyncHandler(async (req, res) =>
+  ok(res, await adminService.getAdminActivitySummary(req.auth?.admin)),
 );
 export const deleteAdminAccount = asyncHandler(async (req, res) => {
   await adminService.deleteAdminAccount(req.auth?.admin, req.params.id);

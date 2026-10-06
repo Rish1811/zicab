@@ -13,6 +13,7 @@ import {
   approveServiceStoreSignup,
   createAirport,
   createAdminAccount,
+  getAdminActivitySummary,
   createAdminBusBooking,
   createBusService,
   createAppModule,
@@ -281,6 +282,7 @@ adminRouter.use('/admin', authenticate(['admin']));
 
 adminRouter.get('/admin/permissions', getAdminPermissions);
 adminRouter.get('/admin/admin-management/admins', getAdmins);
+adminRouter.get('/admin/admin-management/activity-summary', getAdminActivitySummary);
 adminRouter.post('/admin/admin-management/admins', createAdminAccount);
 adminRouter.patch('/admin/admin-management/admins/:id', updateAdminAccount);
 adminRouter.delete('/admin/admin-management/admins/:id', deleteAdminAccount);
