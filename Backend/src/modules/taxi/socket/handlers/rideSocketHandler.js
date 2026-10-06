@@ -349,7 +349,7 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
 
   socket.on(
     SOCKET_EVENTS.RIDE_MESSAGE_SEND,
-    onAsync(socket, async ({ rideId, message }) => {
+    onAsync(socket, async ({ rideId, message, imageUrl }) => {
       await authorizeRideRoomAccess({ socket, rideId });
 
       const savedMessage = await appendRideMessage({
@@ -357,6 +357,7 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
         role: socket.auth.role,
         senderId: socket.auth.sub,
         message,
+        imageUrl,
       });
 
       io.to(getRideRoom(rideId)).emit(SOCKET_EVENTS.RIDE_MESSAGE_NEW, savedMessage);

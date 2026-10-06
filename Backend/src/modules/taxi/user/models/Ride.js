@@ -14,9 +14,16 @@ const rideMessageSchema = new mongoose.Schema(
     },
     message: {
       type: String,
-      required: true,
+      default: '',
       trim: true,
       maxlength: 1000,
+    },
+    // Optional attachment (e.g. rider's current-location photo). A message may
+    // carry text, an image, or both.
+    imageUrl: {
+      type: String,
+      default: '',
+      trim: true,
     },
     sentAt: {
       type: Date,

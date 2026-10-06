@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { randomBytes } from 'node:crypto';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { uploadDataUrl } from '../../../../utils/fileUpload.js';
 import { env } from '../../../../config/env.js';
 import { createDefaultAdminState } from '../data/defaultAdminState.js';
 import { Admin } from '../models/Admin.js';
@@ -5399,6 +5400,26 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
     }
     update['bankDetails.upiVerificationStatus'] = upiStatus;
     update['bankDetails.upiVerifiedAt'] = upiStatus === 'verified' ? new Date() : null;
+  }
+
+  // Admin can also EDIT the driver's payment UPI id and/or QR scanner image.
+  // Dot-paths keep account number / IFSC untouched. A data-URL QR is uploaded
+  // to /uploads; an http URL (or empty string to clear) is stored as-is.
+  if (payload.paymentUpiId !== undefined) {
+    update['bankDetails.upiId'] = String(payload.paymentUpiId || '').trim();
+  }
+  if (payload.paymentQrImage !== undefined) {
+    const qr = String(payload.paymentQrImage || '').trim();
+    if (qr.startsWith('data:')) {
+      const uploaded = await uploadDataUrl({
+        dataUrl: qr,
+        folder: 'driver-upi-qr',
+        publicIdPrefix: `driver-upi-${id}`,
+      });
+      update['bankDetails.qrCodeImage'] = uploaded.secureUrl;
+    } else {
+      update['bankDetails.qrCodeImage'] = qr;
+    }
   }
 
   if (payload.onboarding !== undefined) {

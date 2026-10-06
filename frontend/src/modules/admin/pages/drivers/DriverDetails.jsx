@@ -457,6 +457,9 @@ const DriverDetails = () => {
   const [activeTab, setActiveTab] = useState('Driver Profile');
   const [profile, setProfile] = useState(null);
   const [upiActionBusy, setUpiActionBusy] = useState(false);
+  const [upiEditing, setUpiEditing] = useState(false);
+  const [upiIdDraft, setUpiIdDraft] = useState('');
+  const [qrDraft, setQrDraft] = useState(''); // data URL of a newly picked QR
   const [walletForm, setWalletForm] = useState({ amount: '', operation: 'set', description: '', isSubmitting: false });
   const [walletHistory, setWalletHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1187,6 +1190,41 @@ const DriverDetails = () => {
                     setUpiActionBusy(false);
                   }
                 };
+                const onQrFile = (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => setQrDraft(String(reader.result || ''));
+                  reader.readAsDataURL(file);
+                };
+                const saveUpiEdit = async () => {
+                  try {
+                    setUpiActionBusy(true);
+                    const token = localStorage.getItem('adminToken');
+                    const body = { paymentUpiId: upiIdDraft.trim() };
+                    if (qrDraft) body.paymentQrImage = qrDraft;
+                    const response = await fetch(
+                      `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/drivers/${id}`,
+                      {
+                        method: 'PATCH',
+                        headers: {
+                          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(body),
+                      },
+                    );
+                    const data = await response.json();
+                    if (!response.ok || !data?.success) throw new Error(data?.message || 'Unable to save');
+                    setUpiEditing(false);
+                    setQrDraft('');
+                    await fetchProfile();
+                  } catch (err) {
+                    window.alert(err?.message || 'Unable to save');
+                  } finally {
+                    setUpiActionBusy(false);
+                  }
+                };
                 const badge =
                   status === 'verified'
                     ? 'bg-green-100 text-green-700'
@@ -1202,9 +1240,62 @@ const DriverDetails = () => {
                           Shown to riders at ride-end for direct payment. Verify before it goes live.
                         </p>
                       </div>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${badge}`}>{status}</span>
+                      <div className="flex items-center gap-3">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${badge}`}>{status}</span>
+                        {!upiEditing && (
+                          <button
+                            type="button"
+                            onClick={() => { setUpiEditing(true); setUpiIdDraft(pay.upiId || ''); setQrDraft(''); }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          >
+                            <PencilLine size={13} /> Edit
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {hasUpi ? (
+                    {upiEditing ? (
+                      <div className="mt-5 space-y-4">
+                        <div>
+                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">UPI ID</label>
+                          <input
+                            type="text"
+                            value={upiIdDraft}
+                            onChange={(e) => setUpiIdDraft(e.target.value)}
+                            placeholder="name@bank"
+                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">QR scanner image</label>
+                          <input type="file" accept="image/*" onChange={onQrFile} className="mt-1 block text-sm" />
+                          {(qrDraft || pay.qrCodeImage) ? (
+                            <img
+                              src={qrDraft || resolveUrl(pay.qrCodeImage)}
+                              alt="QR preview"
+                              className="mt-3 h-36 w-36 rounded-lg border border-gray-200 object-contain bg-white"
+                            />
+                          ) : null}
+                        </div>
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            disabled={upiActionBusy}
+                            onClick={saveUpiEdit}
+                            className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            disabled={upiActionBusy}
+                            onClick={() => { setUpiEditing(false); setQrDraft(''); }}
+                            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : hasUpi ? (
                       <div className="mt-5 flex flex-col gap-5 md:flex-row md:items-start">
                         <div className="flex-1 space-y-2">
                           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">UPI ID</p>

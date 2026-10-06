@@ -1152,10 +1152,12 @@ export const createRideRecord = async ({
   const requestedBookingMode = String(bookingMode || '').trim().toLowerCase();
   const normalizedServiceType = normalizeServiceType(serviceType);
   const bidRideSettings = await getBidRideSettings();
-  const fareIncreaseWaitMinutes = toPositiveNumber(
-    bidRideSettings.user_fare_increase_wait_minutes,
-    2,
-  );
+  // Bidding wait window: 0 = instant (no cool-off between rider fare raises).
+  // toPositiveNumber would reject a configured 0 and fall back, so read it as a
+  // non-negative number and default to 0 (instant).
+  const rawFareIncreaseWait = Number(bidRideSettings.user_fare_increase_wait_minutes);
+  const fareIncreaseWaitMinutes =
+    Number.isFinite(rawFareIncreaseWait) && rawFareIncreaseWait >= 0 ? rawFareIncreaseWait : 0;
   // Whether this booking may be negotiated is the admin's call, not the app's.
   // The policy weighs the master switch, the services bidding is switched on
   // for, whether this vehicle is marked biddable, and the distance cap - which
@@ -1668,6 +1670,7 @@ export const serializeRideRealtime = (ride) => ({
     senderRole: message.senderRole,
     senderId: String(message.senderId),
     message: message.message,
+    imageUrl: message.imageUrl || '',
     sentAt: message.sentAt,
   })),
 });
@@ -2153,11 +2156,12 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
   return populatedRide;
 };
 
-export const appendRideMessage = async ({ rideId, role, senderId, message }) => {
+export const appendRideMessage = async ({ rideId, role, senderId, message, imageUrl }) => {
   const trimmedMessage = String(message || '').trim();
+  const trimmedImageUrl = String(imageUrl || '').trim();
 
-  if (!trimmedMessage) {
-    throw new ApiError(400, 'Message is required');
+  if (!trimmedMessage && !trimmedImageUrl) {
+    throw new ApiError(400, 'Message or image is required');
   }
 
   if (!['user', 'driver'].includes(role)) {
@@ -2176,6 +2180,7 @@ export const appendRideMessage = async ({ rideId, role, senderId, message }) => 
     senderRole: role,
     senderId,
     message: trimmedMessage,
+    imageUrl: trimmedImageUrl,
   });
 
   if (ride.messages.length > 200) {
@@ -2192,6 +2197,7 @@ export const appendRideMessage = async ({ rideId, role, senderId, message }) => 
     senderRole: latestMessage.senderRole,
     senderId: String(latestMessage.senderId),
     message: latestMessage.message,
+    imageUrl: latestMessage.imageUrl || '',
     sentAt: latestMessage.sentAt,
   };
 };
