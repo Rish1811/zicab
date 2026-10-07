@@ -24,6 +24,11 @@ import { Driver } from '../driver/models/Driver.js';
 const CYCLE_MS = 60 * 1000;
 const LOCK_KEY = 'surge:engine:lock';
 const ACTIVE_KEY = 'surge:active';
+// Demand and free drivers per hexagon from the latest cycle, surging or not,
+// for the driver map's "high demand" layer. Short-lived: it describes the
+// last minute, and a stale snapshot must not outlive a stopped engine.
+const SNAPSHOT_KEY = 'surge:snapshot';
+const SNAPSHOT_TTL_SECONDS = 180;
 const SETTINGS_TTL_MS = 30 * 1000;
 // Legal ceiling for the combined multiplier (Motor Vehicle Aggregator
 // Guidelines 2025), whatever the scheduled windows and settings say.
@@ -43,7 +48,7 @@ const SETTING_FIELDS = [
 
 let settingsCache = { value: null, at: 0 };
 // Used only when Redis is unavailable, so a single instance still works.
-const memory = { demand: new Map(), active: new Map() };
+const memory = { demand: new Map(), active: new Map(), snapshot: new Map() };
 let engineTimer = null;
 
 const minuteBucket = (time = Date.now()) => Math.floor(time / 60000);
@@ -160,6 +165,35 @@ async function writeActive(active) {
   );
 }
 
+async function writeSnapshot(snapshot) {
+  memory.snapshot = new Map(snapshot);
+  await runRedisCommand(
+    async (client) => {
+      const tx = client.multi().del(SNAPSHOT_KEY);
+      if (snapshot.size > 0) {
+        tx.hSet(SNAPSHOT_KEY, Object.fromEntries([...snapshot].map(([hex, entry]) => [hex, JSON.stringify(entry)])));
+        tx.expire(SNAPSHOT_KEY, SNAPSHOT_TTL_SECONDS);
+      }
+      await tx.exec();
+    },
+    { label: 'surge snapshot write' },
+  );
+}
+
+const readSnapshot = async () => {
+  const result = await runRedisCommand((client) => client.hGetAll(SNAPSHOT_KEY), { label: 'surge snapshot read' });
+  if (!result.ok) return new Map(memory.snapshot);
+  return new Map(
+    Object.entries(result.value || {}).map(([hex, json]) => {
+      try {
+        return [hex, JSON.parse(json)];
+      } catch {
+        return [hex, null];
+      }
+    }).filter(([, value]) => value),
+  );
+};
+
 /// Distinct riders across a set of hexagons over the window.
 const countDemand = async (settings, hexes, buckets) => {
   const keys = hexes.flatMap((hex) => buckets.map((bucket) => demandKey(settings.resolution, bucket, hex)));
@@ -241,12 +275,14 @@ export const runSurgeCycle = async () => {
   const previous = await readActive();
   const holdMs = settings.hold_minutes * 60 * 1000;
   const next = new Map();
+  const snapshot = new Map();
 
   for (const hex of candidates) {
     const area = gridDisk(hex, 1);
     const demand = await countDemand(settings, area, buckets);
     const supply = area.reduce((sum, cell) => sum + (supplyByHex.get(cell) || 0), 0);
     const multiplier = multiplierForRatio(settings, demand, supply);
+    if (demand > 0) snapshot.set(hex, { demand, supply, at: now, resolution: settings.resolution });
     const held = previous.get(hex);
     const heldLive = held && held.until > now && held.resolution === settings.resolution;
 
@@ -265,6 +301,11 @@ export const runSurgeCycle = async () => {
   }
 
   await writeActive(next);
+  // The map's demand layer is a by-product: it must never stop the surge
+  // itself from being written.
+  await writeSnapshot(snapshot).catch((error) => {
+    console.error('[surge] snapshot not written', error?.message);
+  });
   pruneMemory(current - settings.window_minutes);
   return { enabled: true, demandHexes: demandHexes.length, active: next.size };
 };
@@ -326,6 +367,92 @@ export const listActiveSurges = async ({ lat, lng, radiusKm = 15 } = {}) => {
     })
     .filter((surge) => surge.distance_km === null || surge.distance_km <= radiusKm)
     .sort((a, b) => b.multiplier - a.multiplier);
+};
+
+/**
+ * How busy an area is, for the driver map.
+ *
+ * Surging is always "very high". Otherwise riders per free driver decides it:
+ * more riders than drivers is "high", reaching the surge trigger is "very
+ * high". A trickle of riders below half the surge minimum stays "normal", so
+ * one person checking a price does not light up a hexagon.
+ */
+export const demandLevelFor = (settings, demand, supply, multiplier = 1) => {
+  if (multiplier > 1) return 'very_high';
+  if (demand < Math.max(2, Math.ceil(settings.min_demand / 2))) return 'normal';
+  const ratio = demand / Math.max(1, supply);
+  if (ratio >= settings.trigger_ratio) return 'very_high';
+  if (ratio >= 1) return 'high';
+  return 'normal';
+};
+
+const describeHex = (settings, hex, active, snapshot, now) => {
+  const surge = active.get(hex);
+  const live = surge && surge.until > now && surge.multiplier > 1 && surge.resolution === settings.resolution;
+  const counts = snapshot.get(hex);
+  const fresh = counts && counts.resolution === settings.resolution;
+  const demand = fresh ? counts.demand : (live ? surge.demand : 0);
+  const supply = fresh ? counts.supply : (live ? surge.supply : 0);
+  const multiplier = live ? surge.multiplier : 1;
+
+  return {
+    multiplier,
+    surge_ends_at: live ? new Date(surge.until).toISOString() : null,
+    surge_ends_in_minutes: live ? Math.max(0, Math.ceil((surge.until - now) / 60000)) : 0,
+    demand_level: demandLevelFor(settings, demand, supply, multiplier),
+    demand,
+    free_drivers: supply,
+  };
+};
+
+/**
+ * Every hexagon near a point that is surging or busy, for the driver map.
+ *
+ * Reads only what the engine already wrote (active surges and the last
+ * cycle's snapshot): looking at the map is never counted as demand and never
+ * changes a price. The multiplier is the very value rider quotes read.
+ */
+export const listOpportunityCells = async ({ lat, lng, radiusKm = 8, limit = 150 } = {}) => {
+  const settings = await getSurgeSettings();
+  if (!settings.enabled) return { enabled: false, cells: [] };
+
+  const now = Date.now();
+  const [active, snapshot] = await Promise.all([readActive(), readSnapshot()]);
+  const centre = isValidPoint(lat, lng) ? [lat, lng] : null;
+  const hexes = new Set([...active.keys(), ...snapshot.keys()]);
+
+  const cells = [];
+  for (const hex of hexes) {
+    const info = describeHex(settings, hex, active, snapshot, now);
+    if (info.multiplier <= 1 && info.demand_level === 'normal') continue;
+
+    const [hexLat, hexLng] = cellToLatLng(hex);
+    const distanceKm = centre ? round2(greatCircleDistance(centre, [hexLat, hexLng], 'km')) : null;
+    if (distanceKm !== null && distanceKm > radiusKm) continue;
+
+    cells.push({
+      hex,
+      center: { lat: hexLat, lng: hexLng },
+      boundary: cellToBoundary(hex).map(([pointLat, pointLng]) => ({ lat: pointLat, lng: pointLng })),
+      ...info,
+      distance_km: distanceKm,
+    });
+  }
+
+  cells.sort((a, b) => (a.distance_km ?? 0) - (b.distance_km ?? 0));
+  return { enabled: true, cells: cells.slice(0, limit) };
+};
+
+/** The same description for one point - used for airports. */
+export const describeOpportunityAt = async (lat, lng) => {
+  const settings = await getSurgeSettings();
+  if (!settings.enabled || !isValidPoint(lat, lng)) {
+    return { multiplier: 1, surge_ends_in_minutes: 0, demand_level: 'normal', demand: 0, free_drivers: 0 };
+  }
+  const hex = latLngToCell(lat, lng, settings.resolution);
+  const [active, snapshot] = await Promise.all([readActive(), readSnapshot()]);
+  const { surge_ends_at: _unused, ...info } = describeHex(settings, hex, active, snapshot, Date.now());
+  return { hex, ...info };
 };
 
 /// Runs a cycle every minute on whichever instance holds the lock.

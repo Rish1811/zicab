@@ -127,6 +127,7 @@ import {
 } from "../controllers/driverController.js";
 import { triggerDriverSosAlert } from '../../safety/controllers/safetyController.js';
 import { listActiveSurges } from '../../services/surgeService.js';
+import { getOpportunityMap } from '../../services/opportunityMapService.js';
 
 export const driverRouter = Router();
 
@@ -647,6 +648,23 @@ driverRouter.get(
     const radiusKm = Math.min(50, Math.max(1, Number(req.query.radius_km) || 15));
     const results = await listActiveSurges({ lat, lng, radiusKm });
     res.json({ success: true, data: { results, refreshed_at: new Date().toISOString() } });
+  }),
+);
+// The surge & demand map: surging and busy hexagons near the driver, the best
+// few places to go with what a trip pays there, and airport demand. Read-only
+// over what the surge engine already computed - looking never moves a price.
+// Contract: docs/surge-heatmap-implementation.md in the driver app repo.
+driverRouter.get(
+  "/opportunity-map",
+  authenticate(["driver"]),
+  asyncHandler(async (req, res) => {
+    const data = await getOpportunityMap({
+      driverId: req.auth?.sub,
+      lat: req.query.lat ?? req.query.latitude,
+      lng: req.query.lng ?? req.query.longitude,
+      radiusKm: req.query.radius_km,
+    });
+    res.json({ success: true, data });
   }),
 );
 driverRouter.patch(

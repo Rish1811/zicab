@@ -4504,6 +4504,55 @@ const surgeRequester = (req) => {
 /// Pass the pickup as `lat`/`lng` (or a `zone_id` outright) to get the tariffs
 /// that trip will actually be billed at. Callers that send neither still get
 /// the full unscoped list, so older app builds keep working.
+/**
+ * Every set-price row matching a query, across pages.
+ *
+ * listSetPrices returns 10 rows unless asked for more. A zone with more rows
+ * than that - Bangalore has 16, because several vehicles carry an old and a
+ * new row - lost the rest, so some vehicles' city prices were never read and
+ * the generic no-zone row priced them instead.
+ */
+const listAllSetPrices = async (args, options) => {
+  const rows = [];
+  for (let page = 1; page <= 20; page += 1) {
+    const result = await listSetPrices({ ...args, page, limit: 100 }, null, options);
+    const batch = result.results || [];
+    rows.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return rows;
+};
+
+/**
+ * The normal (un-surged) ride tariff per vehicle at a point, picked exactly as
+ * a rider's quote picks it - same zone lookup, same no-zone fallback, same
+ * ranking.
+ *
+ * For the driver surge map's "₹194 for 5 km, normally ₹149". Unlike
+ * getSetPrices it records nothing: a driver looking at the map must never be
+ * counted as a rider asking for a price, or looking would raise the surge.
+ */
+export const getTariffsAt = async ({ lat, lng, transportType = null } = {}) => {
+  const latitude = Number(lat);
+  const longitude = Number(lng);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return { zone: null, tariffs: [] };
+
+  const zone = await findZoneByPickup([longitude, latitude]);
+  const zoneId = zone ? String(zone._id) : null;
+  if (!zoneId) return { zone: null, tariffs: [] };
+
+  const [zoneRows, fallback] = await Promise.all([
+    listAllSetPrices({ scope: 'ride', zone_id: zoneId }, { hikeMultiplier: 1 }),
+    listAllSetPrices({ scope: 'ride', zone_id: 'none' }, { hikeMultiplier: 1 }),
+  ]);
+  const rows = [...zoneRows, ...fallback];
+  const serviceLocationId = zone?.service_location_id
+    ? String(zone.service_location_id._id || zone.service_location_id)
+    : null;
+
+  return { zone, tariffs: pickTariffPerVehicle(rows, zoneId, serviceLocationId, transportType) };
+};
+
 export const getSetPrices = asyncHandler(async (req, res) => {
   const query = { ...(req.query || {}) };
   const latitude = Number(query.lat ?? query.latitude);
