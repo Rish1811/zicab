@@ -34,6 +34,7 @@ import { authorizeRideRoomAccess } from './middleware/rideRoomAuth.js';
 import { attachSocketAuth } from './middleware/socketAuth.js';
 import { clearDriverRoute } from './services/driverRouteService.js';
 import { consumeScopedRateLimit } from '../middlewares/rateLimitMiddleware.js';
+import { getSocketClientIp as resolveSocketClientIp } from '../../../utils/clientIp.js';
 
 const DRIVER_LOCATION_WRITE_MIN_DISTANCE_METERS = 25;
 const DRIVER_LOCATION_WRITE_MAX_INTERVAL_MS = 15000;
@@ -87,14 +88,9 @@ const HEADING_MIN_MOVE_METERS = 8;
 
 
 
-const getSocketClientIp = (socket) => {
-  const forwardedFor = socket.handshake.headers?.['x-forwarded-for'];
-  if (typeof forwardedFor === 'string' && forwardedFor.trim()) {
-    return forwardedFor.split(',')[0].trim();
-  }
-
-  return socket.handshake.address || socket.conn?.remoteAddress || 'unknown';
-};
+// The address nginx saw - see utils/clientIp.js for why not the first
+// X-Forwarded-For entry.
+const getSocketClientIp = (socket) => resolveSocketClientIp(socket);
 
 const toRadians = (value) => Number(value || 0) * (Math.PI / 180);
 

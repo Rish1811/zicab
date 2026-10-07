@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { runRedisCommand } from '../../../infrastructure/redis/redisClient.js';
 import { env } from '../../../config/env.js';
+import { getRequestClientIp } from '../../../utils/clientIp.js';
 
 const fallbackCounters = new Map();
 
@@ -38,19 +39,9 @@ const sha1 = (value) => crypto.createHash('sha1').update(String(value || '')).di
 
 const toCleanString = (value) => String(value || '').trim();
 
-const getClientIp = (req) => {
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (typeof forwardedFor === 'string' && forwardedFor.trim()) {
-    return forwardedFor.split(',')[0].trim();
-  }
-
-  return (
-    req.ip ||
-    req.socket?.remoteAddress ||
-    req.connection?.remoteAddress ||
-    'unknown'
-  );
-};
+// See utils/clientIp.js: the first X-Forwarded-For entry is whatever the
+// client wrote, so per-IP limits read the address nginx saw instead.
+const getClientIp = (req) => getRequestClientIp(req);
 
 const resolveIdentifierParts = (req, mode = 'ip') => {
   const ip = getClientIp(req);

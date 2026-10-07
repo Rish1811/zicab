@@ -56,6 +56,7 @@ import {
   summarizePhonePePayload,
   summarizePhonePeRequestBody,
 } from '../../services/paymentDiagnostics.js';
+import { getRequestClientIp } from '../../../../utils/clientIp.js';
 
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say', '']);
 
@@ -4484,8 +4485,7 @@ const surgeRequester = (req) => {
       // Expired or foreign token: fall back to the address.
     }
   }
-  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return `ip:${forwarded || req.ip || 'unknown'}`;
+  return `ip:${getRequestClientIp(req)}`;
 };
 
 /// Tariff catalog for the rider apps.
