@@ -77,7 +77,7 @@ import { sendEmail } from '../../services/mailService.js';
 import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
 import { signAccessToken } from '../../services/tokenService.js';
 import { applyPriceHikeToSetPrice, getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
-import { getSurgeSettings, listActiveSurges, updateSurgeSettings } from '../../services/surgeService.js';
+import { getSurgeSettings, listActiveSurges, surgeForVehicle, updateSurgeSettings } from '../../services/surgeService.js';
 import { getBidRideSettings } from '../../services/transportSettingsService.js';
 import { resolveCatalogDispatchType } from '../../services/biddingPolicyService.js';
 import { PriceHike } from '../models/PriceHike.js';
@@ -2036,6 +2036,12 @@ const normalizeServiceStoreRentalCommission = (value = {}, existing = {}) => ({
     ),
   ),
 });
+
+/** The vehicle type id of a serialized set-price row, whatever its shape. */
+const setPriceVehicleId = (row) => {
+  const value = row?.type_id || row?.vehicle_type;
+  return value?._id || value || null;
+};
 
 const serializeSetPrice = (item) => ({
   _id: item._id,
@@ -7594,10 +7600,16 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null, options
   // The multiplier is the pickup hexagon's automatic surge, passed in by the
   // rider catalog. A request with no pickup has no area to surge, so 1. The
   // scheduled Price Hike time slots are retired - surge follows demand only.
+  //
+  // `options.surgeSettings` carries the vehicles the admin limited surge to;
+  // the other vehicles' rows stay at the normal fare.
   const hikeMultiplier = Number(options.hikeMultiplier) > 0 ? Number(options.hikeMultiplier) : 1;
   const quotedResults = currentAdmin
     ? pagedRows.map((row) => row.result)
-    : pagedRows.map((row) => applyPriceHikeToSetPrice(row.result, hikeMultiplier));
+    : pagedRows.map((row) => applyPriceHikeToSetPrice(
+      row.result,
+      surgeForVehicle(options.surgeSettings, setPriceVehicleId(row.result), hikeMultiplier),
+    ));
 
   return {
     results: quotedResults,

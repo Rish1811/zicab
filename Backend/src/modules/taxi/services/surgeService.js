@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { cellToBoundary, cellToLatLng, greatCircleDistance, gridDisk, latLngToCell } from 'h3-js';
 import { runRedisCommand } from '../../../infrastructure/redis/redisClient.js';
 import { SurgeSetting } from '../admin/models/SurgeSetting.js';
@@ -59,8 +60,26 @@ const round2 = (value) => Math.round(value * 100) / 100;
 const serializeSettings = (doc) => {
   const defaults = new SurgeSetting().toObject();
   const source = doc || defaults;
-  return Object.fromEntries(SETTING_FIELDS.map((field) => [field, source[field] ?? defaults[field]]));
+  return {
+    ...Object.fromEntries(SETTING_FIELDS.map((field) => [field, source[field] ?? defaults[field]])),
+    vehicle_type_ids: (source.vehicle_type_ids || []).map(String),
+  };
 };
+
+/**
+ * Whether the surge applies to a vehicle type. The admin can limit it to some
+ * vehicles; an empty list means all of them. Once a list is set, only the
+ * vehicles on it surge - something with no vehicle id is not on it.
+ */
+export const surgeAppliesToVehicle = (settings, vehicleTypeId) => {
+  const ids = settings?.vehicle_type_ids || [];
+  if (ids.length === 0) return true;
+  return Boolean(vehicleTypeId) && ids.includes(String(vehicleTypeId));
+};
+
+/** The surge for one vehicle: the area's multiplier if it applies, else 1. */
+export const surgeForVehicle = (settings, vehicleTypeId, multiplier) =>
+  surgeAppliesToVehicle(settings, vehicleTypeId) ? multiplier : 1;
 
 export const getSurgeSettings = async ({ fresh = false } = {}) => {
   if (!fresh && settingsCache.value && Date.now() - settingsCache.at < SETTINGS_TTL_MS) {
@@ -83,6 +102,14 @@ export const updateSurgeSettings = async (payload = {}) => {
   }
   if (update.resolution !== undefined) {
     update.resolution = Math.min(9, Math.max(7, Math.round(update.resolution)));
+  }
+  // An empty list (or "all") means every vehicle. Unknown ids are dropped
+  // rather than refused, so a deleted vehicle type cannot block a save.
+  if (payload.vehicle_type_ids !== undefined) {
+    const list = Array.isArray(payload.vehicle_type_ids) ? payload.vehicle_type_ids : [];
+    update.vehicle_type_ids = [...new Set(list.map(String))]
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
   }
 
   const doc = await SurgeSetting.findOneAndUpdate(

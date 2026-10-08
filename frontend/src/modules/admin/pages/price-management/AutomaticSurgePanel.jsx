@@ -43,17 +43,26 @@ const AutomaticSurgePanel = () => {
   const [active, setActive] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [vehicles, setVehicles] = useState([]);
+  // 'all' or 'some'. Kept apart from the id list so choosing "Only these" with
+  // nothing ticked yet is not mistaken for "all".
+  const [scope, setScope] = useState('all');
 
-  const apply = (payload) => {
+  // The minute-by-minute refresh only updates the live areas: replacing the
+  // settings too would wipe out edits the admin has not saved yet.
+  const apply = (payload, { areasOnly = false } = {}) => {
     const data = payload?.data || payload || {};
-    if (data.settings) setSettings(data.settings);
+    if (data.settings && !areasOnly) {
+      setSettings(data.settings);
+      setScope((data.settings.vehicle_type_ids || []).length ? 'some' : 'all');
+    }
     setActive(Array.isArray(data.active) ? data.active : []);
   };
 
   const load = useCallback(async ({ quiet = false } = {}) => {
     try {
       if (!quiet) setLoading(true);
-      apply(await api.get('/admin/surge'));
+      apply(await api.get('/admin/surge'), { areasOnly: quiet });
     } catch (err) {
       console.error('Fetch automatic surge failed:', err);
       if (!quiet) toast.error('Could not load automatic surge');
@@ -68,8 +77,36 @@ const AutomaticSurgePanel = () => {
     return () => clearInterval(timer);
   }, [load]);
 
+  useEffect(() => {
+    api.get('/admin/types/vehicle-types/list')
+      .then((res) => {
+        const body = res?.data ?? res;
+        const list = body?.data?.results || body?.results || body?.data || body || [];
+        setVehicles(
+          (Array.isArray(list) ? list : [])
+            .filter((v) => v && (v._id || v.id))
+            .map((v) => ({ id: String(v._id || v.id), name: v.name || 'Vehicle', active: v.active !== false && v.status !== 'inactive' }))
+            .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)),
+        );
+      })
+      .catch((err) => console.error('Fetch vehicle types failed:', err));
+  }, []);
+
+  const chosenIds = settings?.vehicle_type_ids || [];
+  const toggleVehicle = (id) =>
+    setSettings((prev) => {
+      const ids = prev.vehicle_type_ids || [];
+      return { ...prev, vehicle_type_ids: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id] };
+    });
+
   const save = async (patch = {}) => {
     const next = { ...settings, ...patch };
+    // "All vehicles" is saved as an empty list.
+    next.vehicle_type_ids = scope === 'all' ? [] : (next.vehicle_type_ids || []);
+    if (scope === 'some' && next.vehicle_type_ids.length === 0) {
+      toast.error('Tick at least one vehicle, or choose All vehicles');
+      return;
+    }
     try {
       setSaving(true);
       apply(await api.patch('/admin/surge', next));
@@ -150,6 +187,64 @@ const AutomaticSurgePanel = () => {
             <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{field.help}</p>
           </div>
         ))}
+      </div>
+
+      <div className="mt-3 border-t border-gray-100 pt-3">
+        <p className={labelClass}>Applies to</p>
+        <div className="flex flex-wrap items-center gap-4 mb-2">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer">
+            <input
+              type="radio"
+              name="surge-scope"
+              className="accent-indigo-600"
+              checked={scope === 'all'}
+              onChange={() => setScope('all')}
+            />
+            All vehicles
+          </label>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer">
+            <input
+              type="radio"
+              name="surge-scope"
+              className="accent-indigo-600"
+              checked={scope === 'some'}
+              onChange={() => setScope('some')}
+            />
+            Only the vehicles I choose
+          </label>
+        </div>
+        {scope === 'some' && (
+          <div>
+            <div className="flex flex-wrap gap-2">
+              {vehicles.map((vehicle) => {
+                const checked = chosenIds.includes(vehicle.id);
+                return (
+                  <label
+                    key={vehicle.id}
+                    className={`flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-md border cursor-pointer transition-colors ${
+                      checked ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    } ${vehicle.active ? '' : 'opacity-60'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-indigo-600"
+                      checked={checked}
+                      onChange={() => toggleVehicle(vehicle.id)}
+                    />
+                    {vehicle.name}
+                    {!vehicle.active && <span className="text-[9px] font-normal text-gray-400">(inactive)</span>}
+                  </label>
+                );
+              })}
+              {vehicles.length === 0 && <p className="text-[11px] text-gray-400">Loading vehicles...</p>}
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">
+              {chosenIds.length
+                ? `Surge applies to ${chosenIds.length} ${chosenIds.length === 1 ? 'vehicle' : 'vehicles'}. The rest always keep the normal fare.`
+                : 'Tick the vehicles that should surge. The rest keep the normal fare.'}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-end gap-2 mt-3">

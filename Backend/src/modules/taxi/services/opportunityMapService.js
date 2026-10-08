@@ -3,7 +3,7 @@ import { Airport } from '../admin/models/Airport.js';
 import { getMapSettings } from '../admin/services/adminService.js';
 import { Driver } from '../driver/models/Driver.js';
 import { getTariffsAt } from '../user/controllers/userController.js';
-import { describeOpportunityAt, getSurgeSettings, listOpportunityCells } from './surgeService.js';
+import { describeOpportunityAt, getSurgeSettings, listOpportunityCells, surgeAppliesToVehicle } from './surgeService.js';
 
 /**
  * The driver app's surge & demand map: where fares are higher and where
@@ -88,7 +88,7 @@ const labelFor = async (hex, lat, lng) => {
 };
 
 /** Normal and surged fare for this driver's vehicle at a point. */
-const exampleFareAt = async ({ lat, lng, multiplier, vehicleTypeIds, tariffCache }) => {
+const exampleFareAt = async ({ lat, lng, multiplier, vehicleTypeIds, tariffCache, settings }) => {
   const { zone, tariffs } = await getTariffsAt({ lat, lng });
   const zoneKey = zone ? String(zone._id) : 'none';
   if (!tariffCache.has(zoneKey)) tariffCache.set(zoneKey, tariffs);
@@ -100,11 +100,13 @@ const exampleFareAt = async ({ lat, lng, multiplier, vehicleTypeIds, tariffCache
   if (!row) return null;
 
   const normal = fareFor(row, EXAMPLE_TRIP_KM);
+  const rowVehicleId = row.type_id || row.vehicle_type?._id || row.vehicle_type;
+  const applied = surgeAppliesToVehicle(settings, rowVehicleId) ? multiplier : 1;
   return {
     km: EXAMPLE_TRIP_KM,
     normal,
     // The surge scales the tariff itself, so the fare scales with it.
-    now: Math.round(normal * multiplier),
+    now: Math.round(normal * applied),
     vehicle: row.name || '',
   };
 };
@@ -115,7 +117,7 @@ export const getOpportunityMap = async ({ driverId, lat, lng, radiusKm }) => {
   const longitude = Number(lng);
   const hasPoint = Number.isFinite(latitude) && Number.isFinite(longitude);
 
-  const [settings, { enabled, cells }, driver] = await Promise.all([
+  const [settings, { enabled, cells: rawCells }, driver] = await Promise.all([
     getSurgeSettings(),
     listOpportunityCells({ lat: latitude, lng: longitude, radiusKm: radius }),
     driverId ? Driver.findById(driverId).select('vehicleTypeId vehicleTypeIds').lean() : null,
@@ -124,6 +126,14 @@ export const getOpportunityMap = async ({ driverId, lat, lng, radiusKm }) => {
   const vehicleTypeIds = [driver?.vehicleTypeId, ...(driver?.vehicleTypeIds || [])]
     .filter(Boolean)
     .map(String);
+
+  // When the admin limits surge to some vehicles and none of this driver's is
+  // one of them, the surge is not theirs to earn: their map shows the demand
+  // but no higher fares.
+  const driverSurged = vehicleTypeIds.length === 0
+    || vehicleTypeIds.some((id) => surgeAppliesToVehicle(settings, id));
+  const unsurge = (item) => (driverSurged ? item : { ...item, multiplier: 1, surge_ends_in_minutes: 0 });
+  const cells = rawCells.map(unsurge);
 
   // The best few places to go: highest fare first, then busiest, then nearest.
   // Only surging or busy hexagons are worth suggesting; the quiet grid around
@@ -148,6 +158,7 @@ export const getOpportunityMap = async ({ driverId, lat, lng, radiusKm }) => {
             multiplier: cell.multiplier,
             vehicleTypeIds,
             tariffCache,
+            settings,
           }).catch(() => null)
           : null,
       ]);
@@ -181,7 +192,8 @@ export const getOpportunityMap = async ({ driverId, lat, lng, radiusKm }) => {
         if (!Number.isFinite(Number(aLat)) || !Number.isFinite(Number(aLng))) return null;
         const distance = hasPoint ? distanceKm(latitude, longitude, Number(aLat), Number(aLng)) : null;
         if (distance !== null && distance > AIRPORT_RADIUS_KM) return null;
-        const info = await describeOpportunityAt(Number(aLat), Number(aLng)).catch(() => null);
+        const raw = await describeOpportunityAt(Number(aLat), Number(aLng)).catch(() => null);
+        const info = raw ? unsurge(raw) : null;
         return {
           name: airport.name,
           lat: Number(aLat),
@@ -200,7 +212,7 @@ export const getOpportunityMap = async ({ driverId, lat, lng, radiusKm }) => {
   return {
     refreshed_at: new Date().toISOString(),
     refresh_after_seconds: REFRESH_AFTER_SECONDS,
-    surge_enabled: Boolean(enabled && settings.enabled),
+    surge_enabled: Boolean(enabled && settings.enabled && driverSurged),
     max_multiplier: Number(settings.max_multiplier) || 1,
     cells: cells.map((cell) => ({ ...cell, label: labels.get(cell.hex) || '' })),
     hotspots,

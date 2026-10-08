@@ -76,6 +76,12 @@ const surgeSettingSchema = new mongoose.Schema(
       min: 1,
       max: 60,
     },
+    // Vehicle types the surge applies to. Empty means every vehicle - the
+    // default, and what it was before the admin could choose.
+    vehicle_type_ids: {
+      type: [mongoose.Schema.Types.ObjectId],
+      default: [],
+    },
   },
   { timestamps: true },
 );

@@ -18,7 +18,7 @@ import { User } from '../user/models/User.js';
 import { UserWallet } from '../user/models/UserWallet.js';
 import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
-import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt } from './surgeService.js';
+import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, getSurgeSettings, surgeAppliesToVehicle } from './surgeService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
 import { resolveBiddingPolicy } from './biddingPolicyService.js';
@@ -1278,12 +1278,18 @@ export const createRideRecord = async ({
   // offer can say "1.2x surge ride" and reports can separate surge income. The
   // fare already includes it. A current app sends the multiplier it priced
   // with; otherwise the pickup's surge now is the best record there is.
+  //
+  // A vehicle the admin left out of surge was quoted at the normal fare, so it
+  // is recorded as no surge whatever an older app sends.
   const pickupSurge = await getSurgeAt(pickupCoords?.[1], pickupCoords?.[0]).catch(() => null);
+  const surgeSettings = await getSurgeSettings().catch(() => null);
   const quotedSurge = Number(surgeMultiplier);
-  const rideSurgeMultiplier = Math.min(
-    ABSOLUTE_MAX_MULTIPLIER,
-    Math.max(1, Number.isFinite(quotedSurge) && quotedSurge >= 1 ? quotedSurge : Number(pickupSurge?.multiplier) || 1),
-  );
+  const rideSurgeMultiplier = surgeAppliesToVehicle(surgeSettings, primaryVehicleTypeId)
+    ? Math.min(
+      ABSOLUTE_MAX_MULTIPLIER,
+      Math.max(1, Number.isFinite(quotedSurge) && quotedSurge >= 1 ? quotedSurge : Number(pickupSurge?.multiplier) || 1),
+    )
+    : 1;
   const rideSurge = {
     multiplier: Math.round(rideSurgeMultiplier * 100) / 100,
     source: rideSurgeMultiplier > 1 ? 'automatic' : 'none',

@@ -36,7 +36,7 @@ import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../ser
 import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
 import { listServiceStores, listSetPrices, listZones } from '../../admin/services/adminService.js';
 import { findZoneByPickup } from '../../services/matchingService.js';
-import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, recordSurgeDemand } from '../../services/surgeService.js';
+import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, getSurgeSettings, recordSurgeDemand } from '../../services/surgeService.js';
 import { verifyAccessToken } from '../../services/tokenService.js';
 import { resolveRouteCached } from '../../services/routeService.js';
 import {
@@ -4618,10 +4618,12 @@ export const getSetPrices = asyncHandler(async (req, res) => {
     surge = await getSurgeAt(latitude, longitude).catch(() => surge);
   }
   const hikeMultiplier = Math.min(ABSOLUTE_MAX_MULTIPLIER, Math.max(1, surge.multiplier));
+  // The admin can limit surge to some vehicles; the rest keep the normal fare.
+  const surgeSettings = await getSurgeSettings();
 
   const [zoneRows, fallback] = await Promise.all([
-    listSetPrices({ ...query, zone_id: zoneId }, null, { hikeMultiplier }),
-    listSetPrices({ ...query, zone_id: 'none' }, null, { hikeMultiplier }),
+    listSetPrices({ ...query, zone_id: zoneId }, null, { hikeMultiplier, surgeSettings }),
+    listSetPrices({ ...query, zone_id: 'none' }, null, { hikeMultiplier, surgeSettings }),
   ]);
   const data = { ...zoneRows, results: [...(zoneRows.results || []), ...(fallback.results || [])] };
 
@@ -4643,6 +4645,9 @@ export const getSetPrices = asyncHandler(async (req, res) => {
       multiplier: hikeMultiplier,
       source: hikeMultiplier > 1 ? 'automatic' : 'none',
       ends_at: hikeMultiplier > 1 ? surge.ends_at : null,
+      // Empty = every vehicle. Otherwise only these are surged; each row's
+      // price_hike_multiplier says which multiplier it was priced under.
+      vehicle_type_ids: surgeSettings.vehicle_type_ids,
     },
   });
 });
