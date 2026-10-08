@@ -126,7 +126,9 @@ export const getOpportunityMap = async ({ driverId, lat, lng, radiusKm }) => {
     .map(String);
 
   // The best few places to go: highest fare first, then busiest, then nearest.
-  const ranked = [...cells].sort((a, b) =>
+  // Only surging or busy hexagons are worth suggesting; the quiet grid around
+  // the driver is there to be seen, not to be sent to.
+  const ranked = cells.filter((cell) => cell.multiplier > 1 || cell.demand_level !== 'normal').sort((a, b) =>
     b.multiplier - a.multiplier
     || LEVEL_RANK[b.demand_level] - LEVEL_RANK[a.demand_level]
     || (a.distance_km ?? 0) - (b.distance_km ?? 0));

@@ -412,19 +412,28 @@ const describeHex = (settings, hex, active, snapshot, now) => {
  * cycle's snapshot): looking at the map is never counted as demand and never
  * changes a price. The multiplier is the very value rider quotes read.
  */
-export const listOpportunityCells = async ({ lat, lng, radiusKm = 8, limit = 150 } = {}) => {
+export const listOpportunityCells = async ({ lat, lng, radiusKm = 8, limit = 150, gridRings = GRID_RINGS } = {}) => {
   const settings = await getSurgeSettings();
-  if (!settings.enabled) return { enabled: false, cells: [] };
+  const centre = isValidPoint(lat, lng) ? [lat, lng] : null;
+
+  // The hexagons around the driver, whatever their demand - the grid a driver
+  // sees on Rapido or Uber even when nothing is surging. Without it a quiet
+  // map was blank, which reads as broken rather than as "normal here".
+  const grid = centre ? new Set(gridDisk(latLngToCell(centre[0], centre[1], settings.resolution), gridRings)) : new Set();
+
+  if (!settings.enabled) {
+    return { enabled: false, cells: [...grid].map((hex) => normalCell(hex, centre)).slice(0, limit) };
+  }
 
   const now = Date.now();
   const [active, snapshot] = await Promise.all([readActive(), readSnapshot()]);
-  const centre = isValidPoint(lat, lng) ? [lat, lng] : null;
-  const hexes = new Set([...active.keys(), ...snapshot.keys()]);
+  const hexes = new Set([...active.keys(), ...snapshot.keys(), ...grid]);
 
   const cells = [];
   for (const hex of hexes) {
     const info = describeHex(settings, hex, active, snapshot, now);
-    if (info.multiplier <= 1 && info.demand_level === 'normal') continue;
+    // Quiet hexagons are only drawn as part of the grid around the driver.
+    if (info.multiplier <= 1 && info.demand_level === 'normal' && !grid.has(hex)) continue;
 
     const [hexLat, hexLng] = cellToLatLng(hex);
     const distanceKm = centre ? round2(greatCircleDistance(centre, [hexLat, hexLng], 'km')) : null;
@@ -441,6 +450,28 @@ export const listOpportunityCells = async ({ lat, lng, radiusKm = 8, limit = 150
 
   cells.sort((a, b) => (a.distance_km ?? 0) - (b.distance_km ?? 0));
   return { enabled: true, cells: cells.slice(0, limit) };
+};
+
+/**
+ * Rings of hexagons drawn around the driver. At resolution 8 (about 0.8 km
+ * between centres) 4 rings is 61 hexagons, reaching about 3 km out.
+ */
+const GRID_RINGS = 4;
+
+const normalCell = (hex, centre) => {
+  const [hexLat, hexLng] = cellToLatLng(hex);
+  return {
+    hex,
+    center: { lat: hexLat, lng: hexLng },
+    boundary: cellToBoundary(hex).map(([pointLat, pointLng]) => ({ lat: pointLat, lng: pointLng })),
+    multiplier: 1,
+    surge_ends_at: null,
+    surge_ends_in_minutes: 0,
+    demand_level: 'normal',
+    demand: 0,
+    free_drivers: 0,
+    distance_km: centre ? round2(greatCircleDistance(centre, [hexLat, hexLng], 'km')) : null,
+  };
 };
 
 /** The same description for one point - used for airports. */
