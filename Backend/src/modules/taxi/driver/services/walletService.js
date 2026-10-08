@@ -223,8 +223,10 @@ export const ensureDriverWalletCanAcceptRide = async (driverOrId, { session } = 
       'wallet.cashLimit': wallet.cashLimit,
       'wallet.isBlocked': true,
     });
+    // A pass waives the minimum, so buying today's pass is the way back to
+    // work - not a top-up of the minimum.
     throw new ApiError(403, wallet.rules.isWalletEnabled
-      ? 'Driver wallet minimum balance is not met. Please top up to accept rides.'
+      ? "Buy today's pass to go online and get rides."
       : 'Driver wallet is disabled by admin.');
   }
 
