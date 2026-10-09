@@ -11,6 +11,7 @@ import { WalletTransaction } from '../driver/models/WalletTransaction.js';
 import { incrementDriverTodaySummaryForCompletedRide } from '../driver/services/driverTodaySummaryService.js';
 import { applyDriverWalletAdjustment, ensureDriverWalletCanAcceptRide, settleCompletedRideWallet } from '../driver/services/walletService.js';
 import { sendRideInvoiceEmail } from './invoiceService.js';
+import { sendPushNotificationToEntities } from './pushNotificationService.js';
 import { Delivery } from '../user/models/Delivery.js';
 import { RideBid } from '../user/models/RideBid.js';
 import { Ride } from '../user/models/Ride.js';
@@ -2208,6 +2209,30 @@ export const appendRideMessage = async ({ rideId, role, senderId, message, image
   await ride.save();
 
   const latestMessage = ride.messages[ride.messages.length - 1];
+
+  // Push the message to the OTHER party so a backgrounded or closed app still
+  // gets it — the socket only reaches a live app. Fire-and-forget: a push
+  // failure must not fail sending the chat message.
+  try {
+    const fromDriver = role === 'driver';
+    const body = trimmedMessage || (trimmedImageUrl ? '📷 Photo' : '');
+    if (body) {
+      sendPushNotificationToEntities({
+        userIds: fromDriver && ride.userId ? [String(ride.userId)] : [],
+        driverIds: !fromDriver && ride.driverId ? [String(ride.driverId)] : [],
+        title: fromDriver ? 'Message from your driver' : 'Message from your rider',
+        body,
+        data: {
+          type: 'ride_message',
+          rideId: String(ride._id),
+          senderRole: role,
+          hasImage: trimmedImageUrl ? 'true' : 'false',
+        },
+      }).catch(() => {});
+    }
+  } catch (_) {
+    // ignore — chat delivery over the socket already succeeded
+  }
 
   return {
     id: String(latestMessage._id),
