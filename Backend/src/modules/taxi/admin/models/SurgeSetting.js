@@ -1,8 +1,11 @@
 import mongoose from 'mongoose';
 
 /**
- * Settings for automatic, demand-driven surge. One document; the admin's Price
- * Hike page edits it.
+ * Settings for automatic, demand-driven surge, edited on the admin's Price Hike
+ * page. One document per vehicle type that has its own settings
+ * (key "vehicle:<id>"), plus the "default" one every other vehicle follows.
+ * The hexagon size (`resolution`) is read from "default" only: every vehicle
+ * shares one map.
  *
  * The city is cut into H3 hexagons. Each minute every hexagon compares the
  * riders asking for a price in and around it against the free drivers in and
@@ -15,6 +18,11 @@ const surgeSettingSchema = new mongoose.Schema(
       type: String,
       default: 'default',
       unique: true,
+    },
+    // The vehicle type these settings are for; null on "default".
+    vehicle_type_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
     },
     enabled: {
       type: Boolean,
@@ -75,12 +83,6 @@ const surgeSettingSchema = new mongoose.Schema(
       default: 10,
       min: 1,
       max: 60,
-    },
-    // Vehicle types the surge applies to. Empty means every vehicle - the
-    // default, and what it was before the admin could choose.
-    vehicle_type_ids: {
-      type: [mongoose.Schema.Types.ObjectId],
-      default: [],
     },
   },
   { timestamps: true },

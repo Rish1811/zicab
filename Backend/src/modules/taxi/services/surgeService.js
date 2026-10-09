@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { cellToBoundary, cellToLatLng, greatCircleDistance, gridDisk, latLngToCell } from 'h3-js';
 import { runRedisCommand } from '../../../infrastructure/redis/redisClient.js';
+import { ApiError } from '../../../utils/ApiError.js';
 import { SurgeSetting } from '../admin/models/SurgeSetting.js';
 import { Driver } from '../driver/models/Driver.js';
 
@@ -13,6 +14,14 @@ import { Driver } from '../driver/models/Driver.js';
  * it, counted the way dispatch counts them. Both are summed over the hexagon
  * and its six neighbours, so a surge follows an area rather than one block.
  *
+ * Surge is worked out per settings profile. "default" compares the riders with
+ * every free driver and prices every vehicle without settings of its own -
+ * which, until an admin gives a vehicle its own, is all of them. A vehicle type
+ * with its own settings compares the same riders with its own free drivers
+ * only, under its own limits: ten free autos and one free car surge the car,
+ * not the auto. A rider asking for a price has not chosen a vehicle yet, so
+ * every rider counts as demand for every profile.
+ *
  * Once a minute one API instance (whichever holds the Redis lock) recomputes
  * every hexagon with recent demand and writes the result to Redis, where every
  * instance reads it when quoting. A surge holds for `hold_minutes` once set, so
@@ -24,6 +33,7 @@ import { Driver } from '../driver/models/Driver.js';
 
 const CYCLE_MS = 60 * 1000;
 const LOCK_KEY = 'surge:engine:lock';
+// Field "<profile>|<hex>" -> the surge running there for that profile.
 const ACTIVE_KEY = 'surge:active';
 // Demand and free drivers per hexagon from the latest cycle, surging or not,
 // for the driver map's "high demand" layer. Short-lived: it describes the
@@ -35,9 +45,11 @@ const SETTINGS_TTL_MS = 30 * 1000;
 // Guidelines 2025), whatever the scheduled windows and settings say.
 export const ABSOLUTE_MAX_MULTIPLIER = 2;
 
-const SETTING_FIELDS = [
+export const DEFAULT_PROFILE = 'default';
+
+// Set per profile.
+const PROFILE_FIELDS = [
   'enabled',
-  'resolution',
   'window_minutes',
   'min_demand',
   'trigger_ratio',
@@ -46,8 +58,10 @@ const SETTING_FIELDS = [
   'max_multiplier',
   'hold_minutes',
 ];
+// Shared by every profile, read from "default": one map for all vehicles.
+const SHARED_FIELDS = ['resolution'];
 
-let settingsCache = { value: null, at: 0 };
+let profilesCache = { value: null, at: 0 };
 // Used only when Redis is unavailable, so a single instance still works.
 const memory = { demand: new Map(), active: new Map(), snapshot: new Map() };
 let engineTimer = null;
@@ -55,74 +69,128 @@ let engineTimer = null;
 const minuteBucket = (time = Date.now()) => Math.floor(time / 60000);
 const demandKey = (res, bucket, hex) => `surge:dem:${res}:${bucket}:${hex}`;
 const demandHexesKey = (res, bucket) => `surge:demhex:${res}:${bucket}`;
+const activeField = (profile, hex) => `${profile}|${hex}`;
 const round2 = (value) => Math.round(value * 100) / 100;
 
-const serializeSettings = (doc) => {
+const serializeProfile = (doc, shared = null) => {
   const defaults = new SurgeSetting().toObject();
   const source = doc || defaults;
+  const own = Object.fromEntries(PROFILE_FIELDS.map((field) => [field, source[field] ?? defaults[field]]));
+  const sharedValues = shared
+    || Object.fromEntries(SHARED_FIELDS.map((field) => [field, source[field] ?? defaults[field]]));
   return {
-    ...Object.fromEntries(SETTING_FIELDS.map((field) => [field, source[field] ?? defaults[field]])),
-    vehicle_type_ids: (source.vehicle_type_ids || []).map(String),
+    ...own,
+    ...sharedValues,
+    vehicle_type_id: source.vehicle_type_id ? String(source.vehicle_type_id) : null,
   };
 };
 
 /**
- * Whether the surge applies to a vehicle type. The admin can limit it to some
- * vehicles; an empty list means all of them. Once a list is set, only the
- * vehicles on it surge - something with no vehicle id is not on it.
+ * Every profile: `default`, and `vehicles` - vehicle type id -> its own
+ * settings - for the vehicle types that have them.
  */
-export const surgeAppliesToVehicle = (settings, vehicleTypeId) => {
-  const ids = settings?.vehicle_type_ids || [];
-  if (ids.length === 0) return true;
-  return Boolean(vehicleTypeId) && ids.includes(String(vehicleTypeId));
-};
-
-/** The surge for one vehicle: the area's multiplier if it applies, else 1. */
-export const surgeForVehicle = (settings, vehicleTypeId, multiplier) =>
-  surgeAppliesToVehicle(settings, vehicleTypeId) ? multiplier : 1;
-
-export const getSurgeSettings = async ({ fresh = false } = {}) => {
-  if (!fresh && settingsCache.value && Date.now() - settingsCache.at < SETTINGS_TTL_MS) {
-    return settingsCache.value;
+export const getSurgeProfiles = async ({ fresh = false } = {}) => {
+  if (!fresh && profilesCache.value && Date.now() - profilesCache.at < SETTINGS_TTL_MS) {
+    return profilesCache.value;
   }
-  const doc = await SurgeSetting.findOne({ key: 'default' }).lean();
-  const value = serializeSettings(doc);
-  settingsCache = { value, at: Date.now() };
+  const docs = await SurgeSetting.find({}).lean();
+  const defaultProfile = serializeProfile(docs.find((doc) => doc.key === DEFAULT_PROFILE));
+  const shared = Object.fromEntries(SHARED_FIELDS.map((field) => [field, defaultProfile[field]]));
+  const vehicles = new Map(
+    docs
+      .filter((doc) => doc.key !== DEFAULT_PROFILE && doc.vehicle_type_id)
+      .map((doc) => [String(doc.vehicle_type_id), serializeProfile(doc, shared)]),
+  );
+  const value = {
+    default: defaultProfile,
+    vehicles,
+    anyEnabled: defaultProfile.enabled || [...vehicles.values()].some((profile) => profile.enabled),
+  };
+  profilesCache = { value, at: Date.now() };
   return value;
 };
 
+/** The "default" settings - and the shared hexagon size every profile uses. */
+export const getSurgeSettings = async ({ fresh = false } = {}) => (await getSurgeProfiles({ fresh })).default;
+
+/** Which profile prices a vehicle type: its own if it has one, else default. */
+export const profileKeyForVehicle = (profiles, vehicleTypeId) =>
+  vehicleTypeId && profiles?.vehicles?.has(String(vehicleTypeId)) ? String(vehicleTypeId) : DEFAULT_PROFILE;
+
+export const settingsForProfile = (profiles, key) =>
+  key === DEFAULT_PROFILE ? profiles.default : profiles.vehicles.get(key) || profiles.default;
+
+export const settingsForVehicle = (profiles, vehicleTypeId) =>
+  settingsForProfile(profiles, profileKeyForVehicle(profiles, vehicleTypeId));
+
+const enabledProfileKeys = (profiles) => [
+  ...(profiles.default.enabled ? [DEFAULT_PROFILE] : []),
+  ...[...profiles.vehicles].filter(([, profile]) => profile.enabled).map(([key]) => key),
+];
+
+const toObjectId = (value) => {
+  const id = String(value || '').trim();
+  return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
+};
+
+/**
+ * Saves one profile: a vehicle type's when `vehicle_type_id` is given, the
+ * default one otherwise. Only that document is written, so saving one vehicle
+ * can never change another's settings. The first save for a vehicle starts
+ * from the default values for anything not sent.
+ */
 export const updateSurgeSettings = async (payload = {}) => {
+  const vehicleTypeId = payload.vehicle_type_id ? toObjectId(payload.vehicle_type_id) : null;
+  if (payload.vehicle_type_id && !vehicleTypeId) {
+    throw new ApiError(400, 'Invalid vehicle type');
+  }
+
   const update = {};
-  for (const field of SETTING_FIELDS) {
+  for (const field of PROFILE_FIELDS) {
     if (payload[field] === undefined || payload[field] === '') continue;
     update[field] = field === 'enabled' ? Boolean(payload[field]) : Number(payload[field]);
   }
   if (update.max_multiplier !== undefined) {
     update.max_multiplier = Math.min(ABSOLUTE_MAX_MULTIPLIER, Math.max(1, update.max_multiplier));
   }
-  if (update.resolution !== undefined) {
-    update.resolution = Math.min(9, Math.max(7, Math.round(update.resolution)));
+  if (!vehicleTypeId && payload.resolution !== undefined && payload.resolution !== '') {
+    update.resolution = Math.min(9, Math.max(7, Math.round(Number(payload.resolution))));
   }
-  // An empty list (or "all") means every vehicle. Unknown ids are dropped
-  // rather than refused, so a deleted vehicle type cannot block a save.
-  if (payload.vehicle_type_ids !== undefined) {
-    const list = Array.isArray(payload.vehicle_type_ids) ? payload.vehicle_type_ids : [];
-    update.vehicle_type_ids = [...new Set(list.map(String))]
-      .filter((id) => mongoose.Types.ObjectId.isValid(id))
-      .map((id) => new mongoose.Types.ObjectId(id));
+
+  const key = vehicleTypeId ? `vehicle:${vehicleTypeId}` : DEFAULT_PROFILE;
+  let seed = {};
+  if (vehicleTypeId) {
+    const exists = await SurgeSetting.exists({ key });
+    if (!exists) {
+      const base = (await getSurgeProfiles({ fresh: true })).default;
+      seed = Object.fromEntries(PROFILE_FIELDS.filter((field) => update[field] === undefined).map((field) => [field, base[field]]));
+    }
   }
 
   const doc = await SurgeSetting.findOneAndUpdate(
-    { key: 'default' },
-    { $set: update, $setOnInsert: { key: 'default' } },
-    { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+    { key },
+    { $set: { ...seed, ...update }, $setOnInsert: { key, vehicle_type_id: vehicleTypeId } },
+    { upsert: true, returnDocument: 'after', runValidators: true, setDefaultsOnInsert: true },
   ).lean();
-  settingsCache = { value: null, at: 0 };
+  profilesCache = { value: null, at: 0 };
 
-  if (!doc.enabled) {
+  // A profile switched off stops surging now, not when its hold runs out. A
+  // new hexagon size makes every running surge meaningless.
+  if (update.resolution !== undefined) {
     await writeActive(new Map());
+  } else if (!doc.enabled) {
+    await clearProfile(vehicleTypeId ? String(vehicleTypeId) : DEFAULT_PROFILE);
   }
-  return serializeSettings(doc);
+  return serializeProfile(doc);
+};
+
+/** Removes a vehicle type's own settings: it follows default again. */
+export const resetVehicleSurgeSettings = async (vehicleTypeId) => {
+  const id = toObjectId(vehicleTypeId);
+  if (!id) throw new ApiError(400, 'Invalid vehicle type');
+  await SurgeSetting.deleteOne({ key: `vehicle:${id}` });
+  profilesCache = { value: null, at: 0 };
+  await clearProfile(String(id));
 };
 
 const isValidPoint = (lat, lng) =>
@@ -135,13 +203,17 @@ const isValidPoint = (lat, lng) =>
  */
 export const recordSurgeDemand = async ({ lat, lng, requester }) => {
   if (!isValidPoint(lat, lng) || !requester) return;
-  const settings = await getSurgeSettings();
-  if (!settings.enabled) return;
+  const profiles = await getSurgeProfiles();
+  if (!profiles.anyEnabled) return;
 
-  const res = settings.resolution;
+  const res = profiles.default.resolution;
   const hex = latLngToCell(lat, lng, res);
   const bucket = minuteBucket();
-  const ttlSeconds = (settings.window_minutes + 5) * 60;
+  const longestWindow = Math.max(
+    profiles.default.window_minutes,
+    ...[...profiles.vehicles.values()].map((profile) => profile.window_minutes),
+  );
+  const ttlSeconds = (longestWindow + 5) * 60;
 
   const result = await runRedisCommand(
     async (client) => {
@@ -163,18 +235,23 @@ export const recordSurgeDemand = async ({ lat, lng, requester }) => {
   }
 };
 
-const readActive = async () => {
-  const result = await runRedisCommand((client) => client.hGetAll(ACTIVE_KEY), { label: 'surge read' });
-  if (!result.ok) return new Map(memory.active);
-  return new Map(
-    Object.entries(result.value || {}).map(([hex, json]) => {
+const parseEntries = (entries) =>
+  new Map(
+    entries.map(([field, json]) => {
       try {
-        return [hex, JSON.parse(json)];
+        // Written before surge was per vehicle: those were default's.
+        return [field.includes('|') ? field : activeField(DEFAULT_PROFILE, field), JSON.parse(json)];
       } catch {
-        return [hex, null];
+        return [field, null];
       }
     }).filter(([, value]) => value),
   );
+
+/// Every running surge, keyed "<profile>|<hex>".
+const readActive = async () => {
+  const result = await runRedisCommand((client) => client.hGetAll(ACTIVE_KEY), { label: 'surge read' });
+  if (!result.ok) return new Map(memory.active);
+  return parseEntries(Object.entries(result.value || {}));
 };
 
 async function writeActive(active) {
@@ -183,13 +260,21 @@ async function writeActive(active) {
     async (client) => {
       const tx = client.multi().del(ACTIVE_KEY);
       if (active.size > 0) {
-        tx.hSet(ACTIVE_KEY, Object.fromEntries([...active].map(([hex, entry]) => [hex, JSON.stringify(entry)])));
+        tx.hSet(ACTIVE_KEY, Object.fromEntries([...active].map(([field, entry]) => [field, JSON.stringify(entry)])));
         tx.expire(ACTIVE_KEY, 3600);
       }
       await tx.exec();
     },
     { label: 'surge write' },
   );
+}
+
+async function clearProfile(profile) {
+  const active = await readActive();
+  for (const field of [...active.keys()]) {
+    if (field.startsWith(`${profile}|`)) active.delete(field);
+  }
+  await writeActive(active);
 }
 
 async function writeSnapshot(snapshot) {
@@ -221,24 +306,24 @@ const readSnapshot = async () => {
   );
 };
 
-/// Distinct riders across a set of hexagons over the window.
-const countDemand = async (settings, hexes, buckets) => {
-  const keys = hexes.flatMap((hex) => buckets.map((bucket) => demandKey(settings.resolution, bucket, hex)));
+/// Distinct riders across a set of hexagons over the given minutes.
+const countDemand = async (resolution, hexes, buckets) => {
+  const keys = hexes.flatMap((hex) => buckets.map((bucket) => demandKey(resolution, bucket, hex)));
   const result = await runRedisCommand((client) => client.pfCount(keys), { label: 'surge count' });
   if (result.ok) return Number(result.value) || 0;
 
   const riders = new Set();
   for (const hex of hexes) {
     for (const bucket of buckets) {
-      for (const rider of memory.demand.get(`${settings.resolution}:${bucket}:${hex}`) || []) riders.add(rider);
+      for (const rider of memory.demand.get(`${resolution}:${bucket}:${hex}`) || []) riders.add(rider);
     }
   }
   return riders.size;
 };
 
-const hexesWithDemand = async (settings, buckets) => {
+const hexesWithDemand = async (resolution, buckets) => {
   const result = await runRedisCommand(
-    (client) => client.sUnion(buckets.map((bucket) => demandHexesKey(settings.resolution, bucket))),
+    (client) => client.sUnion(buckets.map((bucket) => demandHexesKey(resolution, bucket))),
     { label: 'surge hexes' },
   );
   if (result.ok) return result.value || [];
@@ -246,13 +331,17 @@ const hexesWithDemand = async (settings, buckets) => {
   const hexes = new Set();
   for (const key of memory.demand.keys()) {
     const [res, bucket, hex] = key.split(':');
-    if (Number(res) === settings.resolution && buckets.includes(Number(bucket))) hexes.add(hex);
+    if (Number(res) === resolution && buckets.includes(Number(bucket))) hexes.add(hex);
   }
   return [...hexes];
 };
 
-/// Free drivers per hexagon - the same availability test dispatch uses.
-const freeDriversByHex = async (settings) => {
+/**
+ * Free drivers per hexagon - the same availability test dispatch uses - in
+ * total, and per vehicle type for the types with their own settings. A
+ * driver enrolled in several types counts for each.
+ */
+const freeDriversByHex = async (resolution, vehicleTypeIds) => {
   const drivers = await Driver.find({
     isOnline: true,
     isOnRide: false,
@@ -260,17 +349,23 @@ const freeDriversByHex = async (settings) => {
     'location.coordinates.0': { $ne: 0 },
     $or: [{ owner_id: { $ne: null } }, { 'wallet.isBlocked': { $ne: true } }],
   })
-    .select('location')
+    .select('location vehicleTypeId vehicleTypeIds')
     .lean();
 
-  const counts = new Map();
+  const all = new Map();
+  const byType = new Map(vehicleTypeIds.map((id) => [id, new Map()]));
   for (const driver of drivers) {
     const [lng, lat] = driver.location?.coordinates || [];
     if (!isValidPoint(lat, lng)) continue;
-    const hex = latLngToCell(lat, lng, settings.resolution);
-    counts.set(hex, (counts.get(hex) || 0) + 1);
+    const hex = latLngToCell(lat, lng, resolution);
+    all.set(hex, (all.get(hex) || 0) + 1);
+    const types = new Set([driver.vehicleTypeId, ...(driver.vehicleTypeIds || [])].filter(Boolean).map(String));
+    for (const type of types) {
+      const counts = byType.get(type);
+      if (counts) counts.set(hex, (counts.get(hex) || 0) + 1);
+    }
   }
-  return counts;
+  return { all, byType };
 };
 
 /// Riders per free driver -> multiplier. Below `min_demand` riders, or below
@@ -284,47 +379,75 @@ export const multiplierForRatio = (settings, demand, supply) => {
   return round2(Math.min(cap, 1 + steps * settings.step));
 };
 
-/// One pass over every hexagon with recent demand, and its neighbours.
+/// One pass over every hexagon with recent demand, and its neighbours, for
+/// every switched-on profile.
 export const runSurgeCycle = async () => {
-  const settings = await getSurgeSettings({ fresh: true });
-  if (!settings.enabled) {
+  const profiles = await getSurgeProfiles({ fresh: true });
+  const keys = enabledProfileKeys(profiles);
+  if (keys.length === 0) {
     await writeActive(new Map());
     return { enabled: false, active: 0 };
   }
 
+  const resolution = profiles.default.resolution;
   const now = Date.now();
   const current = minuteBucket(now);
-  const buckets = Array.from({ length: settings.window_minutes }, (_, index) => current - index);
+  const windowOf = (key) => settingsForProfile(profiles, key).window_minutes;
+  const longestWindow = Math.max(profiles.default.window_minutes, ...keys.map(windowOf));
+  const bucketsFor = (minutes) => Array.from({ length: minutes }, (_, index) => current - index);
 
-  const demandHexes = await hexesWithDemand(settings, buckets);
+  const demandHexes = await hexesWithDemand(resolution, bucketsFor(longestWindow));
   const candidates = new Set(demandHexes.flatMap((hex) => gridDisk(hex, 1)));
-  const supplyByHex = candidates.size ? await freeDriversByHex(settings) : new Map();
+  const vehicleKeys = keys.filter((key) => key !== DEFAULT_PROFILE);
+  const supply = candidates.size
+    ? await freeDriversByHex(resolution, vehicleKeys)
+    : { all: new Map(), byType: new Map() };
   const previous = await readActive();
-  const holdMs = settings.hold_minutes * 60 * 1000;
   const next = new Map();
   const snapshot = new Map();
 
   for (const hex of candidates) {
     const area = gridDisk(hex, 1);
-    const demand = await countDemand(settings, area, buckets);
-    const supply = area.reduce((sum, cell) => sum + (supplyByHex.get(cell) || 0), 0);
-    const multiplier = multiplierForRatio(settings, demand, supply);
-    if (demand > 0) snapshot.set(hex, { demand, supply, at: now, resolution: settings.resolution });
-    const held = previous.get(hex);
-    const heldLive = held && held.until > now && held.resolution === settings.resolution;
+    // Profiles with the same window share one count.
+    const demandByWindow = new Map();
+    const demandOver = async (minutes) => {
+      if (!demandByWindow.has(minutes)) demandByWindow.set(minutes, await countDemand(resolution, area, bucketsFor(minutes)));
+      return demandByWindow.get(minutes);
+    };
+    const sumSupply = (counts) => area.reduce((sum, cell) => sum + (counts?.get(cell) || 0), 0);
 
-    if (multiplier > 1 && (!heldLive || multiplier >= held.multiplier)) {
-      // New or rising surge: (re)start the hold.
-      next.set(hex, { multiplier, until: now + holdMs, demand, supply, resolution: settings.resolution, since: heldLive ? held.since : now });
-    } else if (heldLive) {
-      // Demand eased: keep the surge until its hold runs out.
-      next.set(hex, { ...held, demand, supply });
+    // The demand layer on the driver map: every rider, every free driver.
+    const allSupply = sumSupply(supply.all);
+    const allDemand = await demandOver(profiles.default.window_minutes);
+    if (allDemand > 0) snapshot.set(hex, { demand: allDemand, supply: allSupply, at: now, resolution });
+
+    for (const key of keys) {
+      const settings = settingsForProfile(profiles, key);
+      const demand = await demandOver(settings.window_minutes);
+      const free = key === DEFAULT_PROFILE ? allSupply : sumSupply(supply.byType.get(key));
+      const multiplier = multiplierForRatio(settings, demand, free);
+      const field = activeField(key, hex);
+      const held = previous.get(field);
+      const heldLive = held && held.until > now && held.resolution === resolution;
+
+      if (multiplier > 1 && (!heldLive || multiplier >= held.multiplier)) {
+        // New or rising surge: (re)start the hold.
+        const until = now + settings.hold_minutes * 60 * 1000;
+        next.set(field, { multiplier, until, demand, supply: free, resolution, since: heldLive ? held.since : now });
+      } else if (heldLive) {
+        // Demand eased: keep the surge until its hold runs out.
+        next.set(field, { ...held, demand, supply: free });
+      }
     }
   }
 
-  // Surges whose area had no demand at all this cycle still run their hold out.
-  for (const [hex, held] of previous) {
-    if (!next.has(hex) && held.until > now && held.resolution === settings.resolution) next.set(hex, held);
+  // Surges whose area had no demand at all this cycle still run their hold out,
+  // as long as their profile is still on.
+  for (const [field, held] of previous) {
+    const [key] = field.split('|');
+    if (!next.has(field) && keys.includes(key) && held.until > now && held.resolution === resolution) {
+      next.set(field, held);
+    }
   }
 
   await writeActive(next);
@@ -333,8 +456,8 @@ export const runSurgeCycle = async () => {
   await writeSnapshot(snapshot).catch((error) => {
     console.error('[surge] snapshot not written', error?.message);
   });
-  pruneMemory(current - settings.window_minutes);
-  return { enabled: true, demandHexes: demandHexes.length, active: next.size };
+  pruneMemory(current - longestWindow);
+  return { enabled: true, profiles: keys.length, demandHexes: demandHexes.length, active: next.size };
 };
 
 const pruneMemory = (oldestBucket) => {
@@ -343,45 +466,116 @@ const pruneMemory = (oldestBucket) => {
   }
 };
 
-/// The automatic surge at a pickup, or multiplier 1.
-export const getSurgeAt = async (lat, lng) => {
-  const none = { multiplier: 1, ends_at: null, hex: null };
-  if (!isValidPoint(lat, lng)) return none;
-  const settings = await getSurgeSettings();
-  if (!settings.enabled) return none;
+const liveEntry = (entry, resolution, now) =>
+  entry && entry.until > now && entry.multiplier > 1 && entry.resolution === resolution ? entry : null;
 
-  const hex = latLngToCell(lat, lng, settings.resolution);
-  const result = await runRedisCommand((client) => client.hGet(ACTIVE_KEY, hex), { label: 'surge lookup' });
-  let entry = null;
-  if (result.ok && result.value) {
-    try {
-      entry = JSON.parse(result.value);
-    } catch {
-      entry = null;
+/**
+ * The automatic surge at a pickup. `profiles` holds every switched-on
+ * profile's surge there ({ multiplier, ends_at }); `multiplier` and `ends_at`
+ * at the top are default's, for anything that does not price by vehicle.
+ * Use surgeForVehicle() to read one vehicle's.
+ */
+export const getSurgeAt = async (lat, lng) => {
+  const none = { multiplier: 1, ends_at: null, hex: null, profiles: {} };
+  if (!isValidPoint(lat, lng)) return none;
+  const surgeProfiles = await getSurgeProfiles();
+  const keys = enabledProfileKeys(surgeProfiles);
+  if (keys.length === 0) return none;
+
+  const resolution = surgeProfiles.default.resolution;
+  const hex = latLngToCell(lat, lng, resolution);
+  const fields = keys.map((key) => activeField(key, hex));
+  // Before surge was per vehicle, default's field was the bare hexagon.
+  const legacy = surgeProfiles.default.enabled ? [hex] : [];
+  const result = await runRedisCommand((client) => client.hmGet(ACTIVE_KEY, [...fields, ...legacy]), { label: 'surge lookup' });
+
+  const raw = new Map();
+  if (result.ok) {
+    const values = result.value || [];
+    [...fields, ...legacy].forEach((field, index) => {
+      if (values[index]) raw.set(field.includes('|') ? field : activeField(DEFAULT_PROFILE, field), values[index]);
+    });
+  }
+  const now = Date.now();
+  const byProfile = {};
+  for (const key of keys) {
+    let entry = null;
+    if (result.ok) {
+      try {
+        entry = raw.has(activeField(key, hex)) ? JSON.parse(raw.get(activeField(key, hex))) : null;
+      } catch {
+        entry = null;
+      }
+    } else {
+      entry = memory.active.get(activeField(key, hex)) || null;
     }
-  } else if (!result.ok) {
-    entry = memory.active.get(hex) || null;
+    const live = liveEntry(entry, resolution, now);
+    if (live) byProfile[key] = { multiplier: live.multiplier, ends_at: new Date(live.until).toISOString() };
   }
 
-  if (!entry || entry.until <= Date.now() || entry.resolution !== settings.resolution) return { ...none, hex };
-  return { multiplier: entry.multiplier, ends_at: new Date(entry.until).toISOString(), hex };
+  const fallback = byProfile[DEFAULT_PROFILE];
+  return {
+    multiplier: fallback?.multiplier || 1,
+    ends_at: fallback?.ends_at || null,
+    hex,
+    profiles: byProfile,
+  };
+};
+
+/** One vehicle type's surge from a getSurgeAt() result: { multiplier, ends_at }. */
+export const surgeForVehicle = (surgeAt, profiles, vehicleTypeId) => {
+  const key = profileKeyForVehicle(profiles, vehicleTypeId);
+  const entry = surgeAt?.profiles?.[key];
+  if (!entry || !settingsForProfile(profiles, key).enabled) return { multiplier: 1, ends_at: null };
+  return { multiplier: Math.min(ABSOLUTE_MAX_MULTIPLIER, Math.max(1, entry.multiplier)), ends_at: entry.ends_at };
+};
+
+/// The profiles that price a set of vehicle types; default when none given.
+const profileKeysFor = (profiles, vehicleTypeIds = []) => {
+  const ids = (vehicleTypeIds || []).filter(Boolean).map(String);
+  if (ids.length === 0) return [DEFAULT_PROFILE];
+  return [...new Set(ids.map((id) => profileKeyForVehicle(profiles, id)))];
 };
 
 /**
  * Active surge hexagons for a map - the driver app's surge view and the admin
  * page. Each carries its outline, so a client can draw it without H3.
+ *
+ * With `vehicleTypeIds` (a driver's vehicles) only the profiles that price
+ * those vehicles count, and a hexagon shows the highest of them. Without, every
+ * profile's surges are listed separately, each with its `vehicle_type_id`
+ * (null for default) - the admin page.
  */
-export const listActiveSurges = async ({ lat, lng, radiusKm = 15 } = {}) => {
+export const listActiveSurges = async ({ lat, lng, radiusKm = 15, vehicleTypeIds = null } = {}) => {
   const now = Date.now();
-  const active = await readActive();
+  const [profiles, active] = await Promise.all([getSurgeProfiles(), readActive()]);
+  const enabled = new Set(enabledProfileKeys(profiles));
+  const wanted = vehicleTypeIds ? new Set(profileKeysFor(profiles, vehicleTypeIds)) : null;
   const centre = isValidPoint(lat, lng) ? [lat, lng] : null;
 
-  return [...active]
-    .filter(([, entry]) => entry.until > now && entry.multiplier > 1)
-    .map(([hex, entry]) => {
+  const rows = [];
+  for (const [field, entry] of active) {
+    const [key, hex] = field.split('|');
+    if (!enabled.has(key) || (wanted && !wanted.has(key))) continue;
+    if (!liveEntry(entry, profiles.default.resolution, now)) continue;
+    rows.push({ key, hex, entry });
+  }
+
+  // For a driver: one row per hexagon, the best-paying profile.
+  const picked = wanted
+    ? [...rows.reduce((best, row) => {
+      const current = best.get(row.hex);
+      if (!current || row.entry.multiplier > current.entry.multiplier) best.set(row.hex, row);
+      return best;
+    }, new Map()).values()]
+    : rows;
+
+  return picked
+    .map(({ key, hex, entry }) => {
       const [hexLat, hexLng] = cellToLatLng(hex);
       return {
         hex,
+        vehicle_type_id: key === DEFAULT_PROFILE ? null : key,
         multiplier: entry.multiplier,
         ends_at: new Date(entry.until).toISOString(),
         ends_in_minutes: Math.max(0, Math.ceil((entry.until - now) / 60000)),
@@ -413,22 +607,37 @@ export const demandLevelFor = (settings, demand, supply, multiplier = 1) => {
   return 'normal';
 };
 
-const describeHex = (settings, hex, active, snapshot, now) => {
-  const surge = active.get(hex);
-  const live = surge && surge.until > now && surge.multiplier > 1 && surge.resolution === settings.resolution;
+/**
+ * One hexagon for the driver map. `keys` are the profiles pricing the
+ * driver's vehicles; the hexagon shows the highest surge among them, and
+ * `profile_multipliers` keeps each one's for working out a vehicle's fare.
+ */
+const describeHex = (profiles, keys, hex, active, snapshot, now) => {
+  const settings = profiles.default;
+  const resolution = settings.resolution;
+  const profileMultipliers = {};
+  let best = null;
+  for (const key of keys) {
+    const live = liveEntry(active.get(activeField(key, hex)), resolution, now);
+    if (!live) continue;
+    profileMultipliers[key] = live.multiplier;
+    if (!best || live.multiplier > best.multiplier) best = live;
+  }
+
   const counts = snapshot.get(hex);
-  const fresh = counts && counts.resolution === settings.resolution;
-  const demand = fresh ? counts.demand : (live ? surge.demand : 0);
-  const supply = fresh ? counts.supply : (live ? surge.supply : 0);
-  const multiplier = live ? surge.multiplier : 1;
+  const fresh = counts && counts.resolution === resolution;
+  const demand = fresh ? counts.demand : (best ? best.demand : 0);
+  const supply = fresh ? counts.supply : (best ? best.supply : 0);
+  const multiplier = best ? best.multiplier : 1;
 
   return {
     multiplier,
-    surge_ends_at: live ? new Date(surge.until).toISOString() : null,
-    surge_ends_in_minutes: live ? Math.max(0, Math.ceil((surge.until - now) / 60000)) : 0,
+    surge_ends_at: best ? new Date(best.until).toISOString() : null,
+    surge_ends_in_minutes: best ? Math.max(0, Math.ceil((best.until - now) / 60000)) : 0,
     demand_level: demandLevelFor(settings, demand, supply, multiplier),
     demand,
     free_drivers: supply,
+    profile_multipliers: profileMultipliers,
   };
 };
 
@@ -437,28 +646,38 @@ const describeHex = (settings, hex, active, snapshot, now) => {
  *
  * Reads only what the engine already wrote (active surges and the last
  * cycle's snapshot): looking at the map is never counted as demand and never
- * changes a price. The multiplier is the very value rider quotes read.
+ * changes a price. The multiplier is the very value rider quotes read - for
+ * the driver's own vehicles (`vehicleTypeIds`).
  */
-export const listOpportunityCells = async ({ lat, lng, radiusKm = 8, limit = 150, gridRings = GRID_RINGS } = {}) => {
-  const settings = await getSurgeSettings();
+export const listOpportunityCells = async ({ lat, lng, radiusKm = 8, limit = 150, gridRings = GRID_RINGS, vehicleTypeIds = [] } = {}) => {
+  const profiles = await getSurgeProfiles();
+  const settings = profiles.default;
   const centre = isValidPoint(lat, lng) ? [lat, lng] : null;
+  const keys = profileKeysFor(profiles, vehicleTypeIds).filter((key) => settingsForProfile(profiles, key).enabled);
+  const maxMultiplier = keys.length
+    ? Math.max(...keys.map((key) => settingsForProfile(profiles, key).max_multiplier))
+    : settings.max_multiplier;
 
   // The hexagons around the driver, whatever their demand - the grid a driver
   // sees on Rapido or Uber even when nothing is surging. Without it a quiet
   // map was blank, which reads as broken rather than as "normal here".
   const grid = centre ? new Set(gridDisk(latLngToCell(centre[0], centre[1], settings.resolution), gridRings)) : new Set();
 
-  if (!settings.enabled) {
-    return { enabled: false, cells: [...grid].map((hex) => normalCell(hex, centre)).slice(0, limit) };
+  if (keys.length === 0) {
+    return { enabled: false, max_multiplier: maxMultiplier, cells: [...grid].map((hex) => normalCell(hex, centre)).slice(0, limit) };
   }
 
   const now = Date.now();
   const [active, snapshot] = await Promise.all([readActive(), readSnapshot()]);
-  const hexes = new Set([...active.keys(), ...snapshot.keys(), ...grid]);
+  const hexes = new Set([
+    ...[...active.keys()].map((field) => field.split('|')[1]).filter(Boolean),
+    ...snapshot.keys(),
+    ...grid,
+  ]);
 
   const cells = [];
   for (const hex of hexes) {
-    const info = describeHex(settings, hex, active, snapshot, now);
+    const info = describeHex(profiles, keys, hex, active, snapshot, now);
     // Quiet hexagons are only drawn as part of the grid around the driver.
     if (info.multiplier <= 1 && info.demand_level === 'normal' && !grid.has(hex)) continue;
 
@@ -476,7 +695,7 @@ export const listOpportunityCells = async ({ lat, lng, radiusKm = 8, limit = 150
   }
 
   cells.sort((a, b) => (a.distance_km ?? 0) - (b.distance_km ?? 0));
-  return { enabled: true, cells: cells.slice(0, limit) };
+  return { enabled: true, max_multiplier: maxMultiplier, cells: cells.slice(0, limit) };
 };
 
 /**
@@ -497,19 +716,21 @@ const normalCell = (hex, centre) => {
     demand_level: 'normal',
     demand: 0,
     free_drivers: 0,
+    profile_multipliers: {},
     distance_km: centre ? round2(greatCircleDistance(centre, [hexLat, hexLng], 'km')) : null,
   };
 };
 
 /** The same description for one point - used for airports. */
-export const describeOpportunityAt = async (lat, lng) => {
-  const settings = await getSurgeSettings();
-  if (!settings.enabled || !isValidPoint(lat, lng)) {
+export const describeOpportunityAt = async (lat, lng, vehicleTypeIds = []) => {
+  const profiles = await getSurgeProfiles();
+  const keys = profileKeysFor(profiles, vehicleTypeIds).filter((key) => settingsForProfile(profiles, key).enabled);
+  if (keys.length === 0 || !isValidPoint(lat, lng)) {
     return { multiplier: 1, surge_ends_in_minutes: 0, demand_level: 'normal', demand: 0, free_drivers: 0 };
   }
-  const hex = latLngToCell(lat, lng, settings.resolution);
+  const hex = latLngToCell(lat, lng, profiles.default.resolution);
   const [active, snapshot] = await Promise.all([readActive(), readSnapshot()]);
-  const { surge_ends_at: _unused, ...info } = describeHex(settings, hex, active, snapshot, Date.now());
+  const { surge_ends_at: _unused, profile_multipliers: _alsoUnused, ...info } = describeHex(profiles, keys, hex, active, snapshot, Date.now());
   return { hex, ...info };
 };
 

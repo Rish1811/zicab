@@ -18,7 +18,7 @@ import { User } from '../user/models/User.js';
 import { UserWallet } from '../user/models/UserWallet.js';
 import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
-import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, getSurgeSettings, surgeAppliesToVehicle } from './surgeService.js';
+import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, getSurgeProfiles, surgeForVehicle } from './surgeService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
 import { resolveBiddingPolicy } from './biddingPolicyService.js';
@@ -1276,18 +1276,21 @@ export const createRideRecord = async ({
 
   // The surge this fare was quoted under, kept on the ride so the driver's
   // offer can say "1.2x surge ride" and reports can separate surge income. The
-  // fare already includes it. A current app sends the multiplier it priced
-  // with; otherwise the pickup's surge now is the best record there is.
-  //
-  // A vehicle the admin left out of surge was quoted at the normal fare, so it
-  // is recorded as no surge whatever an older app sends.
+  // fare already includes it. Surge is set per vehicle type, so it is the
+  // booked vehicle's surge at the pickup - read here rather than taken from
+  // the app, whose older builds send one multiplier for every vehicle.
+  // `surgeMultiplier` from the app is only used if the vehicle is still
+  // surging, to keep the value the fare was quoted with.
   const pickupSurge = await getSurgeAt(pickupCoords?.[1], pickupCoords?.[0]).catch(() => null);
-  const surgeSettings = await getSurgeSettings().catch(() => null);
+  const surgeProfiles = await getSurgeProfiles().catch(() => null);
+  const vehicleSurge = surgeProfiles
+    ? surgeForVehicle(pickupSurge, surgeProfiles, primaryVehicleTypeId).multiplier
+    : 1;
   const quotedSurge = Number(surgeMultiplier);
-  const rideSurgeMultiplier = surgeAppliesToVehicle(surgeSettings, primaryVehicleTypeId)
+  const rideSurgeMultiplier = vehicleSurge > 1
     ? Math.min(
       ABSOLUTE_MAX_MULTIPLIER,
-      Math.max(1, Number.isFinite(quotedSurge) && quotedSurge >= 1 ? quotedSurge : Number(pickupSurge?.multiplier) || 1),
+      Number.isFinite(quotedSurge) && quotedSurge > 1 ? Math.min(quotedSurge, vehicleSurge) : vehicleSurge,
     )
     : 1;
   const rideSurge = {

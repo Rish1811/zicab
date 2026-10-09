@@ -36,7 +36,7 @@ import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../ser
 import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
 import { listServiceStores, listSetPrices, listZones } from '../../admin/services/adminService.js';
 import { findZoneByPickup } from '../../services/matchingService.js';
-import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, getSurgeSettings, recordSurgeDemand } from '../../services/surgeService.js';
+import { getSurgeAt, getSurgeProfiles, recordSurgeDemand, surgeForVehicle } from '../../services/surgeService.js';
 import { verifyAccessToken } from '../../services/tokenService.js';
 import { resolveRouteCached } from '../../services/routeService.js';
 import {
@@ -4611,19 +4611,19 @@ export const getSetPrices = asyncHandler(async (req, res) => {
   // zones no longer matters.
   // Every located quote is a rider wanting a ride here: it is the demand the
   // automatic surge measures, and the pickup's hexagon sets its multiplier.
-  let surge = { multiplier: 1, ends_at: null, hex: null };
+  let surge = { multiplier: 1, ends_at: null, hex: null, profiles: {} };
   if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
     recordSurgeDemand({ lat: latitude, lng: longitude, requester: surgeRequester(req) })
       .catch((error) => console.error('Surge demand not recorded', error.message));
     surge = await getSurgeAt(latitude, longitude).catch(() => surge);
   }
-  const hikeMultiplier = Math.min(ABSOLUTE_MAX_MULTIPLIER, Math.max(1, surge.multiplier));
-  // The admin can limit surge to some vehicles; the rest keep the normal fare.
-  const surgeSettings = await getSurgeSettings();
+  // Surge is set per vehicle type: each row is priced with its own vehicle's.
+  const surgeProfiles = await getSurgeProfiles();
+  const multiplierForVehicle = (vehicleTypeId) => surgeForVehicle(surge, surgeProfiles, vehicleTypeId).multiplier;
 
   const [zoneRows, fallback] = await Promise.all([
-    listSetPrices({ ...query, zone_id: zoneId }, null, { hikeMultiplier, surgeSettings }),
-    listSetPrices({ ...query, zone_id: 'none' }, null, { hikeMultiplier, surgeSettings }),
+    listSetPrices({ ...query, zone_id: zoneId }, null, { multiplierForVehicle }),
+    listSetPrices({ ...query, zone_id: 'none' }, null, { multiplierForVehicle }),
   ]);
   const data = { ...zoneRows, results: [...(zoneRows.results || []), ...(fallback.results || [])] };
 
@@ -4633,21 +4633,35 @@ export const getSetPrices = asyncHandler(async (req, res) => {
 
   const results = pickTariffPerVehicle(data.results, zoneId, serviceLocationId, transportType);
 
+  // Each vehicle's surge, for a badge on that vehicle alone. The top-level
+  // multiplier is the highest of them, so an app that shows one badge for the
+  // whole list never hides a surge a rider would pay.
+  const byVehicle = {};
+  for (const row of results) {
+    const id = String(row.type_id || row.vehicle_type?._id || row.vehicle_type || '');
+    if (!id || byVehicle[id]) continue;
+    const vehicleSurge = surgeForVehicle(surge, surgeProfiles, id);
+    if (vehicleSurge.multiplier > 1) byVehicle[id] = vehicleSurge;
+  }
+  const highest = Object.values(byVehicle).reduce(
+    (best, item) => (item.multiplier > best.multiplier ? item : best),
+    { multiplier: 1, ends_at: null },
+  );
+
   res.status(200).json({
     success: true,
     ...data,
     results,
     zone_id: zoneId,
     zone_name: zone?.name || null,
-    price_hike_multiplier: hikeMultiplier,
-    // For a "1.10x surge" label and its countdown in the apps.
+    price_hike_multiplier: highest.multiplier,
+    // For a "1.10x surge" label and its countdown in the apps. Each row's own
+    // price_hike_multiplier is the one it was priced with.
     surge: {
-      multiplier: hikeMultiplier,
-      source: hikeMultiplier > 1 ? 'automatic' : 'none',
-      ends_at: hikeMultiplier > 1 ? surge.ends_at : null,
-      // Empty = every vehicle. Otherwise only these are surged; each row's
-      // price_hike_multiplier says which multiplier it was priced under.
-      vehicle_type_ids: surgeSettings.vehicle_type_ids,
+      multiplier: highest.multiplier,
+      source: highest.multiplier > 1 ? 'automatic' : 'none',
+      ends_at: highest.ends_at,
+      by_vehicle: byVehicle,
     },
   });
 });

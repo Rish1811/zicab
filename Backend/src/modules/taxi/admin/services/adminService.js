@@ -77,7 +77,7 @@ import { sendEmail } from '../../services/mailService.js';
 import { getActivePaymentGateway, normalizePaymentSettingsPayload } from '../../services/paymentGatewayService.js';
 import { signAccessToken } from '../../services/tokenService.js';
 import { applyPriceHikeToSetPrice, getActivePriceHikeMultiplier } from '../../services/priceHikeService.js';
-import { getSurgeSettings, listActiveSurges, surgeForVehicle, updateSurgeSettings } from '../../services/surgeService.js';
+import { DEFAULT_PROFILE, getSurgeProfiles, listActiveSurges, resetVehicleSurgeSettings, updateSurgeSettings } from '../../services/surgeService.js';
 import { getBidRideSettings } from '../../services/transportSettingsService.js';
 import { resolveCatalogDispatchType } from '../../services/biddingPolicyService.js';
 import { PriceHike } from '../models/PriceHike.js';
@@ -7601,15 +7601,15 @@ export const listSetPrices = async (queryArgs = {}, currentAdmin = null, options
   // rider catalog. A request with no pickup has no area to surge, so 1. The
   // scheduled Price Hike time slots are retired - surge follows demand only.
   //
-  // `options.surgeSettings` carries the vehicles the admin limited surge to;
-  // the other vehicles' rows stay at the normal fare.
+  // Surge is set per vehicle type, so `options.multiplierForVehicle(id)` gives
+  // each row its own; `options.hikeMultiplier` is one value for every row.
   const hikeMultiplier = Number(options.hikeMultiplier) > 0 ? Number(options.hikeMultiplier) : 1;
+  const rowMultiplier = (row) => (typeof options.multiplierForVehicle === 'function'
+    ? Number(options.multiplierForVehicle(setPriceVehicleId(row))) || 1
+    : hikeMultiplier);
   const quotedResults = currentAdmin
     ? pagedRows.map((row) => row.result)
-    : pagedRows.map((row) => applyPriceHikeToSetPrice(
-      row.result,
-      surgeForVehicle(options.surgeSettings, setPriceVehicleId(row.result), hikeMultiplier),
-    ));
+    : pagedRows.map((row) => applyPriceHikeToSetPrice(row.result, rowMultiplier(row.result)));
 
   return {
     results: quotedResults,
@@ -12193,24 +12193,57 @@ export const deletePriceHike = async (id, currentAdmin = null) => {
 
 /// Automatic surge settings and the hexagons surging right now, for the
 /// Price Hike page.
+///
+/// Surge is set per vehicle type: `settings` is the default every vehicle
+/// without its own follows, and `vehicles` lists every vehicle type with the
+/// settings that price it now - its own (`has_own_settings`) or default's.
+const automaticSurgeState = async () => {
+  const [profiles, vehicles, active] = await Promise.all([
+    getSurgeProfiles({ fresh: true }),
+    Vehicle.find({}).select('name status active transport_type').sort({ name: 1 }).lean(),
+    listActiveSurges({ radiusKm: Infinity }),
+  ]);
+
+  return {
+    settings: profiles.default,
+    vehicles: vehicles.map((vehicle) => {
+      const id = String(vehicle._id);
+      const own = profiles.vehicles.get(id);
+      return {
+        vehicle_type_id: id,
+        name: vehicle.name || 'Vehicle',
+        transport_type: vehicle.transport_type || '',
+        active: vehicle.active !== false && Number(vehicle.status ?? 1) !== 0,
+        has_own_settings: Boolean(own),
+        settings: own || { ...profiles.default, vehicle_type_id: null },
+      };
+    }),
+    default_profile: DEFAULT_PROFILE,
+    active,
+  };
+};
+
 export const getAutomaticSurge = async (currentAdmin = null) => {
   if (currentAdmin) {
     assertAdminPermission(currentAdmin, 'set_prices.view', 'price hikes');
   }
-
-  return {
-    settings: await getSurgeSettings({ fresh: true }),
-    active: await listActiveSurges({ radiusKm: Infinity }),
-  };
+  return automaticSurgeState();
 };
 
+/// Saves the default settings, or one vehicle type's with `vehicle_type_id`.
 export const updateAutomaticSurge = async (payload, currentAdmin = null) => {
   if (currentAdmin) {
     assertAdminPermission(currentAdmin, 'set_prices.view', 'price hikes');
   }
+  await updateSurgeSettings(payload || {});
+  return automaticSurgeState();
+};
 
-  return {
-    settings: await updateSurgeSettings(payload || {}),
-    active: await listActiveSurges({ radiusKm: Infinity }),
-  };
+/// A vehicle type stops using its own settings and follows default again.
+export const resetVehicleAutomaticSurge = async (vehicleTypeId, currentAdmin = null) => {
+  if (currentAdmin) {
+    assertAdminPermission(currentAdmin, 'set_prices.view', 'price hikes');
+  }
+  await resetVehicleSurgeSettings(vehicleTypeId);
+  return automaticSurgeState();
 };

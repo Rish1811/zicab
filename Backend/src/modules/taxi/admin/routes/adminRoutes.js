@@ -83,6 +83,7 @@ import {
   getPriceHikes,
   getAutomaticSurge,
   updateAutomaticSurge,
+  resetVehicleAutomaticSurge,
   createPriceHike,
   updatePriceHike,
   deletePriceHike,
@@ -560,6 +561,7 @@ adminRouter.use('/', promotionsRouter);
 adminRouter.get('/admin/price-hikes', getPriceHikes);
 adminRouter.get('/admin/surge', getAutomaticSurge);
 adminRouter.patch('/admin/surge', updateAutomaticSurge);
+adminRouter.delete('/admin/surge/vehicles/:vehicleTypeId', resetVehicleAutomaticSurge);
 adminRouter.post('/admin/price-hikes', createPriceHike);
 adminRouter.patch('/admin/price-hikes/:id', updatePriceHike);
 adminRouter.delete('/admin/price-hikes/:id', deletePriceHike);

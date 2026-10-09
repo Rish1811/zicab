@@ -127,6 +127,7 @@ import {
 } from "../controllers/driverController.js";
 import { triggerDriverSosAlert } from '../../safety/controllers/safetyController.js';
 import { listActiveSurges } from '../../services/surgeService.js';
+import { Driver } from '../models/Driver.js';
 import { getOpportunityMap } from '../../services/opportunityMapService.js';
 
 export const driverRouter = Router();
@@ -646,7 +647,10 @@ driverRouter.get(
     const lat = Number(req.query.lat ?? req.query.latitude);
     const lng = Number(req.query.lng ?? req.query.longitude);
     const radiusKm = Math.min(50, Math.max(1, Number(req.query.radius_km) || 15));
-    const results = await listActiveSurges({ lat, lng, radiusKm });
+    // Surge is set per vehicle type: show the driver their own vehicles'.
+    const driver = await Driver.findById(req.auth.sub).select("vehicleTypeId vehicleTypeIds").lean();
+    const vehicleTypeIds = [driver?.vehicleTypeId, ...(driver?.vehicleTypeIds || [])].filter(Boolean).map(String);
+    const results = await listActiveSurges({ lat, lng, radiusKm, vehicleTypeIds });
     res.json({ success: true, data: { results, refreshed_at: new Date().toISOString() } });
   }),
 );

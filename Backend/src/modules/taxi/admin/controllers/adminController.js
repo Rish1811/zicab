@@ -1843,3 +1843,6 @@ export const getAutomaticSurge = asyncHandler(async (req, res) =>
 export const updateAutomaticSurge = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateAutomaticSurge(req.body, req.auth?.admin)),
 );
+export const resetVehicleAutomaticSurge = asyncHandler(async (req, res) =>
+  ok(res, await adminService.resetVehicleAutomaticSurge(req.params.vehicleTypeId, req.auth?.admin)),
+);

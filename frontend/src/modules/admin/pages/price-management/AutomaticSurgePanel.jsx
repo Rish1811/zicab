@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { GoogleMap, PolygonF, OverlayViewF, OVERLAY_MOUSE_TARGET } from '@react-google-maps/api';
-import { Loader2, RefreshCw, Zap } from 'lucide-react';
+import { Loader2, RefreshCw, RotateCcw, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../../shared/api/axiosInstance';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../utils/googleMaps';
@@ -10,8 +10,10 @@ const inputClass =
 const labelClass = 'block text-[10px] font-semibold text-gray-500 mb-1';
 const BENGALURU = { lat: 12.9716, lng: 77.5946 };
 const REFRESH_MS = 60 * 1000;
+const DEFAULT_TAB = 'default';
 
 // Each setting, with the help text an admin needs to set it sensibly.
+// `shared` ones are the same for every vehicle and only edited on Default.
 const FIELDS = [
   { key: 'max_multiplier', label: 'Maximum surge (x)', step: 0.05, min: 1, max: 2, help: 'Legal ceiling is 2x the base fare; some states allow less.' },
   { key: 'min_demand', label: 'Min riders to trigger', step: 1, min: 1, help: 'Distinct riders asking for a price in an area before it can surge.' },
@@ -20,8 +22,9 @@ const FIELDS = [
   { key: 'ratio_step', label: 'Riders per driver per step', step: 0.1, min: 0.1, help: 'How much busier an area must get for the next step.' },
   { key: 'window_minutes', label: 'Demand window (min)', step: 1, min: 2, max: 60, help: 'How far back rider demand is counted.' },
   { key: 'hold_minutes', label: 'Hold surge for (min)', step: 1, min: 1, max: 60, help: 'A surge lasts at least this long, so prices do not flicker.' },
-  { key: 'resolution', label: 'Area size', type: 'select', help: 'Size of each hexagon on the map.' },
+  { key: 'resolution', label: 'Area size', type: 'select', shared: true, help: 'Size of each hexagon on the map. Shared by every vehicle.' },
 ];
+const EDITABLE_KEYS = ['enabled', ...FIELDS.map((field) => field.key)];
 
 const RESOLUTIONS = [
   { value: 7, label: 'Large (~5 km²)' },
@@ -37,25 +40,30 @@ const surgeColour = (multiplier) => {
   return '#F87171';
 };
 
+const pickEditable = (settings = {}) => Object.fromEntries(EDITABLE_KEYS.map((key) => [key, settings[key]]));
+const sameValues = (a = {}, b = {}) => EDITABLE_KEYS.every((key) => String(a[key] ?? '') === String(b[key] ?? ''));
+
+/**
+ * Automatic surge, set per vehicle type. "Default" prices every vehicle that
+ * has no settings of its own; giving a vehicle its own (its tab, then Save)
+ * makes it surge on its own drivers and limits. Each tab saves only itself,
+ * and unsaved edits on one tab survive switching to another.
+ */
 const AutomaticSurgePanel = () => {
   const { isLoaded } = useBaseGoogleMapsLoader();
-  const [settings, setSettings] = useState(null);
+  const [state, setState] = useState(null);
   const [active, setActive] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [vehicles, setVehicles] = useState([]);
-  // 'all' or 'some'. Kept apart from the id list so choosing "Only these" with
-  // nothing ticked yet is not mistaken for "all".
-  const [scope, setScope] = useState('all');
+  const [tab, setTab] = useState(DEFAULT_TAB);
+  // Unsaved edits per tab: { [tabKey]: settings }.
+  const [drafts, setDrafts] = useState({});
 
   // The minute-by-minute refresh only updates the live areas: replacing the
-  // settings too would wipe out edits the admin has not saved yet.
+  // settings too could overwrite what is on screen while it is being edited.
   const apply = (payload, { areasOnly = false } = {}) => {
     const data = payload?.data || payload || {};
-    if (data.settings && !areasOnly) {
-      setSettings(data.settings);
-      setScope((data.settings.vehicle_type_ids || []).length ? 'some' : 'all');
-    }
+    if (data.settings && !areasOnly) setState({ settings: data.settings, vehicles: data.vehicles || [] });
     setActive(Array.isArray(data.active) ? data.active : []);
   };
 
@@ -77,40 +85,46 @@ const AutomaticSurgePanel = () => {
     return () => clearInterval(timer);
   }, [load]);
 
-  useEffect(() => {
-    api.get('/admin/types/vehicle-types/list')
-      .then((res) => {
-        const body = res?.data ?? res;
-        const list = body?.data?.results || body?.results || body?.data || body || [];
-        setVehicles(
-          (Array.isArray(list) ? list : [])
-            .filter((v) => v && (v._id || v.id))
-            .map((v) => ({ id: String(v._id || v.id), name: v.name || 'Vehicle', active: v.active !== false && v.status !== 'inactive' }))
-            .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)),
-        );
-      })
-      .catch((err) => console.error('Fetch vehicle types failed:', err));
-  }, []);
+  const vehicles = useMemo(
+    () => [...(state?.vehicles || [])].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)),
+    [state],
+  );
+  const vehicle = tab === DEFAULT_TAB ? null : vehicles.find((item) => item.vehicle_type_id === tab) || null;
+  const isDefault = tab === DEFAULT_TAB;
+  const hasOwn = isDefault || Boolean(vehicle?.has_own_settings);
 
-  const chosenIds = settings?.vehicle_type_ids || [];
-  const toggleVehicle = (id) =>
-    setSettings((prev) => {
-      const ids = prev.vehicle_type_ids || [];
-      return { ...prev, vehicle_type_ids: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id] };
+  // What is saved for this tab: default's, or the vehicle's own - or, for a
+  // vehicle still following default, default's values as a starting point.
+  const saved = useMemo(() => {
+    if (!state) return null;
+    return pickEditable(isDefault ? state.settings : (vehicle?.settings || state.settings));
+  }, [state, isDefault, vehicle]);
+  const values = drafts[tab] || saved;
+  const dirty = Boolean(drafts[tab]) && !sameValues(drafts[tab], saved);
+
+  const setField = (key, value) =>
+    setDrafts((prev) => ({ ...prev, [tab]: { ...(prev[tab] || saved), [key]: value } }));
+
+  const resetTab = () =>
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[tab];
+      return next;
     });
 
-  const save = async (patch = {}) => {
-    const next = { ...settings, ...patch };
-    // "All vehicles" is saved as an empty list.
-    next.vehicle_type_ids = scope === 'all' ? [] : (next.vehicle_type_ids || []);
-    if (scope === 'some' && next.vehicle_type_ids.length === 0) {
-      toast.error('Tick at least one vehicle, or choose All vehicles');
-      return;
+  const tabName = isDefault ? 'Default' : vehicle?.name || 'this vehicle';
+
+  const save = async () => {
+    const payload = { ...values };
+    if (!isDefault) {
+      payload.vehicle_type_id = tab;
+      delete payload.resolution;
     }
     try {
       setSaving(true);
-      apply(await api.patch('/admin/surge', next));
-      toast.success(next.enabled ? 'Automatic surge saved' : 'Automatic surge is off');
+      apply(await api.patch('/admin/surge', payload));
+      resetTab();
+      toast.success(`${tabName} surge saved`);
     } catch (err) {
       console.error('Save automatic surge failed:', err);
       toast.error(err?.response?.data?.message || 'Could not save automatic surge');
@@ -119,14 +133,36 @@ const AutomaticSurgePanel = () => {
     }
   };
 
-  const mapCenter = useMemo(() => {
-    if (!active.length) return BENGALURU;
-    const lat = active.reduce((sum, area) => sum + area.center.lat, 0) / active.length;
-    const lng = active.reduce((sum, area) => sum + area.center.lng, 0) / active.length;
-    return { lat, lng };
-  }, [active]);
+  const followDefault = async () => {
+    if (!vehicle || !window.confirm(`${vehicle.name} will stop using its own surge settings and follow Default again. Continue?`)) return;
+    try {
+      setSaving(true);
+      apply(await api.delete(`/admin/surge/vehicles/${vehicle.vehicle_type_id}`));
+      resetTab();
+      toast.success(`${vehicle.name} now follows Default`);
+    } catch (err) {
+      console.error('Reset vehicle surge failed:', err);
+      toast.error(err?.response?.data?.message || 'Could not reset this vehicle');
+    } finally {
+      setSaving(false);
+    }
+  };
 
-  if (loading || !settings) {
+  // Areas surging under the settings this tab shows: a vehicle that follows
+  // default surges wherever default does.
+  const tabAreas = useMemo(() => {
+    const key = hasOwn && !isDefault ? tab : null;
+    return active.filter((area) => (area.vehicle_type_id || null) === key);
+  }, [active, tab, hasOwn, isDefault]);
+
+  const mapCenter = useMemo(() => {
+    if (!tabAreas.length) return BENGALURU;
+    const lat = tabAreas.reduce((sum, area) => sum + area.center.lat, 0) / tabAreas.length;
+    const lng = tabAreas.reduce((sum, area) => sum + area.center.lng, 0) / tabAreas.length;
+    return { lat, lng };
+  }, [tabAreas]);
+
+  if (loading || !state || !values) {
     return (
       <div className="bg-white border border-gray-100 rounded-lg p-6 mb-4 flex items-center justify-center">
         <Loader2 size={18} className="animate-spin text-indigo-500" />
@@ -134,40 +170,90 @@ const AutomaticSurgePanel = () => {
     );
   }
 
+  const ownCount = vehicles.filter((item) => item.has_own_settings).length;
+  const tabButton = (key, label, { on, own, muted } = {}) => (
+    <button
+      key={key}
+      type="button"
+      onClick={() => setTab(key)}
+      className={`shrink-0 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors ${
+        tab === key ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
+      } ${muted ? 'opacity-60' : ''}`}
+      title={own ? 'Has its own surge settings' : 'Follows Default'}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+      {label}
+      {drafts[key] && <span className="text-amber-500" title="Unsaved changes">•</span>}
+    </button>
+  );
+
   return (
     <div className="bg-white border border-gray-100 rounded-lg p-3 shadow-sm mb-5">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 mb-2">
+      <div className="mb-2">
+        <h2 className="text-sm font-bold text-[#1E293B] flex items-center gap-1.5">
+          <Zap size={14} className="text-amber-500" /> Automatic surge
+        </h2>
+        <p className="text-[11px] text-gray-500 mt-0.5 max-w-3xl">
+          Like Rapido and Uber: the city is split into hexagons, and every minute each one compares the
+          riders asking for a price there with the free drivers nearby. Every vehicle follows <b>Default</b>{' '}
+          unless you give it its own settings: then it surges on its own drivers and limits, and saving one
+          vehicle never changes another.
+        </p>
+      </div>
+
+      {/* Vehicle tabs */}
+      <div className="flex gap-1.5 overflow-x-auto pb-2 border-b border-gray-100">
+        {tabButton(DEFAULT_TAB, 'Default', { on: state.settings.enabled, own: true })}
+        {vehicles.map((item) =>
+          tabButton(item.vehicle_type_id, item.name, {
+            on: item.has_own_settings ? item.settings.enabled : state.settings.enabled,
+            own: item.has_own_settings,
+            muted: !item.active,
+          }),
+        )}
+      </div>
+      <p className="text-[10px] text-gray-400 mt-1">
+        Green dot = surge on. {ownCount} of {vehicles.length} vehicles have their own settings; the rest follow Default.
+      </p>
+
+      <div className="mt-3 flex flex-col lg:flex-row lg:items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-bold text-[#1E293B] flex items-center gap-1.5">
-            <Zap size={14} className="text-amber-500" /> Automatic surge
-          </h2>
-          <p className="text-[11px] text-gray-500 mt-0.5 max-w-3xl">
-            Like Rapido and Uber: the city is split into hexagons, and every minute each one compares the
-            riders asking for a price there with the free drivers nearby. Busy areas get a small surge
-            that holds for a while, then eases off. While this is off, fares never surge.
+          <p className="text-xs font-bold text-gray-800">
+            {isDefault ? 'Default - every vehicle without its own settings' : vehicle?.name}
+            {!isDefault && !vehicle?.active && <span className="ml-1 text-[10px] font-normal text-gray-400">(inactive vehicle)</span>}
           </p>
+          {!isDefault && !hasOwn && (
+            <p className="text-[11px] text-amber-600 mt-0.5">
+              Follows Default now (values below are Default&apos;s). Change them and Save to give {vehicle?.name} its own surge.
+            </p>
+          )}
+          {!isDefault && hasOwn && (
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Own settings: surges on {vehicle?.name} drivers only, whatever Default does.
+            </p>
+          )}
         </div>
         <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 shrink-0 cursor-pointer">
           <input
             type="checkbox"
             className="h-4 w-4 accent-indigo-600"
-            checked={Boolean(settings.enabled)}
+            checked={Boolean(values.enabled)}
             disabled={saving}
-            onChange={(e) => save({ enabled: e.target.checked })}
+            onChange={(e) => setField('enabled', e.target.checked)}
           />
-          {settings.enabled ? 'On' : 'Off'}
+          Surge {values.enabled ? 'on' : 'off'}
         </label>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {FIELDS.map((field) => (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
+        {FIELDS.filter((field) => isDefault || !field.shared).map((field) => (
           <div key={field.key}>
             <label className={labelClass} title={field.help}>{field.label}</label>
             {field.type === 'select' ? (
               <select
                 className={inputClass}
-                value={settings[field.key]}
-                onChange={(e) => setSettings((prev) => ({ ...prev, [field.key]: Number(e.target.value) }))}
+                value={values[field.key]}
+                onChange={(e) => setField(field.key, Number(e.target.value))}
               >
                 {RESOLUTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -180,8 +266,8 @@ const AutomaticSurgePanel = () => {
                 step={field.step}
                 min={field.min}
                 max={field.max}
-                value={settings[field.key]}
-                onChange={(e) => setSettings((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                value={values[field.key]}
+                onChange={(e) => setField(field.key, e.target.value)}
               />
             )}
             <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{field.help}</p>
@@ -189,85 +275,44 @@ const AutomaticSurgePanel = () => {
         ))}
       </div>
 
-      <div className="mt-3 border-t border-gray-100 pt-3">
-        <p className={labelClass}>Applies to</p>
-        <div className="flex flex-wrap items-center gap-4 mb-2">
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer">
-            <input
-              type="radio"
-              name="surge-scope"
-              className="accent-indigo-600"
-              checked={scope === 'all'}
-              onChange={() => setScope('all')}
-            />
-            All vehicles
-          </label>
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 cursor-pointer">
-            <input
-              type="radio"
-              name="surge-scope"
-              className="accent-indigo-600"
-              checked={scope === 'some'}
-              onChange={() => setScope('some')}
-            />
-            Only the vehicles I choose
-          </label>
-        </div>
-        {scope === 'some' && (
-          <div>
-            <div className="flex flex-wrap gap-2">
-              {vehicles.map((vehicle) => {
-                const checked = chosenIds.includes(vehicle.id);
-                return (
-                  <label
-                    key={vehicle.id}
-                    className={`flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-md border cursor-pointer transition-colors ${
-                      checked ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    } ${vehicle.active ? '' : 'opacity-60'}`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="accent-indigo-600"
-                      checked={checked}
-                      onChange={() => toggleVehicle(vehicle.id)}
-                    />
-                    {vehicle.name}
-                    {!vehicle.active && <span className="text-[9px] font-normal text-gray-400">(inactive)</span>}
-                  </label>
-                );
-              })}
-              {vehicles.length === 0 && <p className="text-[11px] text-gray-400">Loading vehicles...</p>}
-            </div>
-            <p className="text-[10px] text-gray-400 mt-1">
-              {chosenIds.length
-                ? `Surge applies to ${chosenIds.length} ${chosenIds.length === 1 ? 'vehicle' : 'vehicles'}. The rest always keep the normal fare.`
-                : 'Tick the vehicles that should surge. The rest keep the normal fare.'}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-end gap-2 mt-3">
+      <div className="flex flex-wrap items-center justify-end gap-2 mt-3">
         <button
           onClick={() => load()}
           className="flex items-center gap-1 text-[11px] font-semibold text-gray-600 hover:text-gray-900 px-2 py-1"
         >
           <RefreshCw size={11} /> Refresh
         </button>
+        {!isDefault && vehicle?.has_own_settings && (
+          <button
+            onClick={followDefault}
+            disabled={saving}
+            className="text-[11px] font-semibold text-gray-600 hover:text-red-600 px-2 py-1 disabled:opacity-50"
+          >
+            Use Default settings
+          </button>
+        )}
         <button
-          onClick={() => save()}
-          disabled={saving}
+          onClick={resetTab}
+          disabled={!dirty || saving}
+          className="flex items-center gap-1 border border-gray-200 text-gray-700 text-[11px] font-semibold px-3 py-1 rounded-md hover:bg-gray-50 disabled:opacity-40"
+          title="Discard unsaved changes on this tab"
+        >
+          <RotateCcw size={11} /> Reset
+        </button>
+        <button
+          onClick={save}
+          disabled={saving || (!dirty && hasOwn)}
           className="flex items-center gap-1 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-semibold px-3 py-1 rounded-md transition-colors disabled:opacity-50"
         >
           {saving && <Loader2 size={11} className="animate-spin" />}
-          Save settings
+          Save {tabName}
         </button>
       </div>
 
       <div className="mt-3 border-t border-gray-100 pt-3">
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs font-semibold text-gray-700">
-            Surging now: {active.length} {active.length === 1 ? 'area' : 'areas'}
+            Surging now for {tabName}: {tabAreas.length} {tabAreas.length === 1 ? 'area' : 'areas'}
           </p>
           <p className="text-[10px] text-gray-400">Updates every minute</p>
         </div>
@@ -277,11 +322,11 @@ const AutomaticSurgePanel = () => {
             <GoogleMap
               mapContainerStyle={{ width: '100%', height: '100%' }}
               center={mapCenter}
-              zoom={active.length ? 12 : 11}
+              zoom={tabAreas.length ? 12 : 11}
               options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
             >
-              {active.map((area) => (
-                <React.Fragment key={area.hex}>
+              {tabAreas.map((area) => (
+                <React.Fragment key={`${area.vehicle_type_id || 'default'}-${area.hex}`}>
                   <PolygonF
                     paths={area.boundary}
                     options={{
@@ -303,7 +348,7 @@ const AutomaticSurgePanel = () => {
           </div>
         ) : null}
 
-        {active.length > 0 ? (
+        {tabAreas.length > 0 ? (
           <div className="mt-2 overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead>
@@ -316,8 +361,8 @@ const AutomaticSurgePanel = () => {
                 </tr>
               </thead>
               <tbody>
-                {active.map((area) => (
-                  <tr key={area.hex} className="border-t border-gray-50 text-gray-700">
+                {tabAreas.map((area) => (
+                  <tr key={`${area.vehicle_type_id || 'default'}-${area.hex}`} className="border-t border-gray-50 text-gray-700">
                     <td className="py-1 pr-3 font-bold">{area.multiplier.toFixed(2)}x</td>
                     <td className="py-1 pr-3">{area.demand}</td>
                     <td className="py-1 pr-3">{area.supply}</td>
@@ -332,9 +377,9 @@ const AutomaticSurgePanel = () => {
           </div>
         ) : (
           <p className="text-[11px] text-gray-400 mt-2">
-            {settings.enabled
+            {saved.enabled
               ? 'No area is busy enough to surge right now.'
-              : 'Turn automatic surge on to start measuring demand.'}
+              : `Surge is off for ${tabName}.`}
           </p>
         )}
       </div>
