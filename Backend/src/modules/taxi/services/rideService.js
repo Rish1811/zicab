@@ -2107,7 +2107,16 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
     ? String(collectedVia).trim().toLowerCase()
     : '';
 
-  if (['cash', 'upi'].includes(normalizedCollectedVia)) {
+  // A rider who already paid the fare online in the app: the money reached ZI
+  // CAB and the driver's wallet, so whatever the driver taps it is recorded as
+  // online. Settlement stays cash-like either way (see verifyRazorpayRideFare).
+  const paidOnlineByRider = ride.driverPaymentCollection?.source === 'rider_fare_online'
+    && String(ride.driverPaymentCollection?.status || '').toLowerCase() === 'paid';
+
+  if (paidOnlineByRider) {
+    ride.collectedVia = 'online';
+    ride.paymentMethod = 'cash';
+  } else if (['cash', 'upi'].includes(normalizedCollectedVia)) {
     // Driver collected the fare directly — cash in hand, or into their own UPI
     // via their personal QR. Either way the money never reached the platform,
     // so settlement must be cash-like (commission deducted from the driver's

@@ -9,6 +9,8 @@ import {
 import {
   acceptRideBid,
   createRazorpayRideCompletionOrder,
+  createRazorpayRideFareOrder,
+  verifyRazorpayRideFare,
   cancelRide,
   createRazorpayRideTipOrder,
   createRide,
@@ -47,6 +49,9 @@ rideRouter.post('/:rideId/parcel-proof', authenticate(['driver']), asyncHandler(
 rideRouter.post('/:rideId/complete-payment/razorpay/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createRazorpayRideCompletionOrder));
 rideRouter.post('/:rideId/complete-payment/razorpay/verify', authenticate(['user']), asyncHandler(verifyRazorpayRideCompletion));
 rideRouter.post('/:rideId/complete-payment/wallet', authenticate(['user']), asyncHandler(payRideCompletionWithWallet));
+// The rider pays a cash ride's fare online (Razorpay) instead of the driver's UPI.
+rideRouter.post('/:rideId/fare-payment/razorpay/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createRazorpayRideFareOrder));
+rideRouter.post('/:rideId/fare-payment/razorpay/verify', authenticate(['user']), asyncHandler(verifyRazorpayRideFare));
 rideRouter.post('/:rideId/tip/razorpay/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createRazorpayRideTipOrder));
 rideRouter.post('/:rideId/tip/razorpay/verify', authenticate(['user']), asyncHandler(verifyRazorpayRideTip));
 rideRouter.patch('/:rideId/feedback', authenticate(['user']), asyncHandler(submitRideReview));

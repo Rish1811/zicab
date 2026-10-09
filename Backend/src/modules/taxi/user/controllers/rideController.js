@@ -792,6 +792,222 @@ export const payRideCompletionWithWallet = async (req, res) => {
   }
 };
 
+/**
+ * The rider pays a cash ride's fare online, Rapido-style, instead of paying
+ * the driver's own UPI - which PhonePe and Google Pay decline when another app
+ * opens it. Open from when the driver is assigned until the fare is paid,
+ * before or after the trip is completed.
+ *
+ * The money reaches ZI CAB, so the driver's wallet is credited the full fare
+ * the moment it is verified. The ride stays a cash ride for settlement: the
+ * commission (or a pass's waiver) is taken exactly as if the driver had been
+ * handed the cash, so the driver nets the same whichever way the rider paid
+ * and whenever the payment lands relative to completion.
+ */
+const RIDER_FARE_ONLINE_SOURCE = 'rider_fare_online';
+
+const loadRideForFarePayment = async (rideId, userId, session = null) => {
+  const ride = await Ride.findOne({ _id: rideId, userId }).session(session);
+  if (!ride) {
+    throw new ApiError(404, 'Ride not found');
+  }
+  if (!ride.driverId) {
+    throw new ApiError(409, 'Ride has no assigned driver yet');
+  }
+  if (ride.status === RIDE_STATUS.CANCELLED || ride.liveStatus === RIDE_LIVE_STATUS.CANCELLED) {
+    throw new ApiError(409, 'This ride was cancelled');
+  }
+  if (String(ride.paymentMethod || 'cash').trim().toLowerCase() !== 'cash') {
+    throw new ApiError(409, 'This ride is already paid online');
+  }
+  return ride;
+};
+
+export const createRazorpayRideFareOrder = async (req, res) => {
+  const rideId = String(req.params.rideId || '').trim();
+  const ride = await loadRideForFarePayment(rideId, req.auth.sub);
+
+  if (isDriverCollectionPaid(ride)) {
+    throw new ApiError(409, 'This fare is already paid');
+  }
+
+  const fare = roundMoney(ride.fare || 0);
+  if (fare <= 0) {
+    throw new ApiError(400, 'No fare to pay for this ride');
+  }
+
+  const { keyId, keySecret } = await resolveRazorpayCredentials();
+  const compactRideId = rideId.replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'ride';
+  const compactUserId = String(req.auth?.sub || '').replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
+
+  const order = await razorpayRequest({
+    method: 'POST',
+    path: '/orders',
+    body: {
+      amount: Math.round(fare * 100),
+      currency: 'INR',
+      receipt: `ufare_${compactUserId}_${compactRideId}_${Date.now().toString(36)}`,
+      notes: {
+        rideId,
+        userId: String(req.auth.sub),
+        driverId: String(ride.driverId),
+        source: RIDER_FARE_ONLINE_SOURCE,
+      },
+    },
+    keyId,
+    keySecret,
+  });
+
+  res.status(201).json({
+    success: true,
+    data: {
+      keyId,
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency || 'INR',
+      fare,
+    },
+  });
+};
+
+export const verifyRazorpayRideFare = async (req, res) => {
+  const rideId = String(req.params.rideId || '').trim();
+  const orderId = String(req.body?.razorpay_order_id || '');
+  const paymentId = String(req.body?.razorpay_payment_id || '');
+  const signature = String(req.body?.razorpay_signature || '');
+
+  if (!orderId || !paymentId || !signature) {
+    throw new ApiError(400, 'Payment verification fields are required');
+  }
+
+  const ride = await loadRideForFarePayment(rideId, req.auth.sub);
+
+  // The app retrying after a dropped response: already done.
+  if (String(ride.driverPaymentCollection?.providerPaymentId || '') === paymentId && isDriverCollectionPaid(ride)) {
+    return res.json({ success: true, data: await getRideDetails(rideId) });
+  }
+
+  const { keyId, keySecret } = await resolveRazorpayCredentials();
+  const expectedSignature = crypto
+    .createHmac('sha256', keySecret)
+    .update(`${orderId}|${paymentId}`)
+    .digest('hex');
+  if (expectedSignature !== signature) {
+    throw new ApiError(400, 'Invalid payment signature');
+  }
+
+  // The order must be this ride's fare order, for this rider.
+  const order = await razorpayRequest({
+    method: 'GET',
+    path: `/orders/${encodeURIComponent(orderId)}`,
+    keyId,
+    keySecret,
+  });
+  if (
+    String(order?.notes?.rideId || '') !== rideId
+    || String(order?.notes?.userId || '') !== String(req.auth.sub)
+    || String(order?.notes?.source || '') !== RIDER_FARE_ONLINE_SOURCE
+  ) {
+    throw new ApiError(400, 'This payment is not for this ride');
+  }
+  const paidAmount = roundMoney(Number(order?.amount || 0) / 100);
+  if (paidAmount <= 0) {
+    throw new ApiError(400, 'Invalid order amount');
+  }
+
+  if (isDriverCollectionPaid(ride)) {
+    throw new ApiError(409, 'This fare was already paid');
+  }
+
+  const session = await mongoose.startSession();
+  let walletResult = null;
+  let driverId = null;
+  try {
+    session.startTransaction();
+
+    // Marking the fare paid and crediting the driver happen together, and
+    // only once: a second verify finds the fare already paid and stops.
+    const updated = await Ride.findOneAndUpdate(
+      {
+        _id: rideId,
+        userId: req.auth.sub,
+        'driverPaymentCollection.paidAt': null,
+        'driverPaymentCollection.status': { $nin: [...PAYMENT_PAID_STATUSES] },
+      },
+      {
+        $set: {
+          collectedVia: 'online',
+          driverPaymentCollection: {
+            provider: 'razorpay',
+            providerId: paymentId,
+            providerOrderId: orderId,
+            providerPaymentId: paymentId,
+            providerMode: 'razorpay_order',
+            source: RIDER_FARE_ONLINE_SOURCE,
+            status: 'paid',
+            amount: paidAmount,
+            currency: order.currency || 'INR',
+            linkUrl: '',
+            paidAt: new Date(),
+            updatedAt: new Date(),
+          },
+        },
+      },
+      { returnDocument: 'after', session },
+    );
+    if (!updated) {
+      throw new ApiError(409, 'This fare was already paid');
+    }
+    driverId = updated.driverId;
+
+    walletResult = await applyDriverWalletAdjustment({
+      driverId,
+      rideId: updated._id,
+      amount: paidAmount,
+      type: 'adjustment',
+      description: 'Ride fare paid online by rider',
+      metadata: {
+        source: RIDER_FARE_ONLINE_SOURCE,
+        rideId,
+        userId: String(req.auth.sub),
+        provider: 'razorpay',
+        providerOrderId: orderId,
+        providerPaymentId: paymentId,
+      },
+      session,
+    });
+
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+
+  // Tell the driver at once, so they do not also take cash.
+  emitToDriver(driverId, 'ride:payment:received', {
+    rideId,
+    amount: paidAmount,
+    method: 'online',
+    message: `Rider paid Rs ${paidAmount.toFixed(0)} online. Do not collect cash.`,
+  });
+  if (walletResult?.transaction) {
+    emitToDriver(driverId, 'driver:wallet:updated', {
+      wallet: walletResult.wallet,
+      transaction: walletResult.transaction,
+      notification: {
+        id: `ride-fare-${paymentId}`,
+        title: 'Rider paid online',
+        body: `Rs ${paidAmount.toFixed(0)} added to your wallet. Do not collect cash for this ride.`,
+        sentAt: new Date().toISOString(),
+      },
+    });
+  }
+
+  res.json({ success: true, data: await getRideDetails(rideId) });
+};
+
 export const createRazorpayRideTipOrder = async (req, res) => {
   const rideId = String(req.params.rideId || '').trim();
   const tipAmount = normalizeMoneyAmount(req.body?.tipAmount, 'tipAmount');
