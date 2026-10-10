@@ -1158,6 +1158,15 @@ const AdminLayout = () => {
       console.log('New driver registration:', data);
     });
 
+    socketService.on('new_booking', (data = {}) => {
+      const label = String(data.type || '').toLowerCase() === 'parcel' ? 'Parcel delivery' : 'Ride';
+      const where = data.dropAddress ? ` to ${data.dropAddress}` : '';
+      toast(`${label} booked${where}`, {
+        duration: 4500,
+        className: 'font-bold text-[13px] rounded-2xl shadow-xl border border-sky-50 bg-white',
+      });
+    });
+
     const handleSupportChatNotification = (payload = {}) => {
       const senderRole = String(payload.senderRole || payload.sender?.role || '').toLowerCase();
       const receiverRole = String(payload.receiverRole || payload.receiver?.role || '').toLowerCase();
@@ -1213,6 +1222,7 @@ const AdminLayout = () => {
     return () => {
       socketService.off('new_sos');
       socketService.off('new_driver_registration');
+      socketService.off('new_booking');
       socketService.off('chat:message', handleSupportChatNotification);
     };
   }, [isAdminChatRoute, navigate]);
