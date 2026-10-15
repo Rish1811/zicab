@@ -34,8 +34,15 @@ const BannerImage = () => {
   const [formData, setFormData] = useState(createInitialFormData);
   const [imagePreview, setImagePreview] = useState(null);
 
+  // The transparent decoration shown at the very top of the app home screen,
+  // stored alongside the banners in user_home_settings.topImage.
+  const [topImage, setTopImage] = useState('');
+  const [topImageDraft, setTopImageDraft] = useState('');
+  const [topImageSaving, setTopImageSaving] = useState(false);
+
   const token = localStorage.getItem('adminToken') || '';
   const baseUrl = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin';
+  const homeSettingsUrl = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/general-settings/user-home-management`;
 
   const resolveImageUrl = useCallback(
     (img) => {
@@ -87,6 +94,65 @@ const BannerImage = () => {
     }
   }, [token]);
 
+  const fetchTopImage = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(homeSettingsUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const current = (data.settings?.topImage || data.settings?.top_image || '').toString();
+      setTopImage(current);
+      setTopImageDraft(current);
+    } catch (error) {
+      console.error('Failed to load home top image:', error);
+    }
+  }, [token, homeSettingsUrl]);
+
+  const persistTopImage = useCallback(async (value) => {
+    if (!token) return;
+    setTopImageSaving(true);
+    try {
+      // Read-modify-write so we never clobber the promos the banner sync writes.
+      const res = await fetch(homeSettingsUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = res.ok ? await res.json() : { settings: {} };
+      const currentSettings = data.settings || {};
+
+      const saveRes = await fetch(homeSettingsUrl, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ settings: { ...currentSettings, topImage: value } }),
+      });
+      if (saveRes.ok) {
+        setTopImage(value);
+        setTopImageDraft(value);
+      } else {
+        alert('Failed to save top image');
+      }
+    } catch (error) {
+      console.error('Save top image error:', error);
+      alert(`Network Error: ${error.message}`);
+    } finally {
+      setTopImageSaving(false);
+    }
+  }, [token, homeSettingsUrl]);
+
+  const handleTopImageFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setTopImageDraft(reader.result.toString());
+    reader.onerror = () => alert('Could not read the image file');
+    reader.readAsDataURL(file);
+  };
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -130,7 +196,8 @@ const BannerImage = () => {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    fetchTopImage();
+  }, [fetchData, fetchTopImage]);
 
   useEffect(() => {
     if (!isCreateRoute) {
@@ -287,6 +354,92 @@ const BannerImage = () => {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
           >
+            {/* Home Top Image — the transparent decoration pinned to the very
+                top of the app home screen (festival garland, lights, ...). */}
+            <div className="bg-white rounded-[22px] border border-gray-200 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-[15px] font-black text-[#2D3A6E] uppercase tracking-tight italic leading-none">
+                    Home Top Image
+                  </h2>
+                  <p className="text-[11px] font-semibold text-gray-400 mt-1">
+                    Transparent PNG shown at the very top of the app home page. Full width, top aligned.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                {/* Preview on a dark backdrop so transparency reads correctly. */}
+                <div className="w-full md:w-80 shrink-0">
+                  <div className="rounded-xl overflow-hidden border border-gray-200" style={{ background: '#0D1B2A' }}>
+                    {topImageDraft ? (
+                      <img
+                        src={resolveImageUrl(topImageDraft)}
+                        alt="Home top"
+                        className="w-full object-contain"
+                        style={{ maxHeight: 140 }}
+                      />
+                    ) : (
+                      <div className="h-24 flex items-center justify-center text-gray-500 text-xs gap-2">
+                        <ImageIcon size={16} /> No top image set
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                      <input type="file" className="hidden" accept="image/png,image/webp,image/*" onChange={handleTopImageFile} />
+                      <Upload size={16} /> Choose Image
+                    </label>
+                    {topImageDraft ? (
+                      <button
+                        type="button"
+                        onClick={() => setTopImageDraft('')}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                      >
+                        <Trash2 size={15} /> Clear
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <label className="block text-[13px] font-semibold text-gray-900 mb-1">Or paste an image URL</label>
+                    <input
+                      type="url"
+                      value={topImageDraft.startsWith('data:') ? '' : topImageDraft}
+                      onChange={(e) => setTopImageDraft(e.target.value)}
+                      placeholder="https://example.com/garland.png"
+                      className="w-full max-w-xl border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => persistTopImage(topImageDraft)}
+                      disabled={topImageSaving || topImageDraft === topImage}
+                      className="h-10 px-6 bg-[#2D3A6E] text-white rounded-lg text-[13px] font-bold hover:bg-[#1d2756] transition-all inline-flex items-center gap-2 disabled:opacity-60"
+                    >
+                      {topImageSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                      Save Top Image
+                    </button>
+                    {topImage ? (
+                      <button
+                        type="button"
+                        onClick={() => persistTopImage('')}
+                        disabled={topImageSaving}
+                        className="h-10 px-4 text-[13px] font-bold text-rose-600 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 inline-flex items-center gap-2 disabled:opacity-60"
+                      >
+                        <Trash2 size={15} /> Remove
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-white rounded-[22px] border border-gray-200 shadow-sm overflow-hidden">
               <div className="p-6 flex items-center justify-between border-b border-gray-100">
                 <div className="flex items-center gap-3 text-sm text-gray-500">
