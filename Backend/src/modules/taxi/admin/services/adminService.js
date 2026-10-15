@@ -6425,6 +6425,9 @@ const toAdminIntercityTripRow = (ride) => {
     routeLabel: [fromCity, toCity].filter(Boolean).join(' -> '),
     tripType: intercity.tripType || '',
     travelDate: intercity.travelDate || '',
+    // The rider's return date/time for a round trip; blank for one-way.
+    returnDate: intercity.returnDate || '',
+    scheduledAt: ride.scheduledAt || null,
   };
 };
 

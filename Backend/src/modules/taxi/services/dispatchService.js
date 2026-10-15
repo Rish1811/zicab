@@ -33,6 +33,16 @@ const DISPATCH_LEASE_REFRESH_MS = 30_000;
 const DISPATCH_RECOVERY_INTERVAL_MS = 30_000;
 const LATE_DRIVER_NOTIFICATION_COOLDOWN_MS = 10_000;
 
+/// How long before a scheduled ride's pickup time the search for a driver
+/// begins. A scheduled trip should already have a captain assigned by the time
+/// the rider is due to leave, so dispatch fires this many minutes early rather
+/// than exactly at pickup. Override with SCHEDULED_DISPATCH_LEAD_MINUTES.
+const SCHEDULED_DISPATCH_LEAD_MINUTES = Math.max(
+  0,
+  Number(process.env.SCHEDULED_DISPATCH_LEAD_MINUTES ?? 15) || 0,
+);
+const SCHEDULED_DISPATCH_LEAD_MS = SCHEDULED_DISPATCH_LEAD_MINUTES * 60 * 1000;
+
 const roundMoney = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
 /// Straight-line metres between two GeoJSON `[lng, lat]` pairs.
@@ -1451,7 +1461,13 @@ export const startDispatchFlow = async (ride, { forceRestart = false } = {}) => 
   }
 
   const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
-  const delayMs = scheduledAt ? scheduledAt.getTime() - Date.now() : 0;
+  // Start searching a lead window before the scheduled pickup, so a captain is
+  // lined up ahead of time instead of only when the trip is already due. If the
+  // lead window has already passed (e.g. a trip booked for 10 minutes out),
+  // delayMs goes <= 0 and we fall through to dispatching immediately.
+  const delayMs = scheduledAt
+    ? scheduledAt.getTime() - SCHEDULED_DISPATCH_LEAD_MS - Date.now()
+    : 0;
   const bookingMode = String(ride?.bookingMode || 'normal').trim().toLowerCase();
   const shouldDispatchImmediately = bookingMode === 'bidding';
 

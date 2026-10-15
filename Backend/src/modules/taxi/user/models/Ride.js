@@ -129,6 +129,13 @@ const rideSchema = new mongoose.Schema(
         default: '',
         trim: true,
       },
+      // The rider's chosen return date/time for a round trip, stored as the
+      // client's ISO string. Blank for one-way bookings.
+      returnDate: {
+        type: String,
+        default: '',
+        trim: true,
+      },
       passengers: {
         type: Number,
         default: 1,

@@ -420,6 +420,10 @@ const normalizeIntercityPayload = (intercity = {}) => ({
   toCity: String(intercity.toCity || '').trim(),
   tripType: String(intercity.tripType || '').trim(),
   travelDate: String(intercity.travelDate || intercity.date || '').trim(),
+  // When the rider wants to be driven back. Only meaningful for a round trip;
+  // one-way bookings leave it blank. Stored as the client's ISO string so the
+  // driver app can show "returning on ..." without a second schema shape.
+  returnDate: String(intercity.returnDate || intercity.returnAt || '').trim(),
   passengers: Math.max(Number(intercity.passengers || 1), 1),
   distance: Math.max(Number(intercity.distance || 0), 0),
   vehicleName: String(intercity.vehicleName || '').trim(),
