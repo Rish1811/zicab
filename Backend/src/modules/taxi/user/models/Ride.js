@@ -585,6 +585,28 @@ const rideSchema = new mongoose.Schema(
       },
     },
     // Surge the fare was quoted under; the fare already includes it.
+    // Tolls on an outstation trip, found from its route and the admin's toll
+    // plazas. Included in `fare`; they go in full to the driver (no commission).
+    tollCharges: {
+      total: { type: Number, default: 0 },
+      roundTrip: { type: Boolean, default: false },
+      items: {
+        type: [
+          new mongoose.Schema(
+            {
+              plazaId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxiTollPlaza', default: null },
+              name: { type: String, default: '', trim: true },
+              highway: { type: String, default: '', trim: true },
+              oneWay: { type: Number, default: 0 },
+              returnTrip: { type: Number, default: 0 },
+              amount: { type: Number, default: 0 },
+            },
+            { _id: false },
+          ),
+        ],
+        default: [],
+      },
+    },
     surge: {
       multiplier: {
         type: Number,

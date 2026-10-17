@@ -14,7 +14,7 @@ import {
   RIDE_STATUS,
 } from '../constants/index.js';
 import { Delivery } from '../user/models/Delivery.js';
-import { getRideRoom, resolveSetPriceForRide } from './rideService.js';
+import { getRideRoom, resolveSetPriceForRide, serializeTollCharges } from './rideService.js';
 import { SOCKET_EVENTS } from '../socket/events.js';
 import { resolveTransportDispatchConfig } from './transportSettingsService.js';
 import { sendPushNotificationToEntities } from './pushNotificationService.js';
@@ -799,6 +799,7 @@ const emitRideRequestToDrivers = async ({
       fare: ride.fare,
       baseFare: Number(ride.baseFare || ride.fare || 0),
       surgeMultiplier: Number(ride.surge?.multiplier || 1),
+      tollCharges: serializeTollCharges(ride.tollCharges),
       bookingMode: ride.bookingMode || 'normal',
       pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
       biddingStatus: ride.biddingStatus || 'none',
