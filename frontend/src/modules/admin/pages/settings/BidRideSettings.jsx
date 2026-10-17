@@ -54,7 +54,7 @@ const InputField = ({ label, name, value, onChange, placeholder, type = "text", 
 const BIDDING_SERVICES = [
   { key: 'city', label: 'City ride', hint: 'Includes airport pickups and drops' },
   { key: 'outstation', label: 'Outstation', hint: 'Drivers quote their own fare' },
-  { key: 'parcel', label: 'Parcel and delivery', hint: 'Sender can raise their offer' },
+  { key: 'parcel', label: 'Parcel and delivery', hint: 'Captains bid their price; the sender accepts a bid' },
 ];
 
 const ToggleRow = ({ label, hint, checked, onChange }) => (

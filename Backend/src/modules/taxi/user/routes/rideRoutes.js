@@ -24,6 +24,7 @@ import {
   payRideCompletionWithWallet,
   submitRideReview,
   updateRideBidCeiling,
+  enableBidding,
   updateRideStatus,
   uploadParcelProof,
   verifyRazorpayRideCompletion,
@@ -41,6 +42,7 @@ rideRouter.get('/active/me', authenticate(['user', 'driver']), asyncHandler(getM
 rideRouter.patch('/:rideId/cancel', authenticate(['user']), asyncHandler(cancelRide));
 rideRouter.get('/:rideId/bids', authenticate(['user']), asyncHandler(getRideBids));
 rideRouter.patch('/:rideId/bids/ceiling', authenticate(['user']), asyncHandler(updateRideBidCeiling));
+rideRouter.post('/:rideId/enable-bidding', authenticate(['user']), asyncHandler(enableBidding));
 rideRouter.post('/:rideId/bids/:bidId/accept', authenticate(['user']), asyncHandler(acceptRideBid));
 rideRouter.get('/:rideId', authenticate(['user', 'driver']), asyncHandler(getRideById));
 rideRouter.patch('/:rideId/status', authenticate(['driver']), asyncHandler(updateRideStatus));
