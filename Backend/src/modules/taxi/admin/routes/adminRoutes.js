@@ -273,6 +273,7 @@ import {
 } from '../controllers/cancellationReasonController.js';
 import { promotionsRouter } from '../promotions/routes/index.js';
 import { listSafetyAlerts, resolveSafetyAlert } from '../../safety/controllers/safetyController.js';
+import { createTollPlaza, deleteTollPlaza, importTollPlazas, listTollPlazas, previewRouteTolls, updateTollPlaza } from '../controllers/tollController.js';
 
 export const adminRouter = Router();
 
@@ -483,6 +484,13 @@ adminRouter.get('/admin/ongoing-rides', getOngoingRides);
 adminRouter.get('/admin/ride-requests', getRideRequests);
 // One ledger of every payment, and an invoice PDF for each.
 adminRouter.get('/admin/payments', getPayments);
+// Toll plazas and per-vehicle toll prices for outstation trips.
+adminRouter.get('/admin/tolls', listTollPlazas);
+adminRouter.get('/admin/tolls/preview', previewRouteTolls);
+adminRouter.post('/admin/tolls', createTollPlaza);
+adminRouter.post('/admin/tolls/import', importTollPlazas);
+adminRouter.patch('/admin/tolls/:id', updateTollPlaza);
+adminRouter.delete('/admin/tolls/:id', deleteTollPlaza);
 adminRouter.get('/admin/payments/subscribers', getPaymentSubscribers);
 adminRouter.get('/admin/payments/:kind/:id/invoice', getPaymentInvoice);
 adminRouter.post('/admin/ride-requests/:id/cancel', cancelRideRequest);

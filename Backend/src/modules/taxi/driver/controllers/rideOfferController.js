@@ -3,6 +3,7 @@ import { Ride } from '../../user/models/Ride.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { RIDE_STATUS } from '../../constants/index.js';
 import { resolveTransportDispatchConfig } from '../../services/transportSettingsService.js';
+import { serializeTollCharges } from '../../services/rideService.js';
 
 /**
  * Offers this driver was dispatched but has not answered yet.
@@ -111,6 +112,7 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
         fare: ride.fare,
         baseFare: Number(ride.baseFare || ride.fare || 0),
         surgeMultiplier: Number(ride.surge?.multiplier || 1),
+        tollCharges: serializeTollCharges(ride.tollCharges),
         bookingMode: ride.bookingMode || 'normal',
         pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
         biddingStatus: ride.biddingStatus || 'none',

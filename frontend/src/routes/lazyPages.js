@@ -186,6 +186,7 @@ export const AdminCreatePackagePrice = lazy(() => import('../modules/admin/pages
 export const AdminDriverIncentive = lazy(() => import('../modules/admin/pages/price-management/DriverIncentive'));
 export const AdminSurgePricing = lazy(() => import('../modules/admin/pages/price-management/SurgePricing'));
 export const AdminPriceHike = lazy(() => import('../modules/admin/pages/price-management/PriceHike'));
+export const AdminTollCharges = lazy(() => import('../modules/admin/pages/price-management/TollCharges'));
 export const AdminVehicleType = lazy(() => import('../modules/admin/pages/price-management/VehicleType'));
 export const AdminRentalVehicleTypes = lazy(() => import('../modules/admin/pages/price-management/RentalVehicleTypes'));
 export const AdminRentalCommissionManager = lazy(() => import('../modules/admin/pages/price-management/RentalCommissionManager'));

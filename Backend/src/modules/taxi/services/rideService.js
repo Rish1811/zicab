@@ -20,6 +20,7 @@ import { UserWallet } from '../user/models/UserWallet.js';
 import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, getSurgeProfiles, surgeForVehicle } from './surgeService.js';
+import { estimateTolls, isRoundTripValue } from './tollService.js';
 import { classifyTrip } from './tripCategoryService.js';
 import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
@@ -1057,6 +1058,56 @@ export const resolveZoneForPickup = async (pickupCoords) => {
 export const resolveServiceLocationIdForPickup = async (pickupCoords) =>
   (await resolveZoneForPickup(pickupCoords)).serviceLocationId;
 
+/** The tolls on an outstation ride, in the shape the apps read. */
+export const serializeTollCharges = (tolls) =>
+  tolls && Number(tolls.total) > 0
+    ? {
+        total: Number(tolls.total),
+        roundTrip: Boolean(tolls.roundTrip),
+        items: (tolls.items || []).map((item) => ({
+          name: item.name || '',
+          highway: item.highway || '',
+          oneWay: Number(item.oneWay || 0),
+          returnTrip: Number(item.returnTrip || 0),
+          amount: Number(item.amount || 0),
+        })),
+      }
+    : null;
+
+/// Tolls for an outstation ride, or null (not outstation, no route, no tolls).
+const resolveRideTolls = async ({ serviceType, pickupCoords, dropCoords, vehicleTypeId, intercity }) => {
+  if (normalizeServiceType(serviceType) !== 'intercity' || !vehicleTypeId) return null;
+  try {
+    const roundTrip = isRoundTripValue(intercity?.tripType);
+    const { byVehicle } = await estimateTolls({
+      origin: pickupCoords,
+      destination: dropCoords,
+      vehicleTypeIds: [String(vehicleTypeId)],
+      roundTrip,
+    });
+    const tolls = byVehicle[String(vehicleTypeId)];
+    if (!tolls || !(tolls.total > 0)) return null;
+    return {
+      total: tolls.total,
+      roundTrip,
+      items: tolls.items
+        .filter((item) => item.amount > 0)
+        .map((item) => ({
+          plazaId: item.plaza_id,
+          name: item.name,
+          highway: item.highway,
+          oneWay: item.one_way,
+          returnTrip: item.return_trip,
+          amount: item.amount,
+        })),
+    };
+  } catch (error) {
+    // Tolls must never stop a booking; the trip is quoted without them.
+    console.error('[tolls] not resolved for ride', error?.message);
+    return null;
+  }
+};
+
 export const createRideRecord = async ({
   userId,
   pickupCoords,
@@ -1084,6 +1135,7 @@ export const createRideRecord = async ({
   bidStepAmount,
   platformFee,
   surgeMultiplier,
+  tollAmount,
 }) => {
   const user = await User.findById(userId);
 
@@ -1095,11 +1147,11 @@ export const createRideRecord = async ({
 
   const riderOtp = await resolveRiderOtp(user);
 
-  const safeFare = Number(fare);
+  const quotedFare = Number(fare);
   const safeEstimatedDistanceMeters = Math.max(0, Number(estimatedDistanceMeters || 0));
   const safeEstimatedDurationMinutes = Math.max(0, Number(estimatedDurationMinutes || 0));
 
-  if (!Number.isFinite(safeFare) || safeFare < 0) {
+  if (!Number.isFinite(quotedFare) || quotedFare < 0) {
     throw new ApiError(400, 'fare must be a positive number or zero');
   }
 
@@ -1110,6 +1162,22 @@ export const createRideRecord = async ({
   }
 
   const primaryVehicleTypeId = dispatchVehicleTypeIds[0] || null;
+
+  // Outstation tolls are worked out here from the route, whatever the app
+  // sent: the app's own toll (`tollAmount`) is taken out of its fare and the
+  // server's put in. An app that knows nothing of tolls therefore still books
+  // them, so the driver is never short, and a stale quote is corrected.
+  const rideTollCharges = await resolveRideTolls({
+    serviceType,
+    pickupCoords,
+    dropCoords,
+    vehicleTypeId: primaryVehicleTypeId,
+    intercity,
+  });
+  const appToll = Math.max(0, Number(tollAmount) || 0);
+  const safeFare = rideTollCharges
+    ? Math.round((Math.max(0, quotedFare - appToll) + rideTollCharges.total) * 100) / 100
+    : quotedFare;
   const primaryVehicle = primaryVehicleTypeId
     ? await Vehicle.findById(primaryVehicleTypeId).select('name icon_types category vehicle_type icon map_icon image dispatch_type admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner').lean()
     : null;
@@ -1427,6 +1495,7 @@ export const createRideRecord = async ({
       transport_type: normalizedTransportType,
       pricingSnapshot,
       surge: rideSurge,
+      ...(rideTollCharges ? { tollCharges: rideTollCharges } : {}),
       trip_category: tripCategory,
       parcel: normalizeParcelPayload(parcel),
       intercity: normalizeIntercityPayload(intercity),
@@ -1491,6 +1560,7 @@ export const createRideRecord = async ({
             transport_type: normalizedTransportType,
             pricingSnapshot,
             surge: rideSurge,
+            ...(rideTollCharges ? { tollCharges: rideTollCharges } : {}),
             trip_category: tripCategory,
             parcel: normalizeParcelPayload(parcel),
             intercity: normalizeIntercityPayload(intercity),
@@ -1619,6 +1689,7 @@ export const serializeRideRealtime = (ride) => ({
     : null,
   paymentMethod: ride.paymentMethod,
   collectedVia: ride.collectedVia || 'cash',
+  tollCharges: serializeTollCharges(ride.tollCharges),
   // Driver's own static UPI handle + QR, exposed to the rider ONLY once admin
   // has verified it. The rider app uses this at ride-end to render a scannable
   // QR and a upi:// deep link. Never includes bank account number / IFSC.
