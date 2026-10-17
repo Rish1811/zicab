@@ -112,6 +112,8 @@ export const buildInvoiceModel = async ({ rideId }) => {
   const currencySymbol = FONTS.unicode ? rawSymbol : 'Rs. ';
 
   const fare = Number(ride.fare || 0);
+  // Outstation tolls are inside the fare; the invoice lists them on their own.
+  const tolls = Math.min(Math.max(0, Number(ride.tollCharges?.total) || 0), fare);
 
   return {
     invoiceDate: formatDate(ride.completedAt || ride.updatedAt),
@@ -140,7 +142,15 @@ export const buildInvoiceModel = async ({ rideId }) => {
     invoiceNumber: invoiceNumber('ride', ride._id),
     fare: {
       symbol: currencySymbol,
-      tripFare: fare,
+      tripFare: Math.round((fare - tolls) * 100) / 100,
+      tolls: tolls > 0
+        ? (ride.tollCharges?.items || [])
+          .filter((item) => Number(item.amount) > 0)
+          .map((item) => ({
+            label: `Toll - ${item.name || 'Toll plaza'}${ride.tollCharges?.roundTrip ? ' (both ways)' : ''}`,
+            amount: Number(item.amount),
+          }))
+        : [],
       total: fare,
     },
   };
@@ -288,6 +298,7 @@ export const renderInvoicePdf = (model) =>
     };
 
     row('Trip Fare', model.fare.tripFare);
+    for (const toll of model.fare.tolls || []) row(toll.label, toll.amount);
     doc.moveTo(left, y - 6).lineTo(right, y - 6).lineWidth(0.75).strokeColor(RULE).stroke();
     row('Total Amount', model.fare.total, true);
 

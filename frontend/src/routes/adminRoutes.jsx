@@ -123,6 +123,7 @@ import {
   AdminSupportTicketTitle,
   AdminSurgePricing,
   AdminPriceHike,
+  AdminTollCharges,
   AdminTipSettings,
   AdminRideVoiceSettings,
   AdminTransportRideSettings,
@@ -372,6 +373,7 @@ const adminRoutes = (
         <Route path="set-price/incentive/:id" element={<AdminDriverIncentive />} />
         <Route path="set-price/surge/:id" element={<AdminSurgePricing />} />
         <Route path="price-hike" element={<AdminPriceHike />} />
+        <Route path="tolls" element={<AdminTollCharges />} />
         <Route path="goods-types" element={<AdminGoodsTypes />} />
         <Route path="goods-types/create" element={<AdminGoodsTypes mode="create" />} />
         <Route path="goods-types/edit/:id" element={<AdminGoodsTypes mode="edit" />} />

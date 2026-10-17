@@ -79,6 +79,7 @@ import {
 } from '../controllers/poolingController.js';
 import { getAppBootstrap, getAppModules, getGeneralSettingsCategory, getGoodsTypes, getPublicRentalVehicleCatalog, getPublicVehicleTypeCatalog, getPublicLandingContent, getPublicLegalContent, submitWebsiteEnquiry } from '../../admin/controllers/adminController.js';
 import { getPublicCancellationReasons } from '../../admin/controllers/cancellationReasonController.js';
+import { getOutstationTolls } from '../../admin/controllers/tollController.js';
 import { getMyEmergencyContacts, saveMyEmergencyContacts, triggerUserSosAlert } from '../../safety/controllers/safetyController.js';
 
 export const userRouter = Router();
@@ -107,6 +108,8 @@ userRouter.get('/trip-category', getTripCategory);
 // Road routes for the maps. Authenticated and rate limited because every
 // cache miss is a billed Directions call.
 userRouter.get('/route', authenticate(['user', 'driver']), routeRateLimit, asyncHandler(getRoute));
+// Tolls on an outstation trip, per vehicle, for the quoted fares.
+userRouter.get('/outstation-tolls', authenticate(['user']), routeRateLimit, getOutstationTolls);
 userRouter.get('/zones', asyncHandler(getZones));
 userRouter.get('/rental-vehicles', asyncHandler(getPublicRentalVehicleCatalog));
 userRouter.get('/service-locations', asyncHandler(listPublicServiceLocations));

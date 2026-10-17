@@ -446,9 +446,12 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
     }
 
     const fare = normalizeAmount(ride.fare || 0, 'fare');
+    // Tolls in the fare are the driver's: they paid them at the plaza, so no
+    // commission is taken on them.
+    const tolls = Math.min(Math.max(0, Number(ride.tollCharges?.total) || 0), fare);
     const commissionConfig = await resolveCommissionConfigForRide(ride, session);
     const tripCommission = computeCommissionAmount({
-      fare,
+      fare: Math.round((fare - tolls) * 100) / 100,
       type: commissionConfig.type,
       value: commissionConfig.value,
     });
