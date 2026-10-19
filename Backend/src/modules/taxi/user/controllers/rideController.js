@@ -16,6 +16,7 @@ import {
   getRideDetails,
   getRideRoom,
   increaseRideBidCeiling,
+  enableRideBidding,
   listRideBidsForUser,
   listRideHistoryForIdentity,
   serializeRideRealtime,
@@ -1440,6 +1441,23 @@ export const updateRideBidCeiling = async (req, res) => {
   if (ride.pricingNegotiationMode === 'user_increment_only') {
     await restartRideDispatchWithLatestFare(ride.rideId || req.params.rideId);
   }
+
+  res.json({
+    success: true,
+    data: ride,
+  });
+};
+
+export const enableBidding = async (req, res) => {
+  const ride = await enableRideBidding({
+    rideId: req.params.rideId,
+    userId: req.auth.sub,
+    userMaxBidFare: req.body.userMaxBidFare,
+  });
+
+  // Re-offer the trip to captains with the bidding block, and refresh the room.
+  await notifyRideBiddingUpdated(ride.rideId || req.params.rideId);
+  await restartRideDispatchWithLatestFare(ride.rideId || req.params.rideId);
 
   res.json({
     success: true,

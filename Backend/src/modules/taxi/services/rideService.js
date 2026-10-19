@@ -2578,6 +2578,90 @@ export const increaseRideBidCeiling = async ({ rideId, userId, incrementSteps = 
   return serializeRideRealtime(updatedRide);
 };
 
+/// Converts a still-searching fixed-fare booking into a driver-bid bidding ride.
+///
+/// The rider app offers this on the finding screen when no captain has accepted
+/// at the quoted price (e.g. after 60s on a parcel). It respects the same admin
+/// bidding policy as a booking made with bidding, computes the bid bands from
+/// the configured percentages, and re-dispatches so captains are re-offered the
+/// trip with the bidding block. The caller re-runs dispatch
+/// (`restartRideDispatchWithLatestFare`) and notifies the room.
+export const enableRideBidding = async ({ rideId, userId, userMaxBidFare }) => {
+  const ride = await Ride.findOne({
+    _id: rideId,
+    userId,
+    status: RIDE_STATUS.SEARCHING,
+    liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+    driverId: null,
+  });
+
+  if (!ride) {
+    throw new ApiError(404, 'Active ride not found');
+  }
+
+  if (ride.bookingMode === 'bidding' || ride.pricingNegotiationMode === 'driver_bid') {
+    // Already a bidding ride — nothing to convert.
+    return serializeRideRealtime(ride);
+  }
+
+  const bidRideSettings = await getBidRideSettings();
+  const primaryVehicle = ride.vehicleTypeId
+    ? await Vehicle.findById(ride.vehicleTypeId).select('dispatch_type').lean()
+    : null;
+  const policy = await resolveBiddingPolicy({
+    vehicle: primaryVehicle,
+    serviceType: normalizeServiceType(ride.serviceType),
+    distanceMeters: Number(ride.estimatedDistanceMeters || 0),
+    bidSettings: bidRideSettings,
+  });
+  if (!policy.allowed) {
+    throw new ApiError(400, 'Bidding is not available for this booking');
+  }
+
+  const baseFare = Math.max(0, Math.round(Number(ride.baseFare || ride.fare || 0)));
+  const stepAmount = normalizeBidStepAmount(bidRideSettings.user_bidding_amount_increase_or_decrease);
+  const range = resolveBidRideRange({ baseFare, bidStepAmount: stepAmount, settings: bidRideSettings });
+  const ceiling = Math.min(range.userBidCeilingFare, range.driverBidCeilingFare);
+  const userMax = clampBidAmountWithinRange({
+    amount: userMaxBidFare,
+    minFare: range.userBidFloorFare,
+    maxFare: ceiling,
+    baseFare,
+    bidStepAmount: stepAmount,
+  });
+
+  const updatedRide = await Ride.findOneAndUpdate(
+    {
+      _id: rideId,
+      userId,
+      status: RIDE_STATUS.SEARCHING,
+      liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+      driverId: null,
+      bookingMode: { $ne: 'bidding' },
+    },
+    {
+      $set: {
+        bookingMode: 'bidding',
+        pricingNegotiationMode: 'driver_bid',
+        biddingStatus: 'open',
+        bidStepAmount: stepAmount,
+        bidFloorFare: range.driverBidFloorFare,
+        userMaxBidFare: userMax,
+        bidCeilingMaxFare: ceiling,
+        fare: baseFare,
+        nextFareIncreaseAt: null,
+      },
+    },
+    { returnDocument: 'after', runValidators: true },
+  );
+
+  if (!updatedRide) {
+    throw new ApiError(409, 'Ride is no longer open for bidding');
+  }
+
+  return serializeRideRealtime(updatedRide);
+};
+
 export const acceptRideBidAssignment = async ({ rideId, bidId, userId }) => {
   let lastError = null;
 
