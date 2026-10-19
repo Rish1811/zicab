@@ -15,6 +15,23 @@ import { Link, useNavigate } from 'react-router-dom';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
 
+// Was used below but never defined, which crashed the whole admin panel
+// whenever this page opened.
+const ToggleSwitch = ({ label, enabled, onToggle }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={enabled}
+    onClick={onToggle}
+    className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700"
+  >
+    <span className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${enabled ? 'bg-yellow-400' : 'bg-gray-200'}`}>
+      <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+    </span>
+    {label}
+  </button>
+);
+
 const DriverSubscriptions = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');

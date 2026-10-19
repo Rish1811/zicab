@@ -1,0 +1,378 @@
+/*
+ * Admin panel dark theme.
+ *
+ * Off unless <html data-admin-theme="dark"> (set by the top-bar toggle, see
+ * modules/admin/theme). Every rule is scoped under that attribute, so light
+ * mode is exactly what adminTheme.css draws.
+ *
+ * Most admin pages colour themselves with Tailwind utilities (bg-white,
+ * text-gray-900, border-gray-200, bg-emerald-50 ...) rather than the
+ * --admin-* variables, so this file remaps those utilities onto a dark
+ * palette. The extra html[...] in each selector out-ranks adminTheme.css's
+ * `.redigo-admin-root .x` rules, so its light !important values give way.
+ *
+ * This file holds the hand-tuned rules. Coloured tints at every opacity step
+ * and the arbitrary bg-[#hex] / text-[#hex] classes found in the admin code
+ * live in adminDarkTheme.generated.css; after adding new colours to admin
+ * pages, rerun `node scripts/generate-admin-dark-theme.cjs` from frontend/.
+ */
+
+html[data-admin-theme='dark'] {
+  color-scheme: dark;
+}
+
+html[data-admin-theme='dark'] .redigo-admin-root {
+  --d-bg: #0a0f1c;
+  --d-card: #111a2b;
+  --d-raised: #162236;
+  --d-hover: #1c2a42;
+  --d-solid: #26354f;
+  --d-solid-hover: #2f4060;
+  --d-border: rgba(148, 163, 184, 0.16);
+  --d-border-strong: rgba(148, 163, 184, 0.3);
+  --d-text: #e6eaf2;
+  --d-text-2: #c3cbd9;
+  --d-muted: #8b97ab;
+  --d-faint: #64708a;
+
+  --admin-bg: var(--d-bg);
+  --admin-card: var(--d-card);
+  --admin-text: var(--d-text);
+  --admin-text-secondary: var(--d-muted);
+  --admin-border: var(--d-border);
+
+  background-color: var(--d-bg) !important;
+  color: var(--d-text);
+}
+
+/* ---------------------------------------------------------------- surfaces */
+
+/* Page backgrounds */
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#F8F9FA\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#F6F8FC\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#f6f7fb\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#f0f4f8\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#F5F6F8\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#F3F4F9\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#F8F9FD\] {
+  background-color: var(--d-bg) !important;
+}
+
+/* Cards, panels, the top bar, modals */
+html[data-admin-theme='dark'] .redigo-admin-root .bg-white,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-white\/60,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-white\/70,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-white\/80,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-white\/90,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-white\/95,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#FFFFFF\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#FBFCFF\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#FAFBFD\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#FFFDF5\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#FFFDF4\],
+html[data-admin-theme='dark'] .redigo-admin-root .focus\:bg-white:focus,
+html[data-admin-theme='dark'] .redigo-admin-root header,
+html[data-admin-theme='dark'] .redigo-admin-root .admin-card {
+  background-color: var(--d-card) !important;
+}
+
+/* Inset panels, rows, chips */
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-50,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-50,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-50\/10,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-50\/20,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-50\/30,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-50\/50,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-50\/60,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-50\/70,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-50\/80,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-50\/40,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-50\/50,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-50\/60,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-50\/70,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-50\/80,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#F8FAFC\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#F9FAFB\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#EEF4FF\],
+html[data-admin-theme='dark'] .redigo-admin-root thead {
+  background-color: var(--d-raised) !important;
+}
+
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-100,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-100,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-200,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-200,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-200\/50,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-300,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-300 {
+  background-color: var(--d-hover) !important;
+}
+
+/* Hover states on light surfaces */
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-white:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-50:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-50:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-50\/20:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-50\/30:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-50\/50:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-50\/60:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-50\/70:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-50\/50:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-50\/70:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-50\/80:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-100:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-100:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-100\/60:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-100\/80:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-200:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-200:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-300:hover,
+html[data-admin-theme='dark'] .redigo-admin-root table tr:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .admin-table tr:hover {
+  background-color: var(--d-hover) !important;
+}
+
+/* Near-black fills (primary buttons, table header bars, avatars) would vanish
+   into the dark page, so they become a raised slate that still reads as
+   "the dark button". Their white text stays white. */
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-900,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-950,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-900,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-gray-950,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-black,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-slate-800,
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#0F172A\],
+html[data-admin-theme='dark'] .redigo-admin-root .bg-\[\#151515\] {
+  background-color: var(--d-solid) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-900:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-800:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-slate-700:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-900:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-gray-800:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:bg-black:hover {
+  background-color: var(--d-solid-hover) !important;
+}
+
+/* ---------------------------------------------------------------- text */
+
+html[data-admin-theme='dark'] .redigo-admin-root .text-black,
+html[data-admin-theme='dark'] .redigo-admin-root .text-gray-950,
+html[data-admin-theme='dark'] .redigo-admin-root .text-slate-950,
+html[data-admin-theme='dark'] .redigo-admin-root .text-gray-900,
+html[data-admin-theme='dark'] .redigo-admin-root .text-slate-900,
+html[data-admin-theme='dark'] .redigo-admin-root .text-gray-800,
+html[data-admin-theme='dark'] .redigo-admin-root .text-slate-800,
+html[data-admin-theme='dark'] .redigo-admin-root .text-\[\#0B1220\],
+html[data-admin-theme='dark'] .redigo-admin-root .text-\[\#151515\],
+html[data-admin-theme='dark'] .redigo-admin-root .text-\[\#1E293B\],
+html[data-admin-theme='dark'] .redigo-admin-root .text-\[\#05070D\],
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-black:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-gray-900:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-gray-950:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-slate-900:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-gray-800:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-slate-800:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .group:hover .group-hover\:text-black {
+  color: var(--d-text) !important;
+}
+
+html[data-admin-theme='dark'] .redigo-admin-root .text-gray-700,
+html[data-admin-theme='dark'] .redigo-admin-root .text-slate-700,
+html[data-admin-theme='dark'] .redigo-admin-root .text-gray-600,
+html[data-admin-theme='dark'] .redigo-admin-root .text-slate-600,
+html[data-admin-theme='dark'] .redigo-admin-root .text-\[\#334155\],
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-gray-700:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-slate-700:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-gray-600:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:text-slate-600:hover {
+  color: var(--d-text-2) !important;
+}
+
+html[data-admin-theme='dark'] .redigo-admin-root .text-gray-500,
+html[data-admin-theme='dark'] .redigo-admin-root .text-slate-500,
+html[data-admin-theme='dark'] .redigo-admin-root .text-gray-400,
+html[data-admin-theme='dark'] .redigo-admin-root .text-slate-400,
+html[data-admin-theme='dark'] .redigo-admin-root .text-\[\#64748B\] {
+  color: var(--d-muted) !important;
+}
+
+html[data-admin-theme='dark'] .redigo-admin-root .text-gray-300,
+html[data-admin-theme='dark'] .redigo-admin-root .text-slate-300,
+html[data-admin-theme='dark'] .redigo-admin-root .text-gray-200,
+html[data-admin-theme='dark'] .redigo-admin-root .text-slate-200 {
+  color: var(--d-faint) !important;
+}
+
+html[data-admin-theme='dark'] .redigo-admin-root ::placeholder {
+  color: var(--d-faint) !important;
+}
+
+/* ---------------------------------------------------------------- borders */
+
+html[data-admin-theme='dark'] .redigo-admin-root .border-white,
+html[data-admin-theme='dark'] .redigo-admin-root .border-gray-50,
+html[data-admin-theme='dark'] .redigo-admin-root .border-slate-50,
+html[data-admin-theme='dark'] .redigo-admin-root .border-gray-100,
+html[data-admin-theme='dark'] .redigo-admin-root .border-slate-100,
+html[data-admin-theme='dark'] .redigo-admin-root .border-gray-200,
+html[data-admin-theme='dark'] .redigo-admin-root .border-gray-250,
+html[data-admin-theme='dark'] .redigo-admin-root .border-slate-200,
+html[data-admin-theme='dark'] .redigo-admin-root .border-\[\#E5E7EB\],
+html[data-admin-theme='dark'] .redigo-admin-root .border-\[\#F1F5F9\],
+html[data-admin-theme='dark'] .redigo-admin-root .divide-gray-50 > :not(:last-child),
+html[data-admin-theme='dark'] .redigo-admin-root .divide-gray-100 > :not(:last-child),
+html[data-admin-theme='dark'] .redigo-admin-root .divide-gray-200 > :not(:last-child),
+html[data-admin-theme='dark'] .redigo-admin-root .divide-slate-50 > :not(:last-child),
+html[data-admin-theme='dark'] .redigo-admin-root .divide-slate-100 > :not(:last-child),
+html[data-admin-theme='dark'] .redigo-admin-root .divide-slate-200 > :not(:last-child),
+html[data-admin-theme='dark'] .redigo-admin-root td,
+html[data-admin-theme='dark'] .redigo-admin-root header {
+  border-color: var(--d-border) !important;
+}
+
+html[data-admin-theme='dark'] .redigo-admin-root .border-gray-300,
+html[data-admin-theme='dark'] .redigo-admin-root .border-slate-300,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:border-gray-200:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:border-gray-300:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:border-slate-200:hover,
+html[data-admin-theme='dark'] .redigo-admin-root .hover\:border-slate-300:hover {
+  border-color: var(--d-border-strong) !important;
+}
+
+html[data-admin-theme='dark'] .redigo-admin-root .ring-white {
+  --tw-ring-color: var(--d-card) !important;
+}
+
+/* Gradient stops that start or end on white */
+html[data-admin-theme='dark'] .redigo-admin-root .from-white { --tw-gradient-from: var(--d-card) !important; }
+html[data-admin-theme='dark'] .redigo-admin-root .via-white { --tw-gradient-via: var(--d-card) !important; }
+html[data-admin-theme='dark'] .redigo-admin-root .to-white { --tw-gradient-to: var(--d-card) !important; }
+html[data-admin-theme='dark'] .redigo-admin-root .to-slate-50 { --tw-gradient-to: var(--d-raised) !important; }
+
+/* ---------------------------------------------------------------- form controls */
+
+html[data-admin-theme='dark'] .redigo-admin-root input[type='text'],
+html[data-admin-theme='dark'] .redigo-admin-root input[type='number'],
+html[data-admin-theme='dark'] .redigo-admin-root input[type='email'],
+html[data-admin-theme='dark'] .redigo-admin-root input[type='tel'],
+html[data-admin-theme='dark'] .redigo-admin-root input[type='password'],
+html[data-admin-theme='dark'] .redigo-admin-root input[type='date'],
+html[data-admin-theme='dark'] .redigo-admin-root input[type='time'],
+html[data-admin-theme='dark'] .redigo-admin-root input[type='datetime-local'],
+html[data-admin-theme='dark'] .redigo-admin-root input[type='search'],
+html[data-admin-theme='dark'] .redigo-admin-root input[type='url'],
+html[data-admin-theme='dark'] .redigo-admin-root input:not([type]),
+html[data-admin-theme='dark'] .redigo-admin-root select,
+html[data-admin-theme='dark'] .redigo-admin-root textarea,
+html[data-admin-theme='dark'] .redigo-admin-root .admin-input {
+  background-color: var(--d-raised) !important;
+  border-color: var(--d-border-strong) !important;
+  color: var(--d-text) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root input.bg-transparent,
+html[data-admin-theme='dark'] .redigo-admin-root textarea.bg-transparent {
+  background-color: transparent !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root select option {
+  background-color: var(--d-card);
+  color: var(--d-text);
+}
+html[data-admin-theme='dark'] .redigo-admin-root input:focus,
+html[data-admin-theme='dark'] .redigo-admin-root select:focus,
+html[data-admin-theme='dark'] .redigo-admin-root textarea:focus {
+  border-color: var(--admin-accent) !important;
+  box-shadow: 0 0 0 1px var(--admin-accent) !important;
+}
+
+/* ---------------------------------------------------------------- admin components */
+
+html[data-admin-theme='dark'] .redigo-admin-root label,
+html[data-admin-theme='dark'] .redigo-admin-root td {
+  color: var(--d-text) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root th {
+  color: var(--d-muted) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root thead,
+html[data-admin-theme='dark'] .redigo-admin-root .admin-table th {
+  background-color: var(--d-raised) !important;
+  border-color: var(--d-border) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root .admin-table-container,
+html[data-admin-theme='dark'] .redigo-admin-root .admin-card {
+  border-color: var(--d-border) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root .admin-btn-secondary {
+  background-color: var(--d-raised) !important;
+  border-color: var(--d-border-strong) !important;
+  color: var(--d-text) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root .admin-btn-secondary:hover {
+  background-color: var(--d-hover) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root .admin-badge-success {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+  color: #34d399 !important;
+  border-color: rgba(16, 185, 129, 0.32) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root .admin-badge-danger {
+  background-color: rgba(239, 68, 68, 0.14) !important;
+  color: #f87171 !important;
+  border-color: rgba(239, 68, 68, 0.32) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root .admin-card:hover,
+html[data-admin-theme='dark'] .redigo-admin-root [class*='card']:hover {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Hand-drawn SVG charts use literal light colours for grid lines and labels. */
+html[data-admin-theme='dark'] .redigo-admin-root svg [stroke='#f1f5f9'],
+html[data-admin-theme='dark'] .redigo-admin-root svg [stroke='#F1F5F9'],
+html[data-admin-theme='dark'] .redigo-admin-root svg [stroke='#e2e8f0'],
+html[data-admin-theme='dark'] .redigo-admin-root svg [stroke='#E2E8F0'],
+html[data-admin-theme='dark'] .redigo-admin-root svg [stroke='#e5e7eb'],
+html[data-admin-theme='dark'] .redigo-admin-root svg [stroke='#E5E7EB'],
+html[data-admin-theme='dark'] .redigo-admin-root svg [stroke='#f3f4f6'] {
+  stroke: var(--d-border) !important;
+}
+html[data-admin-theme='dark'] .redigo-admin-root svg text[fill='#64748b'],
+html[data-admin-theme='dark'] .redigo-admin-root svg text[fill='#64748B'],
+html[data-admin-theme='dark'] .redigo-admin-root svg text[fill='#94a3b8'],
+html[data-admin-theme='dark'] .redigo-admin-root svg text[fill='#9ca3af'],
+html[data-admin-theme='dark'] .redigo-admin-root svg text[fill='#6b7280'] {
+  fill: var(--d-muted) !important;
+}
+
+/* Scrollbars */
+html[data-admin-theme='dark'] .redigo-admin-root ::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.25);
+}
+
+/* Theme toggle menu (lives in the header) */
+html[data-admin-theme='dark'] .redigo-admin-root .admin-theme-toggle {
+  color: var(--d-text-2) !important;
+}
+
+/* ---------------------------------------------------------------- accent fills */
+
+/* Yellow/amber buttons keep their dark label, whatever the text class says.
+   The extra `body` outranks the generated yellow-text rules. */
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-yellow-400,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-yellow-400 *,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-yellow-500,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-yellow-500 *,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-amber-400,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-amber-400 *,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-amber-500,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-amber-500 *,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-\[\#FFC400\],
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-\[\#FFC400\] *,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-\[\#FFB300\],
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-\[\#FFB300\] *,
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-\[\#F4B400\],
+html[data-admin-theme='dark'] body .redigo-admin-root .bg-\[\#F4B400\] *,
+html[data-admin-theme='dark'] body .redigo-admin-root .admin-btn-primary,
+html[data-admin-theme='dark'] body .redigo-admin-root .admin-btn-primary * {
+  color: #0b1220 !important;
+}

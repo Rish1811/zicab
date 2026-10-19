@@ -231,7 +231,7 @@ const DriverDeleteRequests = () => {
         </div>
       </div>
 
-      <div className="rounded-xl p-4 text-xs relative overflow-hidden" style={{ backgroundColor: '#FFF8E1', borderColor: '#F4C542', borderWidth: '1px' }}>
+      <div className="rounded-xl p-4 text-xs relative overflow-hidden border border-amber-300 bg-amber-50">
         <div className="flex items-start gap-3 relative z-10">
           <div className="text-yellow-600 shrink-0 mt-0.5">
             <AlertCircle size={16} />

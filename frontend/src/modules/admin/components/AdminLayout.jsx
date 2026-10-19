@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../styles/adminTheme.css';
+import '../styles/adminDarkTheme.css';
+import '../styles/adminDarkTheme.generated.css';
 import { socketService } from '../../../shared/api/socket';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import { getSupportConversations, markSupportMessagesRead } from '../../shared/chat/chatApi';
@@ -10,6 +12,7 @@ import { isMenuAllowed } from '../constants/adminAccess';
 import { ADMIN_SIDEBAR_SECTIONS } from '../constants/adminSidebar';
 import toast from 'react-hot-toast';
 import AdminSplashScreen from './AdminSplashScreen';
+import AdminThemeToggle from '../theme/AdminThemeToggle';
 import {
   Bell,
   Briefcase,
@@ -1374,6 +1377,7 @@ const AdminLayout = () => {
           </div>
 
           <div className="flex flex-1 items-center justify-end gap-3">
+            <AdminThemeToggle />
             <div ref={notificationsMenuRef} className="relative">
               <button
                 type="button"
