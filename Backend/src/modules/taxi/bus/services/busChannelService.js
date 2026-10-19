@@ -54,6 +54,24 @@ export const serializeChannel = (channel) => ({
   hasWebhookSecret: Boolean(channel.webhookSecret),
   busServiceIds: (channel.busServiceIds || []).map(String),
   active: channel.active !== false,
+  connector: {
+    type: channel.connector?.type || 'push_api',
+    baseUrl: channel.connector?.baseUrl || '',
+    authHeader: channel.connector?.authHeader || 'Authorization',
+    hasAuthValue: Boolean(channel.connector?.authValue),
+    options: channel.connector?.options || {},
+    pollSeconds: Number(channel.connector?.pollSeconds ?? 120),
+    daysAhead: Number(channel.connector?.daysAhead ?? 7),
+    lastPolledAt: channel.connector?.lastPolledAt || null,
+    lastPollStatus: channel.connector?.lastPollStatus || '',
+  },
+  tripMappings: (channel.tripMappings || []).map((mapping) => ({
+    id: String(mapping._id || ''),
+    busServiceId: String(mapping.busServiceId),
+    scheduleId: mapping.scheduleId,
+    externalTripId: mapping.externalTripId,
+    seatMap: mapping.seatMap || {},
+  })),
   lastInboundAt: channel.lastInboundAt || null,
   lastWebhookAt: channel.lastWebhookAt || null,
   lastWebhookStatus: channel.lastWebhookStatus || '',
@@ -219,7 +237,14 @@ export const createChannelBooking = async (channel, body = {}) => {
     throw new ApiError(400, 'seatIds are required');
   }
 
-  const existing = await BusBooking.findOne({ 'channel.channelId': channel._id, 'channel.externalRef': externalRef });
+  let existing = await BusBooking.findOne({ 'channel.channelId': channel._id, 'channel.externalRef': externalRef });
+  if (existing && ['cancelled', 'expired', 'failed'].includes(existing.status)) {
+    // A ref reused after its booking ended is a new sale. Move the old record
+    // aside (it stays for history) so the ref is free again.
+    existing.channel.externalRef = `${externalRef}~ended~${existing._id}`;
+    await existing.save();
+    existing = null;
+  }
   if (existing) {
     const sameSeats = existing.seatIds.length === seatIds.length && seatIds.every((id) => existing.seatIds.includes(id));
     if (!sameSeats) {

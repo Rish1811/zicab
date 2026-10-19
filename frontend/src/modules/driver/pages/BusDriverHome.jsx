@@ -796,6 +796,18 @@ const BusDriverHome = () => {
 
       <button
         type="button"
+        onClick={() => navigate('/taxi/driver/bus-home/tickets')}
+        className="flex w-full items-center justify-between gap-3 rounded-[28px] bg-slate-950 p-5 text-left text-white shadow-sm"
+      >
+        <span>
+          <span className="block text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Boarding</span>
+          <span className="mt-1 block text-lg font-black">Check tickets by PNR or QR</span>
+        </span>
+        <Ticket size={22} className="shrink-0" />
+      </button>
+
+      <button
+        type="button"
         onClick={openLiveRoutePage}
         className="w-full rounded-[28px] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300"
       >

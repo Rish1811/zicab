@@ -324,3 +324,49 @@ export const sendOtpSms = async ({ phone, otp, purpose = 'otp' }) => {
     jobId: parsedFinalResponse?.JobId || null,
   };
 };
+
+/// Sends a non-OTP message on a DLT-registered template. Indian carriers drop
+/// anything that doesn't match a registered template word for word, so the
+/// caller passes the template id and the text with its {#var#} slots already
+/// filled. Returns { mode: 'skipped' } when SMS isn't configured, instead of
+/// failing the action that triggered it.
+export const sendTemplatedSms = async ({ phone, templateId, message }) => {
+  const config = getSmsIndiaHubConfig();
+  if (!templateId || !message || !config.senderId || (!config.apiKey && !(config.user && config.password))) {
+    return { mode: 'skipped', message: 'SMS template or provider not configured' };
+  }
+
+  const normalizedPhone = normalizeIndianPhone(phone);
+  if (!/^91\d{10}$/.test(normalizedPhone)) {
+    return { mode: 'skipped', message: 'Not an Indian mobile number' };
+  }
+
+  const payload = new URLSearchParams({
+    sid: config.senderId,
+    msisdn: normalizedPhone,
+    msg: message,
+    fl: '0',
+    gwid: '2',
+    TemplateId: templateId,
+  });
+  if (config.apiKey) {
+    payload.set('APIKey', config.apiKey);
+  } else {
+    payload.set('user', config.user);
+    payload.set('password', config.password);
+  }
+
+  const response = await fetch(SMS_INDIA_HUB_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json, text/plain;q=0.9, */*;q=0.8',
+    },
+    body: payload.toString(),
+  });
+  const responseText = (await response.text()).trim();
+  if (!isSuccessfulProviderResponse(response, responseText)) {
+    throw new ApiError(502, `SMS India Hub rejected message: ${responseText || response.statusText}`);
+  }
+  return { mode: 'live', providerResponse: responseText };
+};

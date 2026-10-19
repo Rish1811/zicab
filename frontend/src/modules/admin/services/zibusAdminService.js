@@ -16,4 +16,13 @@ export const zibusAdminService = {
   listChannelEvents: (id) => api.get(`/admin/zibus/channels/${id}/events`).then(data),
 
   tripInventory: (params) => api.get('/admin/zibus/inventory', { params }).then(data),
+
+  connectorTypes: () => api.get('/admin/zibus/connector-types').then(data),
+  syncChannelNow: (id) => api.post(`/admin/zibus/channels/${id}/sync-now`).then(data),
+
+  listOperators: () => api.get('/admin/zibus/operators').then(data),
+  createOperator: (payload) => api.post('/admin/zibus/operators', payload).then(data),
+  updateOperator: (id, payload) => api.patch(`/admin/zibus/operators/${id}`, payload).then(data),
+  operatorReport: (id, params) => api.get(`/admin/zibus/operators/${id}/report`, { params }).then(data),
+  searchOwners: (search) => api.get('/admin/zibus/owners', { params: { search } }).then(data),
 };

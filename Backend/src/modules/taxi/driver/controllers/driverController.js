@@ -14,6 +14,7 @@ import { Ride } from "../../user/models/Ride.js";
 import { BusBooking } from "../../user/models/BusBooking.js";
 import { BusSeatHold } from "../../user/models/BusSeatHold.js";
 import { publishBusSeatChange } from "../../bus/services/busSeatSyncService.js";
+import { publishBusLiveLocation } from "../../bus/services/busTicketService.js";
 import { cancelAndRefundFoodForBooking } from "../../bus/services/dhabaService.js";
 import { Owner } from "../../admin/models/Owner.js";
 import { BusService } from "../../admin/models/BusService.js";
@@ -6098,6 +6099,7 @@ export const startBusDriverLiveTrip = async (req, res) => {
   };
 
   await busService.save();
+  publishBusLiveLocation(busService);
 
   res.json({
     success: true,
@@ -6143,6 +6145,7 @@ export const updateBusDriverLiveLocation = async (req, res) => {
   };
 
   await busService.save();
+  publishBusLiveLocation(busService);
 
   res.json({
     success: true,
@@ -6176,6 +6179,7 @@ export const updateBusDriverLiveTripStatus = async (req, res) => {
     };
 
     await busService.save();
+    publishBusLiveLocation(busService);
 
     res.json({
       success: true,
@@ -6207,6 +6211,7 @@ export const updateBusDriverLiveTripStatus = async (req, res) => {
   }
 
   await busService.save();
+  publishBusLiveLocation(busService);
 
   res.json({
     success: true,

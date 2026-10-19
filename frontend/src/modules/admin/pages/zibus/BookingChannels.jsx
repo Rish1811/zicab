@@ -12,6 +12,30 @@ const KINDS = [
   { value: 'other', label: 'Other' },
 ];
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 focus:border-blue-400 focus:outline-none';
+const labelClass = 'text-[10px] font-black uppercase tracking-widest text-slate-400';
+
+const EMPTY_REST_OPTIONS = {
+  bookingsPath: '',
+  listPath: '',
+  refField: '',
+  seatsField: '',
+  seatLabelField: '',
+  statusField: '',
+  cancelledValues: 'CANCELLED',
+  passengerNameField: '',
+  passengerPhoneField: '',
+};
+
+const seatMapToText = (seatMap = {}) =>
+  Object.entries(seatMap || {}).map(([theirs, ours]) => `${theirs}=${ours}`).join(', ');
+
+const textToSeatMap = (text = '') =>
+  Object.fromEntries(
+    String(text)
+      .split(',')
+      .map((pair) => pair.split('=').map((part) => part.trim()))
+      .filter(([theirs, ours]) => theirs && ours),
+  );
 const when = (value) => (value ? new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'never');
 
 const copy = (text) => {
@@ -45,7 +69,7 @@ const SecretBox = ({ secrets, onClose }) => (
   </div>
 );
 
-const ChannelForm = ({ initial, buses, onClose, onSaved }) => {
+const ChannelForm = ({ initial, buses, connectorTypes, onClose, onSaved }) => {
   const [form, setForm] = useState({
     name: initial?.name || '',
     code: initial?.code || '',
@@ -55,18 +79,63 @@ const ChannelForm = ({ initial, buses, onClose, onSaved }) => {
     active: initial?.active !== false,
     busServiceIds: initial?.busServiceIds || [],
   });
+  const [connector, setConnector] = useState(() => ({
+    type: initial?.connector?.type || 'push_api',
+    baseUrl: initial?.connector?.baseUrl || '',
+    authHeader: initial?.connector?.authHeader || 'Authorization',
+    authValue: '',
+    pollSeconds: initial?.connector?.pollSeconds ?? 120,
+    daysAhead: initial?.connector?.daysAhead ?? 7,
+    options: (() => {
+      const saved = { ...EMPTY_REST_OPTIONS, ...(initial?.connector?.options || {}) };
+      return { ...saved, cancelledValues: Array.isArray(saved.cancelledValues) ? saved.cancelledValues.join(', ') : saved.cancelledValues };
+    })(),
+  }));
+  const [mappings, setMappings] = useState(() =>
+    (initial?.tripMappings || []).map((mapping) => ({ ...mapping, seatMapText: seatMapToText(mapping.seatMap) })),
+  );
   const [saving, setSaving] = useState(false);
   const isNew = !initial?.id;
+  const isPull = connector.type !== 'push_api';
   const set = (key) => (event) =>
     setForm((current) => ({ ...current, [key]: event.target.type === 'checkbox' ? event.target.checked : event.target.value }));
+  const setConn = (key) => (event) => setConnector((current) => ({ ...current, [key]: event.target.value }));
+  const setOpt = (key) => (event) =>
+    setConnector((current) => ({ ...current, options: { ...current.options, [key]: event.target.value } }));
+  const setMapping = (index, patch) =>
+    setMappings((current) => current.map((mapping, i) => (i === index ? { ...mapping, ...patch } : mapping)));
 
   const submit = async (event) => {
     event.preventDefault();
     setSaving(true);
     try {
+      const payload = {
+        ...form,
+        connector: {
+          ...connector,
+          authValue: connector.authValue || undefined,
+          options: isPull
+            ? {
+                ...connector.options,
+                cancelledValues: String(connector.options.cancelledValues || '')
+                  .split(',')
+                  .map((value) => value.trim())
+                  .filter(Boolean),
+              }
+            : {},
+        },
+        tripMappings: isPull
+          ? mappings.map((mapping) => ({
+              busServiceId: mapping.busServiceId,
+              scheduleId: mapping.scheduleId,
+              externalTripId: mapping.externalTripId,
+              seatMap: textToSeatMap(mapping.seatMapText),
+            }))
+          : [],
+      };
       const saved = isNew
-        ? await zibusAdminService.createChannel(form)
-        : await zibusAdminService.updateChannel(initial.id, form);
+        ? await zibusAdminService.createChannel(payload)
+        : await zibusAdminService.updateChannel(initial.id, payload);
       onSaved(saved);
     } catch (error) {
       toast.error(error?.message || 'Could not save');
@@ -98,6 +167,83 @@ const ChannelForm = ({ initial, buses, onClose, onSaved }) => {
           </label>
           <label className="space-y-1 sm:col-span-2"><span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Notes</span><input className={inputClass} value={form.notes} onChange={set('notes')} /></label>
           <label className="flex items-center gap-2 text-sm font-bold text-slate-700"><input type="checkbox" checked={form.active} onChange={set('active')} /> Active</label>
+        </div>
+
+        <div className="space-y-4 rounded-2xl border border-slate-100 bg-white p-5">
+          <div>
+            <p className="text-sm font-black text-slate-900">How bookings reach ZI Bus</p>
+            <p className="text-xs font-semibold text-slate-500">
+              Use a connector when their system can&apos;t call our API: ZI Bus then reads their bookings on a timer and locks the same seats here.
+            </p>
+          </div>
+          <select className={inputClass} value={connector.type} onChange={setConn('type')}>
+            {connectorTypes.map((item) => <option key={item.type} value={item.type}>{item.label}</option>)}
+          </select>
+
+          {isPull ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 sm:col-span-2"><span className={labelClass}>Their API base URL</span><input className={inputClass} value={connector.baseUrl} onChange={setConn('baseUrl')} placeholder="https://api.operator-erp.example/" required /></label>
+                <label className="space-y-1"><span className={labelClass}>Auth header</span><input className={inputClass} value={connector.authHeader} onChange={setConn('authHeader')} /></label>
+                <label className="space-y-1">
+                  <span className={labelClass}>Auth value {initial?.connector?.hasAuthValue ? '(saved — blank keeps it)' : ''}</span>
+                  <input className={inputClass} type="password" value={connector.authValue} onChange={setConn('authValue')} autoComplete="off" placeholder="Bearer …" />
+                </label>
+                <label className="space-y-1 sm:col-span-2"><span className={labelClass}>Bookings path ({'{tripId}'}, {'{date}'})</span><input className={inputClass} value={connector.options.bookingsPath} onChange={setOpt('bookingsPath')} placeholder="v1/trips/{tripId}/bookings?date={date}" required /></label>
+                <label className="space-y-1"><span className={labelClass}>Booking list field</span><input className={inputClass} value={connector.options.listPath} onChange={setOpt('listPath')} placeholder="data.bookings" /></label>
+                <label className="space-y-1"><span className={labelClass}>Booking id field</span><input className={inputClass} value={connector.options.refField} onChange={setOpt('refField')} placeholder="pnr" required /></label>
+                <label className="space-y-1"><span className={labelClass}>Seats field</span><input className={inputClass} value={connector.options.seatsField} onChange={setOpt('seatsField')} placeholder="seats" required /></label>
+                <label className="space-y-1"><span className={labelClass}>Seat label inside each seat (if objects)</span><input className={inputClass} value={connector.options.seatLabelField} onChange={setOpt('seatLabelField')} placeholder="seatNo" /></label>
+                <label className="space-y-1"><span className={labelClass}>Status field</span><input className={inputClass} value={connector.options.statusField} onChange={setOpt('statusField')} placeholder="status" /></label>
+                <label className="space-y-1"><span className={labelClass}>Cancelled values (comma separated)</span><input className={inputClass} value={connector.options.cancelledValues} onChange={setOpt('cancelledValues')} placeholder="CANCELLED, REFUNDED" /></label>
+                <label className="space-y-1"><span className={labelClass}>Passenger name field</span><input className={inputClass} value={connector.options.passengerNameField} onChange={setOpt('passengerNameField')} placeholder="passenger.name" /></label>
+                <label className="space-y-1"><span className={labelClass}>Passenger phone field</span><input className={inputClass} value={connector.options.passengerPhoneField} onChange={setOpt('passengerPhoneField')} placeholder="passenger.mobile" /></label>
+                <label className="space-y-1"><span className={labelClass}>Check every (seconds)</span><input className={inputClass} type="number" min="30" max="3600" value={connector.pollSeconds} onChange={setConn('pollSeconds')} /></label>
+                <label className="space-y-1"><span className={labelClass}>Days ahead to sync</span><input className={inputClass} type="number" min="0" max="30" value={connector.daysAhead} onChange={setConn('daysAhead')} /></label>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-slate-900">Their trips ↔ ZI Bus runs</p>
+                  <button
+                    type="button"
+                    onClick={() => setMappings((current) => [...current, { busServiceId: '', scheduleId: '', externalTripId: '', seatMapText: '' }])}
+                    className="flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white"
+                  >
+                    <Plus size={12} /> Map trip
+                  </button>
+                </div>
+                {mappings.length === 0 ? <p className="rounded-xl bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-500">Nothing syncs until at least one trip is mapped.</p> : null}
+                {mappings.map((mapping, index) => {
+                  const bus = buses.find((item) => String(item.id) === String(mapping.busServiceId));
+                  return (
+                    <div key={mapping.id || index} className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                      <div className="grid gap-2 sm:grid-cols-[1.6fr_1fr_1fr_auto]">
+                        <select className={inputClass} value={mapping.busServiceId} onChange={(e) => setMapping(index, { busServiceId: e.target.value, scheduleId: '' })} required>
+                          <option value="">ZI Bus bus</option>
+                          {buses.map((item) => <option key={item.id} value={item.id}>{item.busName} · {item.route?.originCity} → {item.route?.destinationCity}</option>)}
+                        </select>
+                        <select className={inputClass} value={mapping.scheduleId} onChange={(e) => setMapping(index, { scheduleId: e.target.value })} required>
+                          <option value="">Schedule</option>
+                          {(bus?.schedules || []).map((schedule) => <option key={schedule.id} value={schedule.id}>{schedule.label || 'Departs'} {schedule.departureTime}</option>)}
+                        </select>
+                        <input className={inputClass} value={mapping.externalTripId} onChange={(e) => setMapping(index, { externalTripId: e.target.value })} placeholder="Their trip id" required />
+                        <button type="button" onClick={() => setMappings((current) => current.filter((_, i) => i !== index))} className="rounded-xl p-2 text-rose-500 hover:bg-rose-50" aria-label="Remove mapping">
+                          <X size={14} />
+                        </button>
+                      </div>
+                      <input
+                        className={inputClass}
+                        value={mapping.seatMapText}
+                        onChange={(e) => setMapping(index, { seatMapText: e.target.value })}
+                        placeholder="Seat names that differ, e.g. L1=1A, L2=1B (same names need nothing)"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
         </div>
         <div className="space-y-2 rounded-2xl border border-slate-100 bg-white p-5">
           <p className="text-sm font-black text-slate-900">Buses this channel may sell</p>
@@ -184,6 +330,28 @@ const BookingChannels = () => {
   const [editing, setEditing] = useState(null);
   const [logFor, setLogFor] = useState(null);
   const [secrets, setSecrets] = useState(null);
+  const [connectorTypes, setConnectorTypes] = useState([{ type: 'push_api', label: 'They call the ZI Bus channel API' }]);
+  const [syncingId, setSyncingId] = useState('');
+
+  useEffect(() => {
+    zibusAdminService.connectorTypes().then((list) => Array.isArray(list) && setConnectorTypes(list)).catch(() => {});
+  }, []);
+
+  const syncNow = async (channel) => {
+    setSyncingId(channel.id);
+    try {
+      const summary = await zibusAdminService.syncChannelNow(channel.id);
+      const text = `Synced ${summary.trips} run(s): +${summary.added} locked, -${summary.released} released${summary.conflicts ? `, ${summary.conflicts} double-sale conflict(s)` : ''}`;
+      if (summary.errors?.length) toast.error(`${text}. ${summary.errors[0]}`);
+      else toast.success(text);
+      const list = await zibusAdminService.listChannels();
+      if (Array.isArray(list)) setChannels(list);
+    } catch (error) {
+      toast.error(error?.message || 'Sync failed');
+    } finally {
+      setSyncingId('');
+    }
+  };
 
   useEffect(() => {
     Promise.all([zibusAdminService.listChannels(), getAdminBuses().catch(() => [])])
@@ -278,9 +446,24 @@ const BookingChannels = () => {
                 <p className="text-xs font-semibold text-slate-500">
                   Sells: {channel.busServiceIds.length ? `${channel.busServiceIds.length} bus(es)` : 'all active buses'}
                 </p>
+                {channel.connector?.type && channel.connector.type !== 'push_api' ? (
+                  <div className="rounded-xl bg-blue-50 p-3 text-xs">
+                    <p className="font-black text-blue-900">
+                      Connector · {channel.tripMappings.length} trip(s) · every {channel.connector.pollSeconds}s
+                    </p>
+                    <p className={`mt-1 font-semibold ${String(channel.connector.lastPollStatus).startsWith('error') ? 'text-rose-600' : 'text-blue-800'}`}>
+                      Last sync {when(channel.connector.lastPolledAt)} {channel.connector.lastPollStatus ? `· ${channel.connector.lastPollStatus}` : ''}
+                    </p>
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => setEditing(channel)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">Edit</button>
                   <button type="button" onClick={() => setLogFor(channel)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">Sync log</button>
+                  {channel.connector?.type && channel.connector.type !== 'push_api' ? (
+                    <button type="button" disabled={syncingId === channel.id} onClick={() => syncNow(channel)} className="flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50">
+                      {syncingId === channel.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Sync now
+                    </button>
+                  ) : null}
                   <button type="button" onClick={() => rotate(channel)} className="flex items-center gap-1 rounded-xl border border-amber-200 px-3 py-2 text-xs font-black text-amber-700">
                     <RefreshCw size={12} /> New key
                   </button>
@@ -295,6 +478,7 @@ const BookingChannels = () => {
         <ChannelForm
           initial={editing}
           buses={buses}
+          connectorTypes={connectorTypes}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
             upsert(saved);

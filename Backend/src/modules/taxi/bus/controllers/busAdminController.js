@@ -10,6 +10,8 @@ import { Dhaba } from '../models/Dhaba.js';
 import { DhabaOrder } from '../models/DhabaOrder.js';
 import { generateChannelCredentials, serializeChannel } from '../services/busChannelService.js';
 import { getTripSeatSnapshot } from '../services/busSeatSyncService.js';
+import { reconcileChannel } from '../services/busChannelSyncService.js';
+import { getConnector, listConnectorTypes } from '../connectors/index.js';
 import { serializeDhaba, serializeDhabaOrder } from '../services/dhabaService.js';
 import { normalizeDhabaPhone } from './dhabaController.js';
 
@@ -167,6 +169,48 @@ const applyChannelFields = async (channel, body = {}) => {
   if (Array.isArray(body.busServiceIds)) {
     channel.busServiceIds = body.busServiceIds.map((id) => requireObjectId(id, 'busServiceId'));
   }
+
+  if (body.connector && typeof body.connector === 'object') {
+    const input = body.connector;
+    const type = String(input.type || 'push_api');
+    if (type !== 'push_api' && !getConnector(type)) {
+      throw new ApiError(400, 'Unknown connector type');
+    }
+    channel.connector.type = type;
+    if (input.baseUrl !== undefined) channel.connector.baseUrl = String(input.baseUrl || '').trim();
+    if (input.authHeader !== undefined) channel.connector.authHeader = String(input.authHeader || '').trim().slice(0, 60);
+    // Blank means "keep the stored secret"; send null to clear it.
+    if (input.authValue === null) channel.connector.authValue = '';
+    else if (input.authValue) channel.connector.authValue = String(input.authValue);
+    if (input.options && typeof input.options === 'object') channel.connector.options = input.options;
+    if (input.pollSeconds !== undefined) channel.connector.pollSeconds = Math.min(3600, Math.max(30, Number(input.pollSeconds) || 120));
+    if (input.daysAhead !== undefined) channel.connector.daysAhead = Math.min(30, Math.max(0, Number(input.daysAhead) || 0));
+    channel.connector.nextPollAt = null;
+    channel.markModified('connector.options');
+    if (type !== 'push_api') getConnector(type).validate(channel);
+  }
+
+  if (Array.isArray(body.tripMappings)) {
+    const mappings = body.tripMappings.map((mapping) => ({
+      busServiceId: requireObjectId(mapping?.busServiceId, 'busServiceId'),
+      scheduleId: String(mapping?.scheduleId || '').trim(),
+      externalTripId: String(mapping?.externalTripId || '').trim(),
+      seatMap: mapping?.seatMap && typeof mapping.seatMap === 'object' ? mapping.seatMap : {},
+    }));
+    if (mappings.some((mapping) => !mapping.scheduleId || !mapping.externalTripId)) {
+      throw new ApiError(400, 'Each trip mapping needs a schedule and the channel trip id');
+    }
+    channel.tripMappings = mappings;
+  }
+};
+
+export const adminListConnectorTypes = async (_req, res) => {
+  ok(res, listConnectorTypes());
+};
+
+/// Runs the channel's pull connector right now and reports what changed.
+export const adminSyncChannelNow = async (req, res) => {
+  ok(res, await reconcileChannel(requireObjectId(req.params.id)));
 };
 
 export const adminListChannels = async (_req, res) => {

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { BusService } from '../../admin/models/BusService.js';
 import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
+import { sendTemplatedSms } from '../../services/smsService.js';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { refundRazorpayPayment } from './busRefundService.js';
 import { Dhaba } from '../models/Dhaba.js';
@@ -462,6 +463,42 @@ const sendOrderAlert = async (order) => {
   }).catch((error) => {
     console.error('[dhaba] push failed', error.message);
   });
+
+  await sendDhabaAlertSms(order, { eta, itemCount }).catch((error) => {
+    console.error('[dhaba] sms failed', order.orderCode, error.message);
+  });
+};
+
+/// SMS backup for dhabas whose phone isn't watching the panel. Needs a DLT
+/// template registered with the operator and set in the environment:
+///   DHABA_ALERT_SMS_TEMPLATE_ID=<DLT template id>
+///   DHABA_ALERT_SMS_TEMPLATE=<the exact registered text with {#var#} slots>
+/// The slots are filled in order with: order code, bus, arrival time,
+/// passenger count, item count. Without both settings, no SMS is sent.
+const sendDhabaAlertSms = async (order, { eta, itemCount }) => {
+  const templateId = process.env.DHABA_ALERT_SMS_TEMPLATE_ID;
+  const template = process.env.DHABA_ALERT_SMS_TEMPLATE;
+  if (!templateId || !template) {
+    return;
+  }
+
+  const dhaba = await Dhaba.findById(order.dhabaId).select('phone').lean();
+  if (!dhaba?.phone) {
+    return;
+  }
+
+  // DLT variables are capped at 30 characters each.
+  const values = [
+    order.orderCode,
+    `${order.bus?.busName || 'Bus'} ${order.bus?.registrationNumber || ''}`.trim(),
+    eta,
+    String(order.passengerCount || 1),
+    String(itemCount),
+  ].map((value) => String(value).slice(0, 30));
+  let index = 0;
+  const message = template.replace(/\{#var#\}/g, () => values[index++] ?? '');
+
+  await sendTemplatedSms({ phone: dhaba.phone, templateId, message });
 };
 
 /// Uses the bus's live GPS, when the trip is running, to pull an alert

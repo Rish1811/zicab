@@ -325,6 +325,14 @@ const busServiceSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // The bus company (see bus/models/BusOperator). operatorName stays as the
+    // display name shown to passengers.
+    operatorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxiBusOperator',
+      default: null,
+      index: true,
+    },
     ownerDriverId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Driver',

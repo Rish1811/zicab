@@ -8,6 +8,7 @@ import {
   ApplicationStatus,
   BusDriverHome,
   BusDriverLiveRoute,
+  BusConductorTickets,
   BusSignupBuilderPage,
   Chat,
   DriverBankDetailsPage,
@@ -101,6 +102,7 @@ const driverRoutes = (
     <Route path="home" element={<DriverHome />} />
     <Route path="bus-home" element={<BusDriverHome />} />
     <Route path="bus-home/live-route" element={<BusDriverLiveRoute />} />
+    <Route path="bus-home/tickets" element={<BusConductorTickets />} />
     <Route path="pooling" element={<PoolingDriverDashboard />} />
     <Route path="pooling/onboarding" element={<PoolingDriverOnboarding />} />
     <Route path="pooling/status" element={<PoolingDriverPendingStatus />} />

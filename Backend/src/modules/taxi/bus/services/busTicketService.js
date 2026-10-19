@@ -2,9 +2,12 @@ import QRCode from 'qrcode';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { BusService } from '../../admin/models/BusService.js';
 import { BusBooking } from '../../user/models/BusBooking.js';
+import { BusOperator } from '../models/BusOperator.js';
+import { BusDriver } from '../../driver/models/BusDriver.js';
 import { DhabaOrder } from '../models/DhabaOrder.js';
 import { findSchedule, parseIstDateTime, resolveTripWindow } from '../utils/busTime.js';
 import { serializeDhabaOrder } from './dhabaService.js';
+import { getBusSocketServer } from './busSeatSyncService.js';
 
 /// Passengers can watch the bus from this long before their boarding time.
 export const LIVE_TRACKING_LEAD_MINUTES = 60;
@@ -182,26 +185,144 @@ export const verifyTicketByPnr = async ({ pnr, role, actorId }) => {
     throw new ApiError(404, 'No ticket with this PNR');
   }
 
-  const busService = await BusService.findById(booking.busServiceId).select('busDriverId ownerId busName').lean();
-  if (role === 'bus_driver' && String(busService?.busDriverId || '') !== String(actorId)) {
-    throw new ApiError(403, 'This ticket is for a different bus');
+  const busService = await BusService.findById(booking.busServiceId).select('busDriverId ownerId operatorId busName').lean();
+  await assertCrewAccess(busService, role, actorId);
+  return serializeCheckedTicket(booking, busService);
+};
+
+/// Who may check tickets on a bus: its assigned bus driver, its owner (or any
+/// owner account of its company), or an admin.
+const assertCrewAccess = async (busService, role, actorId) => {
+  if (role === 'admin') return;
+  if (role === 'bus_driver') {
+    if (String(busService?.busDriverId || '') === String(actorId)) return;
+    // The driver app links a driver to a bus from the driver side too.
+    if (busService?._id && await BusDriver.exists({ _id: actorId, assignedBusServiceId: busService._id })) return;
   }
-  if (role === 'owner' && String(busService?.ownerId || '') !== String(actorId)) {
-    throw new ApiError(403, 'This ticket is for a bus you do not operate');
+  if (role === 'owner') {
+    if (String(busService?.ownerId || '') === String(actorId)) return;
+    if (busService?.operatorId && await BusOperator.exists({ _id: busService.operatorId, ownerIds: actorId })) return;
+  }
+  throw new ApiError(403, 'This ticket is for a bus you do not operate');
+};
+
+const serializeCheckedTicket = (booking, busService) => ({
+  valid: booking.status === 'confirmed',
+  boardedAt: booking.boarding?.boardedAt || null,
+  pnr: booking.pnr,
+  status: booking.status,
+  travelDate: booking.travelDate,
+  scheduleId: booking.scheduleId,
+  busName: busService?.busName || booking.routeSnapshot?.busName || '',
+  seats: activeSeatLabels(booking),
+  passengerName: booking.passenger?.name || '',
+  passengerPhone: booking.passenger?.phone || '',
+  boardingPoint: booking.boardingPoint?.pointName || booking.boardingPoint?.city || '',
+  droppingPoint: booking.droppingPoint?.pointName || booking.droppingPoint?.city || '',
+  source: booking.bookingSource,
+  channel: booking.channel?.name || '',
+});
+
+/// Conductor checks a passenger in. Refuses tickets for another run or day,
+/// so a ticket can't be reused on a later trip; checking in twice is harmless.
+export const boardTicketByPnr = async ({ pnr, role, actorId, scheduleId, travelDate }) => {
+  const normalized = String(pnr || '').trim().toUpperCase();
+  const booking = await BusBooking.findOne({ pnr: normalized });
+  if (!booking) {
+    throw new ApiError(404, 'No ticket with this PNR');
   }
 
+  const busService = await BusService.findById(booking.busServiceId).select('busDriverId ownerId operatorId busName').lean();
+  await assertCrewAccess(busService, role, actorId);
+
+  if (booking.status !== 'confirmed') {
+    throw new ApiError(409, `This ticket is ${booking.status}`);
+  }
+  if ((scheduleId && booking.scheduleId !== scheduleId) || (travelDate && booking.travelDate !== travelDate)) {
+    throw new ApiError(409, `This ticket is for ${booking.travelDate}, not this trip`);
+  }
+
+  if (!booking.boarding?.boardedAt) {
+    booking.boarding = { boardedAt: new Date(), boardedBy: `${role}:${actorId}` };
+    await booking.save();
+  }
+  return serializeCheckedTicket(booking, busService);
+};
+
+/// Passenger list for the crew's own bus on one run, with check-in state.
+export const getCrewManifest = async ({ role, actorId, busServiceId, scheduleId, travelDate }) => {
+  let filter = { _id: busServiceId };
+  if (role === 'bus_driver') {
+    const driver = await BusDriver.findById(actorId).select('assignedBusServiceId').lean();
+    filter = driver?.assignedBusServiceId ? { _id: driver.assignedBusServiceId } : { busDriverId: actorId };
+  }
+  const busService = await BusService.findOne(filter).select('busDriverId ownerId operatorId busName schedules').lean();
+  if (!busService) {
+    throw new ApiError(404, 'No bus assigned');
+  }
+  await assertCrewAccess(busService, role, actorId);
+
+  const schedule = scheduleId ? findSchedule(busService, scheduleId) : (busService.schedules || [])[0];
+  if (!schedule || !/^\d{4}-\d{2}-\d{2}$/.test(String(travelDate || ''))) {
+    throw new ApiError(400, 'scheduleId and travelDate are required');
+  }
+
+  const bookings = await BusBooking.find({
+    busServiceId: busService._id,
+    scheduleId: schedule.id,
+    travelDate,
+    status: 'confirmed',
+  }).sort({ 'boardingPoint.time': 1, createdAt: 1 });
+
+  const passengers = bookings.map((booking) => serializeCheckedTicket(booking, busService));
   return {
-    valid: booking.status === 'confirmed',
-    pnr: booking.pnr,
-    status: booking.status,
-    travelDate: booking.travelDate,
-    scheduleId: booking.scheduleId,
-    busName: busService?.busName || booking.routeSnapshot?.busName || '',
-    seats: activeSeatLabels(booking),
-    passengerName: booking.passenger?.name || '',
-    boardingPoint: booking.boardingPoint?.pointName || booking.boardingPoint?.city || '',
-    droppingPoint: booking.droppingPoint?.pointName || booking.droppingPoint?.city || '',
-    source: booking.bookingSource,
-    channel: booking.channel?.name || '',
+    busServiceId: String(busService._id),
+    busName: busService.busName,
+    scheduleId: schedule.id,
+    departureTime: schedule.departureTime,
+    travelDate,
+    schedules: (busService.schedules || []).map((item) => ({ id: item.id, label: item.label || '', departureTime: item.departureTime })),
+    totals: {
+      tickets: passengers.length,
+      seats: passengers.reduce((sum, item) => sum + item.seats.length, 0),
+      boardedSeats: passengers.filter((item) => item.boardedAt).reduce((sum, item) => sum + item.seats.length, 0),
+    },
+    passengers,
   };
+};
+
+export const BUS_LIVE_EVENTS = Object.freeze({
+  TRACK: 'bus:track',
+  UNTRACK: 'bus:untrack',
+  LOCATION: 'bus:live:location',
+});
+
+export const getBusLiveRoom = (busServiceId, scheduleId, travelDate) =>
+  `bus-live:${String(busServiceId)}:${String(scheduleId)}:${String(travelDate)}`;
+
+/// Called after the bus driver's app reports a position or changes the trip
+/// state: every passenger watching that run gets it at once. Passengers only
+/// get into the room through the tracking-window check in the socket handler.
+export const publishBusLiveLocation = (busService) => {
+  const live = busService?.liveTracking || {};
+  const io = getBusSocketServer();
+  if (!io || !live.scheduleId || !live.travelDate) {
+    return;
+  }
+
+  io.to(getBusLiveRoom(busService._id, live.scheduleId, live.travelDate)).emit(BUS_LIVE_EVENTS.LOCATION, {
+    busServiceId: String(busService._id),
+    scheduleId: live.scheduleId,
+    travelDate: live.travelDate,
+    state: live.status === 'paused' ? 'paused' : live.status === 'in_progress' ? 'live' : 'waiting_for_bus',
+    location: live.currentLocation?.lat != null
+      ? {
+          lat: Number(live.currentLocation.lat),
+          lng: Number(live.currentLocation.lng),
+          heading: live.currentLocation.heading ?? null,
+          speedKmph: live.currentLocation.speedKmph ?? null,
+        }
+      : null,
+    lastUpdatedAt: live.lastUpdatedAt || new Date(),
+  });
 };

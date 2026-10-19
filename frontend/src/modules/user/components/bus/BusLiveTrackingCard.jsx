@@ -2,9 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api';
 import { Clock, Navigation, Radio } from 'lucide-react';
 import userBusService from '../../services/busService';
+import { socketService } from '../../../../shared/api/socket';
 import { HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../../admin/utils/googleMaps';
 
-const POLL_MS = 10_000;
+// Positions arrive over the socket the moment the driver's app sends them;
+// this slower poll only covers a dropped connection.
+const POLL_MS = 30_000;
+const LIVE_EVENTS = { TRACK: 'bus:track', UNTRACK: 'bus:untrack', LOCATION: 'bus:live:location' };
+const MAX_TRAIL_POINTS = 60;
 const unwrap = (response) => response?.data?.data || response?.data || response || null;
 
 const formatTime = (value) =>
@@ -46,6 +51,42 @@ const BusLiveTrackingCard = ({ bookingId }) => {
       clearTimeout(timer);
     };
   }, [bookingId]);
+
+  const isAvailable = Boolean(tracking?.available);
+  useEffect(() => {
+    if (!bookingId || !isAvailable) return undefined;
+
+    const socket = socketService.connect({ role: 'user' });
+    const subscribe = () => socketService.emit(LIVE_EVENTS.TRACK, { bookingId });
+    const handleLocation = (payload) => {
+      setTracking((current) => {
+        if (!current) return current;
+        const location = payload?.location || current.location;
+        const lastPoint = current.recentPath?.[current.recentPath.length - 1];
+        const moved = location && (!lastPoint || lastPoint.lat !== location.lat || lastPoint.lng !== location.lng);
+        return {
+          ...current,
+          ...(payload?.opensAt ? payload : {}),
+          state: payload?.state || current.state,
+          location,
+          lastUpdatedAt: payload?.lastUpdatedAt || current.lastUpdatedAt,
+          recentPath: moved
+            ? [...(current.recentPath || []), { lat: location.lat, lng: location.lng }].slice(-MAX_TRAIL_POINTS)
+            : current.recentPath,
+        };
+      });
+    };
+
+    socketService.on(LIVE_EVENTS.LOCATION, handleLocation);
+    socketService.on('connect', subscribe);
+    if (socket?.connected) subscribe();
+
+    return () => {
+      socketService.emit(LIVE_EVENTS.UNTRACK, {});
+      socketService.off(LIVE_EVENTS.LOCATION, handleLocation);
+      socketService.off('connect', subscribe);
+    };
+  }, [bookingId, isAvailable]);
 
   const position = tracking?.location ? { lat: tracking.location.lat, lng: tracking.location.lng } : null;
 

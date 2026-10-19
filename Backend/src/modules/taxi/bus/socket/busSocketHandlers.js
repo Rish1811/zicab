@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import { BUS_SEAT_EVENTS, getBusTripRoom, getTripSeatSnapshot } from '../services/busSeatSyncService.js';
 import { getDhabaRoom } from '../services/dhabaService.js';
+import { BUS_LIVE_EVENTS, getBusLiveRoom, getPassengerLiveTracking } from '../services/busTicketService.js';
+import { BusBooking } from '../../user/models/BusBooking.js';
 
 /// Socket wiring for ZI Bus:
 ///  - anyone looking at a seat map joins that run's room and gets every
@@ -37,6 +39,45 @@ export const registerBusSocketHandlers = ({ socket, onAsync }) => {
       socket.emit(BUS_SEAT_EVENTS.SEATS_UPDATED, { ...snapshot, change: 'snapshot', seatIds: [] });
     }),
   );
+
+  // Passenger opens live tracking for one of their own tickets. Joining is
+  // allowed only inside the tracking window (1h before boarding onwards).
+  socket.on(
+    BUS_LIVE_EVENTS.TRACK,
+    onAsync(socket, async ({ bookingId } = {}) => {
+      if (identity.role !== 'user' || !mongoose.isValidObjectId(bookingId)) {
+        return;
+      }
+
+      const booking = await BusBooking.findOne({ _id: bookingId, userId: identity.sub });
+      if (!booking) {
+        return;
+      }
+
+      const tracking = await getPassengerLiveTracking(booking);
+      if (socket.data.busLiveRoom) {
+        socket.leave(socket.data.busLiveRoom);
+        socket.data.busLiveRoom = null;
+      }
+      if (tracking.available) {
+        socket.data.busLiveRoom = getBusLiveRoom(booking.busServiceId, booking.scheduleId, booking.travelDate);
+        socket.join(socket.data.busLiveRoom);
+      }
+      socket.emit(BUS_LIVE_EVENTS.LOCATION, {
+        busServiceId: String(booking.busServiceId),
+        scheduleId: booking.scheduleId,
+        travelDate: booking.travelDate,
+        ...tracking,
+      });
+    }),
+  );
+
+  socket.on(BUS_LIVE_EVENTS.UNTRACK, () => {
+    if (socket.data.busLiveRoom) {
+      socket.leave(socket.data.busLiveRoom);
+      socket.data.busLiveRoom = null;
+    }
+  });
 
   socket.on(BUS_SEAT_EVENTS.UNWATCH, () => {
     if (socket.data.busTripRoom) {

@@ -13,6 +13,7 @@ import {
   AdminChat,
   AdminBusCommissionManager,
   AdminZibusBookingChannels,
+  AdminZibusBusOperators,
   AdminZibusDhabaOrders,
   AdminZibusDhabaPartners,
   AdminZibusSeatInventory,
@@ -224,6 +225,7 @@ const adminRoutes = (
       <Route path="bus-service/commission" element={<AdminBusCommissionManager />} />
       <Route path="bus-service/bookings" element={<AdminBusBookingManager />} />
       <Route path="bus-service/inventory" element={<AdminZibusSeatInventory />} />
+      <Route path="bus-service/operators" element={<AdminZibusBusOperators />} />
       <Route path="bus-service/channels" element={<AdminZibusBookingChannels />} />
       <Route path="bus-service/dhabas" element={<AdminZibusDhabaPartners />} />
       <Route path="bus-service/dhaba-orders" element={<AdminZibusDhabaOrders />} />

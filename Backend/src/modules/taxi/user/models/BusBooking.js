@@ -166,6 +166,11 @@ const busBookingSchema = new mongoose.Schema(
       pointName: { type: String, default: '', trim: true },
       time: { type: String, default: '', trim: true },
     },
+    // Set when the conductor checks the ticket in at the door.
+    boarding: {
+      boardedAt: { type: Date, default: null },
+      boardedBy: { type: String, default: '' },
+    },
     // Food pre-booked from partner dhabas. It is charged in the same payment
     // as the seats but kept out of `amount`, so the seat cancellation and
     // refund maths (which divide `amount` per seat) are unaffected.

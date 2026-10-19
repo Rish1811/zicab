@@ -3,7 +3,13 @@ import { ApiError } from '../../../../utils/ApiError.js';
 import { BusService } from '../../admin/models/BusService.js';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { listDhabasForTrip } from '../services/dhabaService.js';
-import { buildBusTicket, getPassengerLiveTracking, verifyTicketByPnr } from '../services/busTicketService.js';
+import {
+  boardTicketByPnr,
+  buildBusTicket,
+  getCrewManifest,
+  getPassengerLiveTracking,
+  verifyTicketByPnr,
+} from '../services/busTicketService.js';
 import { findSchedule } from '../utils/busTime.js';
 
 const ok = (res, data) => res.status(200).json({ success: true, data });
@@ -51,5 +57,25 @@ export const verifyBusTicket = async (req, res) => {
     pnr: req.params?.pnr,
     role: req.auth.role,
     actorId: req.auth.sub,
+  }));
+};
+
+export const boardBusTicket = async (req, res) => {
+  ok(res, await boardTicketByPnr({
+    pnr: req.params?.pnr,
+    role: req.auth.role,
+    actorId: req.auth.sub,
+    scheduleId: String(req.body?.scheduleId || ''),
+    travelDate: String(req.body?.travelDate || ''),
+  }));
+};
+
+export const getBusCrewManifest = async (req, res) => {
+  ok(res, await getCrewManifest({
+    role: req.auth.role,
+    actorId: req.auth.sub,
+    busServiceId: String(req.query?.busServiceId || ''),
+    scheduleId: String(req.query?.scheduleId || ''),
+    travelDate: String(req.query?.travelDate || req.query?.date || ''),
   }));
 };

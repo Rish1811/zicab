@@ -7,6 +7,8 @@ import {
   adminCreateDhaba,
   adminDeleteDhaba,
   adminListChannelEvents,
+  adminListConnectorTypes,
+  adminSyncChannelNow,
   adminListChannels,
   adminListDhabaOrders,
   adminListDhabas,
@@ -37,6 +39,15 @@ import {
   updateMyDhaba,
 } from '../controllers/dhabaController.js';
 import {
+  adminCreateOperator,
+  adminListOperators,
+  adminListOwnersForOperators,
+  adminOperatorReport,
+  adminUpdateOperator,
+} from '../controllers/busOperatorController.js';
+import {
+  boardBusTicket,
+  getBusCrewManifest,
   getMyBusLiveTracking,
   getMyBusTicket,
   listTripDhabas,
@@ -58,6 +69,9 @@ busModuleRouter.get(
   authenticate(['bus_driver', 'owner', 'admin']),
   asyncHandler(verifyBusTicket),
 );
+const asCrew = authenticate(['bus_driver', 'owner', 'admin']);
+busModuleRouter.post('/bus-tickets/board/:pnr', asCrew, asyncHandler(boardBusTicket));
+busModuleRouter.get('/bus-tickets/manifest', asCrew, asyncHandler(getBusCrewManifest));
 
 // Dhaba partner panel
 const asDhaba = authenticate(['dhaba']);
@@ -86,6 +100,13 @@ busModuleRouter.patch('/admin/zibus/channels/:id', asAdmin, asyncHandler(adminUp
 busModuleRouter.post('/admin/zibus/channels/:id/rotate-key', asAdmin, asyncHandler(adminRotateChannelKey));
 busModuleRouter.get('/admin/zibus/channels/:id/events', asAdmin, asyncHandler(adminListChannelEvents));
 busModuleRouter.get('/admin/zibus/inventory', asAdmin, asyncHandler(adminTripInventory));
+busModuleRouter.get('/admin/zibus/connector-types', asAdmin, asyncHandler(adminListConnectorTypes));
+busModuleRouter.post('/admin/zibus/channels/:id/sync-now', asAdmin, asyncHandler(adminSyncChannelNow));
+busModuleRouter.get('/admin/zibus/operators', asAdmin, asyncHandler(adminListOperators));
+busModuleRouter.post('/admin/zibus/operators', asAdmin, asyncHandler(adminCreateOperator));
+busModuleRouter.patch('/admin/zibus/operators/:id', asAdmin, asyncHandler(adminUpdateOperator));
+busModuleRouter.get('/admin/zibus/operators/:id/report', asAdmin, asyncHandler(adminOperatorReport));
+busModuleRouter.get('/admin/zibus/owners', asAdmin, asyncHandler(adminListOwnersForOperators));
 
 // Channel API for connected booking platforms / operator systems
 const channelApi = Router();

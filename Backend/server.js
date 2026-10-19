@@ -11,6 +11,7 @@ import { startSurgeEngineLoop } from './src/modules/taxi/services/surgeService.j
 import { startBusHoldSweeper } from './src/modules/taxi/bus/services/busSeatSyncService.js';
 import { startDhabaAlertLoop } from './src/modules/taxi/bus/services/dhabaService.js';
 import { startChannelWebhookRetryLoop } from './src/modules/taxi/bus/services/busChannelService.js';
+import { startChannelPullLoop } from './src/modules/taxi/bus/services/busChannelSyncService.js';
 
 const bootstrap = async () => {
   await connectDatabase();
@@ -34,6 +35,7 @@ const bootstrap = async () => {
   startBusHoldSweeper();
   startDhabaAlertLoop();
   startChannelWebhookRetryLoop();
+  startChannelPullLoop();
 
   // Loopback by default: nginx is the only thing that should reach these
   // processes, and with several instances on 5000-5003 a public bind would let
