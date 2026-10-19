@@ -30,6 +30,7 @@ import {
   cancelDhabaOrdersForBooking,
   confirmDhabaOrdersForBooking,
   createPendingDhabaOrders,
+  getFoodStopCounter,
   priceFoodSelection,
 } from '../../bus/services/dhabaService.js';
 import { refundRazorpayPayment } from '../../bus/services/busRefundService.js';
@@ -592,11 +593,14 @@ const flattenBusBlueprintSeats = (blueprint = {}) =>
     .flatMap((row) => (Array.isArray(row) ? row : []))
     .filter((cell) => cell?.kind === 'seat' && cell?.id);
 
+// A zero or blank per-type price means "not set", so the bus fare applies.
+const positivePrice = (value) => (Number(value) > 0 ? Number(value) : undefined);
+
 const resolveBusSeatPrice = (busService = {}, seat = {}) => {
   const variantPricing = busService?.variantPricing || {};
   const defaultPrice = Number(busService?.seatPrice || 0);
   const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
-  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+  const resolvedPrice = positivePrice(variantPricing?.[variantKey]) ?? positivePrice(variantPricing?.seat) ?? defaultPrice;
 
   return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
 };
@@ -988,7 +992,14 @@ const serializeBusBooking = (booking, busService = null) => {
   const quote = busService ? computeBusCancellationQuote({ booking, busService }) : null;
   const schedule = busService ? findBusSchedule(busService, booking?.scheduleId) : null;
   const arrivalTime = schedule?.arrivalTime || booking?.routeSnapshot?.arrivalTime || '';
-  const arrivalDateTime = parseBusDateTime(booking?.travelDate, arrivalTime);
+  const departureTime = schedule?.departureTime || booking?.routeSnapshot?.departureTime || '';
+  let arrivalDateTime = parseBusDateTime(booking?.travelDate, arrivalTime);
+  const departureDateTime = parseBusDateTime(booking?.travelDate, departureTime);
+  // Overnight runs (21:00 -> 09:00) arrive the next day, not the morning of
+  // the travel date; otherwise they'd count as completed before departure.
+  if (arrivalDateTime && departureDateTime && arrivalDateTime <= departureDateTime) {
+    arrivalDateTime = new Date(arrivalDateTime.getTime() + 24 * 60 * 60 * 1000);
+  }
   const tripCompleted = Boolean(arrivalDateTime && arrivalDateTime.getTime() < Date.now());
   const persistedCancellation = booking.cancellation || {};
   const cancelledSeats = Array.isArray(booking.cancelledSeats) ? booking.cancelledSeats : [];
@@ -1103,8 +1114,8 @@ const serializeBusBooking = (booking, busService = null) => {
     operator: booking.routeSnapshot?.operatorName || '',
     busName: booking.routeSnapshot?.busName || '',
     type: booking.routeSnapshot?.coachType || booking.routeSnapshot?.busCategory || 'Bus',
-    departure: booking.routeSnapshot?.departureTime || '',
-    arrival: booking.routeSnapshot?.arrivalTime || '',
+    departure: booking.routeSnapshot?.departureTime || schedule?.departureTime || '',
+    arrival: booking.routeSnapshot?.arrivalTime || schedule?.arrivalTime || '',
     duration: booking.routeSnapshot?.durationHours || '',
     fromCity: booking.routeSnapshot?.originCity || '',
     toCity: booking.routeSnapshot?.destinationCity || '',
@@ -3204,6 +3215,7 @@ export const searchBuses = async (req, res) => {
     reservedCountMap.set(key, (reservedCountMap.get(key) || 0) + 1);
   });
 
+  const countFoodStops = await getFoodStopCounter(busIds);
   const results = items.flatMap((busService) => {
     const schedules = Array.isArray(busService.schedules) ? busService.schedules : [];
     const totalSeats = flattenBusBlueprintSeats(busService.blueprint).filter(
@@ -3214,12 +3226,16 @@ export const searchBuses = async (req, res) => {
       .filter((schedule) => isScheduleAvailableOnDate(schedule, travelDate))
       .map((schedule) => {
         const reservedSeats = reservedCountMap.get(`${String(busService._id)}:${String(schedule.id)}`) || 0;
-        return serializeBusSearchResult({
-          busService,
-          schedule,
-          travelDate,
-          availableSeats: totalSeats - reservedSeats,
-        });
+        return {
+          ...serializeBusSearchResult({
+            busService,
+            schedule,
+            travelDate,
+            availableSeats: totalSeats - reservedSeats,
+          }),
+          totalSeats,
+          foodStops: countFoodStops(busService._id, schedule.id),
+        };
       });
   });
 
@@ -3240,7 +3256,7 @@ export const getBusRouteSuggestions = async (_req, res) => {
     .sort({ createdAt: -1 })
     .lean();
 
-  const seenRoutes = new Set();
+  const seenRoutes = new Map();
   const results = [];
 
   items.forEach((busService) => {
@@ -3252,12 +3268,16 @@ export const getBusRouteSuggestions = async (_req, res) => {
     }
 
     const key = `${normalizeBusCity(fromCity)}::${normalizeBusCity(toCity)}`;
-    if (seenRoutes.has(key)) {
+    const existing = seenRoutes.get(key);
+    if (existing) {
+      existing.busCount += 1;
+      existing.startingPrice = Math.min(existing.startingPrice || Infinity, Number(busService.seatPrice || 0)) || existing.startingPrice;
       return;
     }
 
-    seenRoutes.add(key);
-    results.push(serializeBusRouteSuggestion(busService));
+    const suggestion = { ...serializeBusRouteSuggestion(busService), busCount: 1 };
+    seenRoutes.set(key, suggestion);
+    results.push(suggestion);
   });
 
   res.status(200).json({
@@ -3746,7 +3766,15 @@ export const submitMyBusBookingReview = async (req, res) => {
 
   const schedule = findBusSchedule(busService, booking.scheduleId);
   const arrivalTime = schedule?.arrivalTime || booking?.routeSnapshot?.arrivalTime || '';
-  const arrivalDateTime = parseBusDateTime(booking.travelDate, arrivalTime);
+  let arrivalDateTime = parseBusDateTime(booking.travelDate, arrivalTime);
+  const departureDateTime = parseBusDateTime(
+    booking.travelDate,
+    schedule?.departureTime || booking?.routeSnapshot?.departureTime || '',
+  );
+  // Overnight runs arrive the day after the travel date.
+  if (arrivalDateTime && departureDateTime && arrivalDateTime <= departureDateTime) {
+    arrivalDateTime = new Date(arrivalDateTime.getTime() + 24 * 60 * 60 * 1000);
+  }
 
   if (!arrivalDateTime || Number.isNaN(arrivalDateTime.getTime())) {
     throw new ApiError(409, 'Bus arrival time is unavailable, so rating is not open yet');

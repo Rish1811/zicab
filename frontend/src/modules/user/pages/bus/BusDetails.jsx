@@ -1,25 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowLeft, User, Phone, Mail, ChevronRight, Check, Loader2, Minus, Plus, UtensilsCrossed } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ChevronDown, Mail, MapPin, Minus, Phone, Plus, ReceiptText, User, UtensilsCrossed } from 'lucide-react';
 import userBusService from '../../services/busService';
 import { userAuthService } from '../../services/authService';
+import { BusScreen, BusTopBar, FooterBar, SectionTitle, TripLine } from '../../components/bus/ZiBusUi';
+import { formatDay, formatRupees, routePrefixFor } from '../../components/bus/zibusFormat';
 import { buildBusRouteState, toPlainData } from './busNavigationState';
 
-const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
-
-const getDisplayRoute = (bus, fallbackFromCity = '', fallbackToCity = '') => ({
-  fromCity: bus?.route?.originCity || bus?.fromCity || fallbackFromCity,
-  toCity: bus?.route?.destinationCity || bus?.toCity || fallbackToCity,
-});
+// A zero or blank per-type price means "not set", so the bus fare applies.
+const positivePrice = (value) => (Number(value) > 0 ? Number(value) : undefined);
 
 const resolveSeatPrice = (bus, seat) => {
   const variantPricing = bus?.variantPricing || {};
   const defaultPrice = Number(bus?.price || 0);
   const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
-  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
-
-  return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
+  const resolved = positivePrice(variantPricing?.[variantKey]) ?? positivePrice(variantPricing?.seat) ?? defaultPrice;
+  return Number.isFinite(Number(resolved)) ? Number(resolved) : defaultPrice;
 };
 
 const loadRazorpayScript = () =>
@@ -28,7 +24,6 @@ const loadRazorpayScript = () =>
       resolve(true);
       return;
     }
-
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
@@ -37,680 +32,384 @@ const loadRazorpayScript = () =>
     document.body.appendChild(script);
   });
 
-const formatTravelDate = (dateStr) => {
-  if (!dateStr) return '';
+const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
+const readStoredProfile = () => {
   try {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    });
-  } catch (err) {
-    return dateStr;
+    return JSON.parse(localStorage.getItem('userInfo') || '{}');
+  } catch {
+    return {};
   }
 };
 
-const CURRENCY_SYMBOL = '\u20B9';
-const formatMoney = (value) => Number(value || 0).toLocaleString('en-IN');
+const StopPicker = ({ label, tone, options, value, onChange, timeKey }) => (
+  <div>
+    <p className={`zb-label mb-2 ${tone}`}>{label}</p>
+    <div className="space-y-2">
+      {options.map((stop) => {
+        const active = String(value) === String(stop.id);
+        return (
+          <button key={stop.id} type="button" onClick={() => onChange(String(stop.id))} className={`zb-option flex items-center gap-3 ${active ? 'is-active' : ''}`}>
+            <span className="zb-radio" />
+            <span className="min-w-0 flex-1">
+              <span className="zb-text block truncate text-sm font-extrabold">{stop.pointName || stop.city}</span>
+              <span className="zb-muted block truncate text-[11px] font-semibold">{stop.city}</span>
+            </span>
+            <span className="zb-text shrink-0 text-sm font-extrabold">{stop[timeKey] || stop.departureTime || stop.arrivalTime || ''}</span>
+          </button>
+        );
+      })}
+    </div>
+  </div>
+);
+
+const DhabaMenu = ({ dhaba, cart, onChange, open, onToggle }) => {
+  const count = Object.values(cart || {}).reduce((sum, quantity) => sum + quantity, 0);
+  return (
+    <div className="zb-soft overflow-hidden">
+      <button type="button" onClick={onToggle} className="flex w-full items-center gap-3 p-3 text-left">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: 'color-mix(in srgb, var(--zb-food) 18%, transparent)' }}>
+          <UtensilsCrossed size={18} className="zb-food-text" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="zb-text block truncate text-sm font-extrabold">{dhaba.name}</span>
+          <span className="zb-muted block truncate text-[11px] font-semibold">
+            Bus reaches ~{new Date(dhaba.expectedArrivalAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            {dhaba.haltMinutes ? ` · ${dhaba.haltMinutes} min halt` : ''}
+          </span>
+        </span>
+        {count ? <span className="zb-badge is-food">{count} added</span> : null}
+        <ChevronDown size={18} className="zb-muted shrink-0 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
+      </button>
+      {open ? (
+        <div className="space-y-1 px-3 pb-3">
+          {dhaba.menu.map((item) => {
+            const quantity = Number(cart?.[item.id] || 0);
+            return (
+              <div key={item.id} className="zb-card flex items-center gap-3 !rounded-2xl px-3 py-2.5">
+                <span className={`zb-veg ${item.isVeg ? '' : 'is-nonveg'}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="zb-text block truncate text-sm font-bold">{item.name}</span>
+                  <span className="zb-muted block text-[11px] font-bold">{formatRupees(item.price)}{item.description ? ` · ${item.description}` : ''}</span>
+                </span>
+                {quantity ? (
+                  <span className="zb-qty">
+                    <button type="button" onClick={() => onChange(item.id, -1)} aria-label={`One less ${item.name}`}><Minus size={14} /></button>
+                    <span>{quantity}</span>
+                    <button type="button" onClick={() => onChange(item.id, 1)} aria-label={`One more ${item.name}`}><Plus size={14} /></button>
+                  </span>
+                ) : (
+                  <button type="button" onClick={() => onChange(item.id, 1)} className="zb-chip !py-1.5 zb-accent-text" style={{ borderColor: 'var(--zb-accent)' }}>Add</button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 const BusDetails = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const routePrefix = useMemo(() => getRoutePrefix(location.pathname), [location.pathname]);
+  const routePrefix = useMemo(() => routePrefixFor(location.pathname), [location.pathname]);
   const state = location.state || {};
-  const { bus, fromCity, toCity, date, selectedSeats } = state;
-  const displayRoute = getDisplayRoute(bus, fromCity, toCity);
-  const [name, setName] = useState('');
+  const { bus, fromCity, toCity, date } = state;
+  const selectedSeats = useMemo(() => (Array.isArray(state.selectedSeats) ? state.selectedSeats : []), [state.selectedSeats]);
+
+  const [liveBus, setLiveBus] = useState(null);
+  const [profile, setProfile] = useState(() => {
+    const stored = readStoredProfile();
+    return { name: stored.name || '', email: stored.email || '', phone: stored.phone || '' };
+  });
+  const [travellerMode, setTravellerMode] = useState('self');
+  const [name, setName] = useState(profile.name);
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('Male');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
-  const [isPaying, setIsPaying] = useState(false);
-  const [travellerMode, setTravellerMode] = useState('self');
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [profileData, setProfileData] = useState(null);
-  const [liveBus, setLiveBus] = useState(null);
-  const pricingBus = liveBus || bus;
-  const pricedSelectedSeats = useMemo(
-    () => selectedSeats.map((seat) => ({
-      ...seat,
-      price: resolveSeatPrice(pricingBus, seat),
-    })),
-    [pricingBus, selectedSeats],
-  );
-  const seatSubtotal = useMemo(
-    () => pricedSelectedSeats.reduce((sum, seat) => sum + Number(seat?.price || 0), 0),
-    [pricedSelectedSeats],
-  );
-  const serviceTaxPercentage = Math.max(0, Number(pricingBus?.serviceTaxPercentage || 0));
-  const serviceTaxAmount = useMemo(
-    () => Math.round((((seatSubtotal * serviceTaxPercentage) / 100) + Number.EPSILON) * 100) / 100,
-    [seatSubtotal, serviceTaxPercentage],
-  );
-  const routeStops = useMemo(
-    () => (Array.isArray(pricingBus?.route?.stops) ? pricingBus.route.stops : []),
-    [pricingBus],
-  );
-  const boardingOptions = useMemo(
-    () => routeStops.filter((stop) => ['pickup', 'both'].includes(stop?.stopType || 'both')),
-    [routeStops],
-  );
-  const droppingOptions = useMemo(
-    () => routeStops.filter((stop) => ['drop', 'both'].includes(stop?.stopType || 'both')),
-    [routeStops],
-  );
+  const [phone, setPhone] = useState(profile.phone);
+  const [email, setEmail] = useState(profile.email);
   const [boardingStopId, setBoardingStopId] = useState('');
   const [droppingStopId, setDroppingStopId] = useState('');
   const [dhabas, setDhabas] = useState([]);
-  // { [dhabaId]: { [itemId]: quantity } }
+  const [openDhaba, setOpenDhaba] = useState('');
   const [foodCart, setFoodCart] = useState({});
+  const [error, setError] = useState('');
+  const [isPaying, setIsPaying] = useState(false);
+
+  const pricingBus = liveBus || bus;
+  const routeStops = useMemo(() => (Array.isArray(pricingBus?.route?.stops) ? pricingBus.route.stops : []), [pricingBus]);
+  const boardingOptions = useMemo(() => routeStops.filter((stop) => ['pickup', 'both'].includes(stop?.stopType || 'both')), [routeStops]);
+  const droppingOptions = useMemo(() => routeStops.filter((stop) => ['drop', 'both'].includes(stop?.stopType || 'both')), [routeStops]);
+  const effectiveBoarding = boardingStopId || String(boardingOptions[0]?.id || '');
+  const effectiveDropping = droppingStopId || String(droppingOptions[droppingOptions.length - 1]?.id || '');
+
+  const seatSubtotal = useMemo(() => round2(selectedSeats.reduce((sum, seat) => sum + resolveSeatPrice(pricingBus, seat), 0)), [pricingBus, selectedSeats]);
+  const taxPercent = Math.max(0, Number(pricingBus?.serviceTaxPercentage || 0));
+  const taxAmount = round2((seatSubtotal * taxPercent) / 100);
   const foodTotal = useMemo(
-    () => dhabas.reduce((sum, dhaba) => sum + dhaba.menu.reduce(
-      (inner, item) => inner + Number(item.price || 0) * Number(foodCart[dhaba.id]?.[item.id] || 0),
-      0,
-    ), 0),
+    () => round2(dhabas.reduce((sum, dhaba) => sum + dhaba.menu.reduce((inner, item) => inner + Number(item.price || 0) * Number(foodCart[dhaba.id]?.[item.id] || 0), 0), 0)),
     [dhabas, foodCart],
   );
-  const payableAmount = useMemo(
-    () => Math.round(((seatSubtotal + serviceTaxAmount + foodTotal) + Number.EPSILON) * 100) / 100,
-    [seatSubtotal, serviceTaxAmount, foodTotal],
-  );
+  const payable = round2(seatSubtotal + taxAmount + foodTotal);
 
-  const changeFoodQuantity = (dhabaId, itemId, delta) => {
-    setFoodCart((current) => {
-      const nextQty = Math.max(0, Math.min(20, Number(current[dhabaId]?.[itemId] || 0) + delta));
-      const nextDhaba = { ...(current[dhabaId] || {}), [itemId]: nextQty };
-      if (!nextQty) delete nextDhaba[itemId];
-      return { ...current, [dhabaId]: nextDhaba };
-    });
-  };
-
-  const buildFoodOrders = () =>
-    Object.entries(foodCart)
-      .map(([dhabaId, items]) => ({
-        dhabaId,
-        items: Object.entries(items || {})
-          .filter(([, quantity]) => quantity > 0)
-          .map(([itemId, quantity]) => ({ itemId, quantity })),
-      }))
-      .filter((entry) => entry.items.length > 0);
-
-  const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
-
+  // Profile for "travelling myself", refreshed from the server.
   useEffect(() => {
     let active = true;
-
-    const storedProfile = (() => {
-      try {
-        return JSON.parse(localStorage.getItem('userInfo') || '{}');
-      } catch {
-        return {};
-      }
-    })();
-
-    const applyProfile = (profile = {}, mode = travellerMode) => {
-      if (!active) {
-        return;
-      }
-
-      const nextProfile = {
-        name: String(profile?.name || '').trim(),
-        email: String(profile?.email || '').trim(),
-        phone: String(profile?.phone || '').trim(),
-      };
-
-      setProfileData(nextProfile);
-
-      if (mode === 'self') {
-        setName(nextProfile.name || '');
-        setEmail(nextProfile.email || '');
-        setPhone(nextProfile.phone || '');
-      }
-    };
-
-    applyProfile(storedProfile, travellerMode);
-
-    const loadProfile = async () => {
-      try {
-        const response = await userAuthService.getCurrentUser();
+    userAuthService
+      .getCurrentUser()
+      .then((response) => {
         const user = response?.data?.user || {};
-        const normalizedUser = {
-          name: user.name || storedProfile?.name || '',
-          email: user.email || storedProfile?.email || '',
-          phone: user.phone || storedProfile?.phone || '',
-        };
-
-        localStorage.setItem('userInfo', JSON.stringify({
-          ...storedProfile,
-          ...user,
-        }));
-        applyProfile(normalizedUser, travellerMode);
-      } catch {
-        applyProfile(storedProfile, travellerMode);
-      } finally {
-        if (active) {
-          setProfileLoading(false);
+        if (!active || !user) return;
+        const next = { name: user.name || '', email: user.email || '', phone: user.phone || '' };
+        setProfile(next);
+        try {
+          localStorage.setItem('userInfo', JSON.stringify({ ...readStoredProfile(), ...user }));
+        } catch {
+          // Storage is optional.
         }
-      }
-    };
-
-    loadProfile();
-
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, []);
 
   useEffect(() => {
-    if (travellerMode === 'self' && profileData) {
-      setName(profileData.name || '');
-      setEmail(profileData.email || '');
-      setPhone(profileData.phone || '');
+    if (travellerMode === 'self') {
+      setName(profile.name);
+      setPhone(profile.phone);
+      setEmail(profile.email);
     }
-  }, [travellerMode, profileData]);
+  }, [profile, travellerMode]);
 
+  // Latest fares and stops, and the dhabas on this run.
   useEffect(() => {
-    if (!bus?.busServiceId || !bus?.scheduleId || !date) {
-      return undefined;
-    }
-
+    if (!bus?.busServiceId || !bus?.scheduleId || !date) return undefined;
     let active = true;
-
-    const loadLiveBus = async () => {
-      try {
-        const response = await userBusService.getSeatLayout({
-          busServiceId: bus.busServiceId,
-          scheduleId: bus.scheduleId,
-          date,
-        });
-
-        if (!active) {
-          return;
-        }
-
-        const nextBus = toPlainData(response?.data?.bus || response?.bus || null);
-        if (nextBus) {
-          setLiveBus(nextBus);
-        }
-      } catch {
-        // Keep rendering with the routed bus snapshot if refresh fails.
-      }
-    };
-
-    loadLiveBus();
-
-    return () => {
-      active = false;
-    };
-  }, [bus?.busServiceId, bus?.scheduleId, date]);
-
-  useEffect(() => {
-    if (!boardingStopId && boardingOptions.length) setBoardingStopId(String(boardingOptions[0].id));
-    if (!droppingStopId && droppingOptions.length) {
-      setDroppingStopId(String(droppingOptions[droppingOptions.length - 1].id));
-    }
-  }, [boardingOptions, droppingOptions, boardingStopId, droppingStopId]);
-
-  useEffect(() => {
-    if (!bus?.busServiceId || !bus?.scheduleId || !date) {
-      return undefined;
-    }
-
-    let active = true;
+    userBusService
+      .getSeatLayout({ busServiceId: bus.busServiceId, scheduleId: bus.scheduleId, date })
+      .then((response) => {
+        const next = toPlainData(response?.data?.bus || null);
+        if (active && next) setLiveBus(next);
+      })
+      .catch(() => {});
     userBusService
       .getTripDhabas({ busServiceId: bus.busServiceId, scheduleId: bus.scheduleId, date })
       .then((response) => {
-        if (!active) return;
         const list = toPlainData(response?.data);
-        setDhabas(Array.isArray(list) ? list : []);
+        if (!active || !Array.isArray(list)) return;
+        setDhabas(list);
+        if (list[0]) setOpenDhaba(list[0].id);
       })
-      .catch(() => {
-        // Food is optional; checkout works without it.
-      });
-
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, [bus?.busServiceId, bus?.scheduleId, date]);
 
-  const applySelfProfile = () => {
-    setTravellerMode('self');
-    setName(profileData?.name || '');
-    setEmail(profileData?.email || '');
-    setPhone(profileData?.phone || '');
-    setError('');
+  useEffect(() => {
+    if (!bus || !selectedSeats.length) navigate(`${routePrefix}/bus`, { replace: true });
+  }, [bus, selectedSeats.length, navigate, routePrefix]);
+  if (!bus || !selectedSeats.length) return null;
+
+  const changeFood = (dhabaId, itemId, delta) => {
+    setFoodCart((current) => {
+      const quantity = Math.max(0, Math.min(20, Number(current[dhabaId]?.[itemId] || 0) + delta));
+      const nextDhaba = { ...(current[dhabaId] || {}), [itemId]: quantity };
+      if (!quantity) delete nextDhaba[itemId];
+      return { ...current, [dhabaId]: nextDhaba };
+    });
   };
 
-  const switchToSomeoneElse = () => {
-    setTravellerMode('other');
-    setName('');
-    setAge('');
-    setGender('Male');
-    setPhone('');
-    setEmail('');
-    setError('');
-  };
+  const foodOrders = () =>
+    Object.entries(foodCart)
+      .map(([dhabaId, items]) => ({
+        dhabaId,
+        items: Object.entries(items || {}).filter(([, quantity]) => quantity > 0).map(([itemId, quantity]) => ({ itemId, quantity })),
+      }))
+      .filter((entry) => entry.items.length);
 
-  if (!bus || !selectedSeats?.length) {
-    navigate(`${routePrefix}/bus`, { replace: true });
-    return null;
-  }
-
-  const handleContinue = async () => {
+  const pay = async () => {
     if (isPaying) return;
-
-    if (!name || !age || !phone || !email) {
-      setError('Please fill in all passenger details.');
+    if (!name.trim() || !age || !phone.trim() || !email.trim()) {
+      setError('Fill in the traveller’s name, age, mobile number and email.');
+      document.getElementById('zb-traveller')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-
     setError('');
     setIsPaying(true);
 
     try {
-      const scriptLoaded = await loadRazorpayScript();
-      if (!scriptLoaded) {
-        throw new Error('Razorpay SDK failed to load');
-      }
+      if (!(await loadRazorpayScript())) throw new Error('Payment page could not load. Check your connection.');
 
-      const passenger = { name, age, gender, phone, email };
-      const orderResponse = await userBusService.createBookingOrder({
+      const order = unwrapPayload(await userBusService.createBookingOrder({
         busServiceId: bus.busServiceId,
         scheduleId: bus.scheduleId,
         travelDate: date,
         seatIds: selectedSeats.map((seat) => seat.id),
-        passenger,
-        boardingStopId: boardingStopId || undefined,
-        droppingStopId: droppingStopId || undefined,
-        foodOrders: buildFoodOrders(),
-      });
-      const order = unwrapPayload(orderResponse);
+        passenger: { name, age, gender, phone, email },
+        boardingStopId: effectiveBoarding || undefined,
+        droppingStopId: effectiveDropping || undefined,
+        foodOrders: foodOrders(),
+      }));
+      if (!order.keyId || !order.orderId) throw new Error('Unable to start the payment');
 
-      if (!order.keyId || !order.orderId) {
-        throw new Error('Unable to start bus payment');
-      }
-
-      const rzp = new window.Razorpay({
+      const checkout = new window.Razorpay({
         key: order.keyId,
         amount: order.amount,
         currency: order.currency || 'INR',
-        name: bus.operator || 'Bus Booking',
-        description: `${displayRoute.fromCity} to ${displayRoute.toCity}`,
+        name: 'ZI Bus',
+        description: `${bus.fromCity || fromCity} to ${bus.toCity || toCity}`,
         order_id: order.orderId,
-        prefill: {
-          name,
-          email,
-          contact: phone,
-        },
-        modal: {
-          ondismiss: () => {
-            setIsPaying(false);
-          },
-        },
-        theme: {
-          color: '#C2410C',
-        },
+        prefill: { name, email, contact: phone },
+        theme: { color: '#FFC400' },
+        modal: { ondismiss: () => setIsPaying(false) },
         handler: async (response) => {
           try {
-            const verifyResponse = await userBusService.verifyBookingPayment(response);
-            const booking = toPlainData(unwrapPayload(verifyResponse));
+            const booking = toPlainData(unwrapPayload(await userBusService.verifyBookingPayment(response)));
             navigate(`${routePrefix}/bus/confirm`, {
               replace: true,
-              state: buildBusRouteState({
-                booking,
-                fromCity: displayRoute.fromCity,
-                toCity: displayRoute.toCity,
-                date,
-              }),
+              state: buildBusRouteState({ booking, fromCity: bus.fromCity || fromCity, toCity: bus.toCity || toCity, date }),
             });
           } catch (verifyError) {
-            setError(verifyError?.message || 'Payment verification failed');
+            setError(verifyError?.message || 'Payment could not be confirmed');
             setIsPaying(false);
           }
         },
       });
-
-      rzp.on('payment.failed', (event) => {
-        const message = event?.error?.description || event?.error?.reason || 'Payment failed';
-        setError(message);
+      checkout.on('payment.failed', (event) => {
+        setError(event?.error?.description || event?.error?.reason || 'Payment failed');
         setIsPaying(false);
       });
-
-      rzp.open();
+      checkout.open();
     } catch (err) {
-      setError(err?.message || 'Unable to continue with payment');
+      setError(err?.message || 'Unable to continue to payment');
       setIsPaying(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">
-      <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center shadow-sm active:scale-95 transition-all"
-          >
-            <ArrowLeft size={18} className="text-slate-900" />
-          </button>
-          <div className="flex-1">
-            <h1 className="text-lg font-bold text-slate-900 truncate">Passenger Details</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
-              {selectedSeats.length} Seat(s) • {displayRoute.fromCity} to {displayRoute.toCity}
-            </p>
-          </div>
-        </div>
-      </div>
+  const fieldLabel = 'zb-label mb-1.5 block';
 
-      <div className="px-5 pt-6 space-y-6">
-        <div className="overflow-hidden rounded-[28px] bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_58%,#334155_100%)] p-6 text-white shadow-xl shadow-slate-200">
-          <div className="flex justify-between items-start gap-4">
-            <div>
-              <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-2">{formatTravelDate(date)} • {bus.departure}</p>
-              <h3 className="text-xl font-bold leading-tight">{bus.operator}</h3>
-              <p className="text-sm font-medium text-slate-300 mt-1">{bus.type}</p>
-              <p className="mt-3 text-xs font-semibold text-slate-300">{displayRoute.fromCity} to {displayRoute.toCity}</p>
+  return (
+    <BusScreen>
+      <BusTopBar onBack={() => navigate(-1)} title="Review & pay" subtitle={`${selectedSeats.length} seat${selectedSeats.length > 1 ? 's' : ''} · ${formatDay(date)}`} step={2} />
+
+      <div className="zb-body">
+        <div className="zb-card p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="zb-text truncate text-base font-extrabold">{bus.operator || bus.busName}</p>
+              <p className="zb-muted truncate text-xs font-semibold">{bus.type}</p>
             </div>
-            <div className="rounded-2xl bg-white/10 px-4 py-3 text-right backdrop-blur-sm">
-              <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">Seats</p>
-              <p className="text-base font-bold text-white">{selectedSeats.map((seat) => seat.label || seat.id).join(', ')}</p>
+            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+              {selectedSeats.map((seat) => <span key={seat.id} className="zb-badge is-accent">{seat.label}</span>)}
             </div>
+          </div>
+          <div className="mt-4">
+            <TripLine departure={bus.departure} arrival={bus.arrival} fromLabel={bus.fromCity || fromCity} toLabel={bus.toCity || toCity} duration={bus.duration} compact />
           </div>
         </div>
 
         {boardingOptions.length || droppingOptions.length ? (
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
-            <h3 className="text-lg font-bold text-slate-900">Boarding & Dropping</h3>
-            {[
-              { label: 'Boarding point', tone: 'text-emerald-600', options: boardingOptions, value: boardingStopId, onChange: setBoardingStopId, timeKey: 'departureTime' },
-              { label: 'Dropping point', tone: 'text-rose-600', options: droppingOptions, value: droppingStopId, onChange: setDroppingStopId, timeKey: 'arrivalTime' },
-            ].filter((group) => group.options.length).map((group) => (
-              <div key={group.label} className="space-y-2">
-                <p className={`text-[10px] font-black uppercase tracking-wider ${group.tone}`}>{group.label}</p>
-                <div className="space-y-2">
-                  {group.options.map((stop) => {
-                    const selected = String(group.value) === String(stop.id);
-                    return (
-                      <button
-                        key={stop.id}
-                        type="button"
-                        onClick={() => group.onChange(String(stop.id))}
-                        className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
-                          selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-100 bg-slate-50 text-slate-800'
-                        }`}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-black">{stop.pointName || stop.city}</span>
-                          <span className={`block truncate text-[11px] font-semibold ${selected ? 'text-white/70' : 'text-slate-500'}`}>{stop.city}</span>
-                        </span>
-                        <span className="shrink-0 text-xs font-black">{stop[group.timeKey] || stop.departureTime || stop.arrivalTime || ''}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          <div className="zb-card space-y-4 p-4">
+            <SectionTitle icon={MapPin} title="Where do you get on and off?" />
+            {boardingOptions.length ? (
+              <StopPicker label="Boarding point" tone="zb-green-text" options={boardingOptions} value={effectiveBoarding} onChange={setBoardingStopId} timeKey="departureTime" />
+            ) : null}
+            {droppingOptions.length ? (
+              <StopPicker label="Dropping point" tone="zb-red-text" options={droppingOptions} value={effectiveDropping} onChange={setDroppingStopId} timeKey="arrivalTime" />
+            ) : null}
           </div>
         ) : null}
 
         {dhabas.length ? (
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Pre-book food on the way</h3>
-                <p className="mt-1 text-xs font-semibold text-slate-500">Optional. Your order is ready when the bus halts at the dhaba.</p>
-              </div>
-              <UtensilsCrossed size={20} className="shrink-0 text-orange-500" />
-            </div>
+          <div className="zb-card space-y-3 p-4">
+            <SectionTitle icon={UtensilsCrossed} title="Food on the way" hint="Optional · paid now · cooked as your bus approaches" />
             {dhabas.map((dhaba) => (
-              <div key={dhaba.id} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-slate-900">{dhaba.name}</p>
-                    <p className="truncate text-[11px] font-semibold text-slate-500">
-                      {[dhaba.highway, dhaba.city].filter(Boolean).join(' • ')}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-orange-50 px-2 py-1 text-[10px] font-black text-orange-600">
-                    ~{new Date(dhaba.expectedArrivalAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {dhaba.menu.map((item) => {
-                    const quantity = Number(foodCart[dhaba.id]?.[item.id] || 0);
-                    return (
-                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className={`h-3 w-3 shrink-0 rounded-sm border-2 ${item.isVeg ? 'border-emerald-600' : 'border-rose-600'}`} />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-bold text-slate-900">{item.name}</p>
-                            <p className="text-[11px] font-bold text-slate-500">{CURRENCY_SYMBOL}{formatMoney(item.price)}</p>
-                          </div>
-                        </div>
-                        {quantity > 0 ? (
-                          <div className="flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 px-1">
-                            <button type="button" onClick={() => changeFoodQuantity(dhaba.id, item.id, -1)} className="p-1.5 text-slate-700" aria-label={`Remove one ${item.name}`}>
-                              <Minus size={14} />
-                            </button>
-                            <span className="w-4 text-center text-sm font-black text-slate-900">{quantity}</span>
-                            <button type="button" onClick={() => changeFoodQuantity(dhaba.id, item.id, 1)} className="p-1.5 text-slate-700" aria-label={`Add one ${item.name}`}>
-                              <Plus size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => changeFoodQuantity(dhaba.id, item.id, 1)}
-                            className="shrink-0 rounded-xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-black text-orange-600"
-                          >
-                            Add
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <DhabaMenu
+                key={dhaba.id}
+                dhaba={dhaba}
+                cart={foodCart[dhaba.id]}
+                open={openDhaba === dhaba.id}
+                onToggle={() => setOpenDhaba((current) => (current === dhaba.id ? '' : dhaba.id))}
+                onChange={(itemId, delta) => changeFood(dhaba.id, itemId, delta)}
+              />
             ))}
           </div>
         ) : null}
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-6">
-          <div className="flex items-center justify-between gap-3">
+        <div id="zb-traveller" className="zb-card space-y-4 p-4">
+          <SectionTitle icon={User} title="Traveller" hint="Ticket and alerts go to this mobile and email." />
+          <div className="zb-soft grid grid-cols-2 gap-1 p-1">
+            {[
+              { id: 'self', label: 'Myself' },
+              { id: 'other', label: 'Someone else' },
+            ].map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  setTravellerMode(option.id);
+                  if (option.id === 'other') { setName(''); setAge(''); setPhone(''); setEmail(''); }
+                }}
+                className={`zb-chip justify-center !border-0 ${travellerMode === option.id ? 'is-active' : '!bg-transparent'}`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <label className="block">
+            <span className={fieldLabel}>Full name</span>
+            <input className="zb-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="As on ID proof" autoComplete="name" />
+          </label>
+          <div className="grid grid-cols-[1fr_2fr] gap-3">
+            <label className="block">
+              <span className={fieldLabel}>Age</span>
+              <input className="zb-input" type="number" min="1" max="120" inputMode="numeric" value={age} onChange={(event) => setAge(event.target.value)} />
+            </label>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Primary Passenger</h3>
-              <p className="mt-1 text-xs font-semibold text-slate-500">Choose who is travelling, then confirm the details below.</p>
-            </div>
-            {profileLoading ? (
-              <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-                <Loader2 size={12} className="animate-spin" /> Loading
-              </div>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={applySelfProfile}
-              className={`rounded-2xl border px-4 py-3 text-left transition-all ${
-                travellerMode === 'self'
-                  ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
-                  : 'border-slate-200 bg-slate-50 text-slate-700'
-              }`}
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.18em]">Self</p>
-              <p className={`mt-1 text-sm font-black ${travellerMode === 'self' ? 'text-white' : 'text-slate-900'}`}>
-                Use my profile
-              </p>
-              <p className={`mt-1 text-[11px] font-semibold ${travellerMode === 'self' ? 'text-white/70' : 'text-slate-500'}`}>
-                Name, phone, and email auto-fill from your account.
-              </p>
-            </button>
-            <button
-              type="button"
-              onClick={switchToSomeoneElse}
-              className={`rounded-2xl border px-4 py-3 text-left transition-all ${
-                travellerMode === 'other'
-                  ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
-                  : 'border-slate-200 bg-slate-50 text-slate-700'
-              }`}
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.18em]">Other</p>
-              <p className={`mt-1 text-sm font-black ${travellerMode === 'other' ? 'text-white' : 'text-slate-900'}`}>
-                Book for someone else
-              </p>
-              <p className={`mt-1 text-[11px] font-semibold ${travellerMode === 'other' ? 'text-white/70' : 'text-slate-500'}`}>
-                Enter passenger details manually.
-              </p>
-            </button>
-          </div>
-
-          {travellerMode === 'self' && profileData ? (
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-[12px] font-bold text-emerald-700">
-              {profileData.email
-                ? `Using ${profileData.email} for the ticket confirmation.`
-                : 'Profile phone and name are filled. Add an email if you want the e-ticket mailed too.'}
-            </div>
-          ) : null}
-
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Full Name</label>
-              <div className="flex min-w-0 items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
-                <User size={16} className="shrink-0 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Enter full name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex-1 space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Age</label>
-                <input
-                  type="number"
-                  placeholder="Age"
-                  value={age}
-                  onChange={(event) => setAge(event.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
-                />
-              </div>
-              <div className="flex-[2] space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Gender</label>
-                <div className="flex bg-slate-50 border border-slate-100 rounded-2xl p-1">
-                  {['Male', 'Female', 'Other'].map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => setGender(item)}
-                      className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${gender === item ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
+              <span className={fieldLabel}>Gender</span>
+              <div className="zb-soft grid grid-cols-3 gap-1 p-1">
+                {['Male', 'Female', 'Other'].map((item) => (
+                  <button key={item} type="button" onClick={() => setGender(item)} className={`zb-chip justify-center !border-0 !px-1 ${gender === item ? 'is-active' : '!bg-transparent'}`}>
+                    {item}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
+          <label className="block">
+            <span className={fieldLabel}><Phone size={11} className="mb-0.5 inline" /> Mobile</span>
+            <input className="zb-input" type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" />
+          </label>
+          <label className="block">
+            <span className={fieldLabel}><Mail size={11} className="mb-0.5 inline" /> Email</span>
+            <input className="zb-input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
+          </label>
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold text-slate-900">Contact Info</h3>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-1 rounded-full">For e-ticket</span>
-          </div>
-
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Mobile Number</label>
-              <div className="flex min-w-0 items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
-                <Phone size={16} className="shrink-0 text-slate-400" />
-                <input
-                  type="tel"
-                  placeholder="Mobile number"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Email ID</label>
-              <div className="flex min-w-0 items-center gap-3 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3">
-                <Mail size={16} className="shrink-0 text-slate-400" />
-                <input
-                  type="email"
-                  placeholder="Email address"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
-                />
-              </div>
-            </div>
-          </div>
-
-          {error && (
-            <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-600">
-              {error}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-8 pt-4 bg-white border-t border-slate-100 z-30">
-        <div className="mb-4 rounded-[24px] border border-slate-100 bg-slate-50/80 p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Fare Summary</p>
-              <p className="mt-1 text-sm font-bold text-slate-900">{selectedSeats.length} seat{selectedSeats.length > 1 ? 's' : ''}</p>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1">
-              <Check size={12} className="text-emerald-600" strokeWidth={3} />
-              <p className="text-[10px] font-bold text-emerald-700">Calculated live</p>
-            </div>
-          </div>
-          <div className="space-y-2.5 text-sm">
-            <div className="flex items-center justify-between text-slate-600">
-              <span className="font-semibold">Seat subtotal</span>
-              <span className="font-bold text-slate-900">{CURRENCY_SYMBOL}{formatMoney(seatSubtotal)}</span>
-            </div>
-            <div className="flex items-center justify-between text-slate-600">
-              <span className="font-semibold">Service tax ({serviceTaxPercentage}%)</span>
-              <span className="font-bold text-slate-900">{CURRENCY_SYMBOL}{formatMoney(serviceTaxAmount)}</span>
-            </div>
+        <div className="zb-card p-4">
+          <SectionTitle icon={ReceiptText} title="Fare" />
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex justify-between"><span className="zb-text-2 font-semibold">Seats ({selectedSeats.length})</span><span className="zb-text font-bold">{formatRupees(seatSubtotal)}</span></div>
+            <div className="flex justify-between"><span className="zb-text-2 font-semibold">Tax ({taxPercent}%)</span><span className="zb-text font-bold">{formatRupees(taxAmount)}</span></div>
             {foodTotal > 0 ? (
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="font-semibold">Dhaba food</span>
-                <span className="font-bold text-slate-900">{CURRENCY_SYMBOL}{formatMoney(foodTotal)}</span>
-              </div>
+              <div className="flex justify-between"><span className="zb-text-2 font-semibold">Dhaba food</span><span className="zb-text font-bold">{formatRupees(foodTotal)}</span></div>
             ) : null}
-            <div className="border-t border-dashed border-slate-200 pt-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Payable Amount</span>
-                <span className="text-2xl font-black text-slate-900">{CURRENCY_SYMBOL}{formatMoney(payableAmount)}</span>
-              </div>
-            </div>
+            <div className="zb-divider my-2" />
+            <div className="flex justify-between"><span className="zb-text font-extrabold">Total</span><span className="text-lg font-extrabold zb-accent-text">{formatRupees(payable)}</span></div>
           </div>
+          <p className="zb-muted mt-3 text-[11px] font-semibold">
+            Your seats are held for 10 minutes while you pay. If payment succeeds but the seats are lost, the full amount is refunded automatically.
+          </p>
         </div>
 
-        <motion.button
-          whileTap={{ scale: 0.98 }}
-          onClick={handleContinue}
-          disabled={isPaying}
-          className="w-full bg-slate-900 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 shadow-lg disabled:opacity-70 transition-all"
-        >
-          {isPaying ? <Loader2 size={20} className="animate-spin" /> : `Pay ${CURRENCY_SYMBOL}${formatMoney(payableAmount)}`}
-          {!isPaying && <ChevronRight size={18} />}
-        </motion.button>
+        {error ? <p className="text-sm font-bold zb-red-text">{error}</p> : null}
       </div>
-    </div>
+
+      <FooterBar label="Total" value={formatRupees(payable)} note={foodTotal ? 'Seats + food' : 'Incl. tax'} actionLabel={`Pay ${formatRupees(payable)}`} loading={isPaying} onAction={pay} />
+    </BusScreen>
   );
 };
 

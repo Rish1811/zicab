@@ -1,303 +1,199 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import {
-  ArrowLeft,
-  Armchair,
-  BusFront,
-  CalendarDays,
-  ChevronRight,
-  Clock3,
-  Images,
-  MapPin,
-  Phone,
-  ShieldCheck,
-  Ticket,
-} from 'lucide-react';
-import { buildBusRouteState } from './busNavigationState';
+import { BusFront, Clock3, Luggage, MapPin, Phone, ShieldCheck, Sparkles, Star, Ticket, UtensilsCrossed } from 'lucide-react';
+import userBusService from '../../services/busService';
+import { BusScreen, BusTopBar, FooterBar, SectionTitle, TripLine } from '../../components/bus/ZiBusUi';
+import { formatDay, formatDuration, formatRupees, routePrefixFor } from '../../components/bus/zibusFormat';
+import { buildBusRouteState, toPlainData } from './busNavigationState';
 
-const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
-
-const getDisplayRoute = (bus, fallbackFromCity = '', fallbackToCity = '') => ({
-  fromCity: bus?.route?.originCity || bus?.fromCity || fallbackFromCity,
-  toCity: bus?.route?.destinationCity || bus?.toCity || fallbackToCity,
-  routeName: bus?.route?.routeName || bus?.routeName || '',
-});
-
-const formatTravelDate = (dateStr) => {
-  if (!dateStr) return '';
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    });
-  } catch {
-    return dateStr;
-  }
-};
-
-const formatDurationBrief = (value = '') => {
-  const raw = String(value || '').trim();
-  if (!raw) return 'Direct';
-  return raw
-    .replace(/days?/gi, 'd')
-    .replace(/hours?/gi, 'h')
-    .replace(/hrs?/gi, 'h')
-    .replace(/minutes?/gi, 'm')
-    .replace(/mins?/gi, 'm')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
-
-const stopBadgeTone = {
-  pickup: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  drop: 'border-rose-200 bg-rose-50 text-rose-700',
-  both: 'border-indigo-200 bg-indigo-50 text-indigo-700',
-};
+const STOP_TONE = { pickup: 'is-green', drop: 'is-red', both: 'is-blue' };
+const STOP_LABEL = { pickup: 'Boarding', drop: 'Dropping', both: 'Board / drop' };
 
 const BusPreview = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const routePrefix = useMemo(() => getRoutePrefix(location.pathname), [location.pathname]);
+  const routePrefix = useMemo(() => routePrefixFor(location.pathname), [location.pathname]);
   const state = location.state || {};
-  const { bus, fromCity, toCity, date } = state;
-  const [activeImage, setActiveImage] = useState(bus?.coverImage || bus?.image || bus?.galleryImages?.[0] || '');
-
-  if (!bus?.busServiceId || !bus?.scheduleId) {
-    navigate(`${routePrefix}/bus`, { replace: true });
-    return null;
-  }
-
-  const gallery = [
-    bus?.coverImage || bus?.image || '',
-    ...(Array.isArray(bus?.galleryImages) ? bus.galleryImages : []),
-  ].filter(Boolean).filter((image, index, list) => list.indexOf(image) === index);
-  const routeStops = Array.isArray(bus?.route?.stops) ? bus.route.stops : [];
-  const displayRoute = getDisplayRoute(bus, fromCity, toCity);
+  const { bus, date } = state;
+  const gallery = useMemo(
+    () => [bus?.coverImage, bus?.image, ...(bus?.galleryImages || [])].filter(Boolean).filter((src, index, list) => list.indexOf(src) === index),
+    [bus],
+  );
+  const [activeImage, setActiveImage] = useState(0);
+  const [dhabas, setDhabas] = useState([]);
 
   useEffect(() => {
-    setActiveImage(bus?.coverImage || bus?.image || bus?.galleryImages?.[0] || '');
-  }, [bus?.coverImage, bus?.galleryImages, bus?.image]);
+    if (!bus?.busServiceId) {
+      navigate(`${routePrefix}/bus`, { replace: true });
+      return undefined;
+    }
+    let active = true;
+    userBusService
+      .getTripDhabas({ busServiceId: bus.busServiceId, scheduleId: bus.scheduleId, date })
+      .then((response) => {
+        const list = toPlainData(response?.data);
+        if (active) setDhabas(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [bus, date, navigate, routePrefix]);
+
+  if (!bus?.busServiceId) return null;
+
+  const stops = Array.isArray(bus.route?.stops) ? bus.route.stops : [];
+  const rules = Array.isArray(bus.cancellationRules) ? bus.cancellationRules : [];
 
   return (
-    <div className="min-h-screen max-w-lg mx-auto bg-[linear-gradient(180deg,#fff7ed_0%,#ffffff_18%,#f8fafc_100%)] font-sans pb-28">
-      <header className="sticky top-0 z-20 border-b border-white/80 bg-white/90 px-5 pb-4 pt-10 shadow-[0_4px_20px_rgba(15,23,42,0.05)] backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm"
-          >
-            <ArrowLeft size={18} className="text-slate-900" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-black text-slate-900">{bus.operator || 'Bus Details'}</h1>
-            <p className="mt-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-              {displayRoute.fromCity} to {displayRoute.toCity} • {formatTravelDate(date)}
-            </p>
-          </div>
-        </div>
-      </header>
+    <BusScreen>
+      <BusTopBar onBack={() => navigate(-1)} title={bus.operator || bus.busName} subtitle={`${bus.fromCity} → ${bus.toCity} · ${formatDay(date)}`} />
 
-      <div className="space-y-5 px-5 pt-5">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="overflow-hidden rounded-[30px] border border-white/80 bg-white/95 shadow-[0_8px_24px_rgba(15,23,42,0.06)]"
-        >
-          <div className="relative h-56 bg-slate-900">
-            {activeImage ? (
-              <img src={activeImage} alt={bus.busName || bus.operator || 'Bus'} className="h-full w-full object-cover" />
+      <div className="zb-body">
+        <div className="zb-card overflow-hidden">
+          <div className="relative h-48" style={{ background: bus.busColor || 'var(--zb-hero-b)' }}>
+            {gallery.length ? (
+              <img src={gallery[activeImage]} alt={bus.busName || 'Bus'} className="h-full w-full object-cover" />
             ) : (
-              <div
-                className="flex h-full w-full items-center justify-center"
-                style={{ backgroundColor: bus.busColor || '#0f172a' }}
-              >
-                <BusFront size={70} className="text-white/90" />
-              </div>
+              <div className="flex h-full items-center justify-center"><BusFront size={64} className="zb-on-dark opacity-80" /></div>
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-900/20 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
-              <div className="flex items-end justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70">{bus.busName || 'Coach Service'}</p>
-                  <h2 className="mt-1 truncate text-[22px] font-black">{bus.operator}</h2>
-                  <p className="mt-1 text-sm font-semibold text-white/75">{bus.type} • {displayRoute.routeName || 'Direct route'}</p>
-                </div>
-                <div className="rounded-2xl bg-white/12 px-4 py-3 text-right backdrop-blur-sm">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/70">Starts at</p>
-                  <p className="mt-1 text-2xl font-black">Rs {Number(bus.price || 0)}</p>
-                </div>
-              </div>
+            <div className="absolute inset-x-0 bottom-0 p-4" style={{ background: 'linear-gradient(transparent, rgba(2,6,23,0.85))' }}>
+              <p className="zb-on-dark text-lg font-extrabold">{bus.busName || bus.operator}</p>
+              <p className="zb-on-dark-2 text-xs font-semibold" style={{ color: 'rgba(226,232,240,0.8)' }}>
+                {bus.type}{bus.registrationNumber ? ` · ${String(bus.registrationNumber).toUpperCase()}` : ''}
+              </p>
             </div>
           </div>
-
           {gallery.length > 1 ? (
-            <div className="border-t border-slate-100 p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Images size={14} className="text-slate-400" />
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Gallery</p>
-              </div>
-              <div className="flex gap-3 overflow-x-auto pb-1">
-                {gallery.map((image, index) => (
-                  <button
-                    key={`${image}-${index}`}
-                    type="button"
-                    onClick={() => setActiveImage(image)}
-                    className={`overflow-hidden rounded-2xl border-2 ${activeImage === image ? 'border-orange-400' : 'border-transparent'}`}
-                  >
-                    <img src={image} alt={`${bus.operator} ${index + 1}`} className="h-20 w-28 object-cover" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </motion.div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-[22px] border border-slate-100 bg-white p-4 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Departure</p>
-            <p className="mt-2 text-lg font-black text-slate-900">{bus.departure || 'NA'}</p>
-          </div>
-          <div className="rounded-[22px] border border-slate-100 bg-white p-4 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Arrival</p>
-            <p className="mt-2 text-lg font-black text-slate-900">{bus.arrival || 'NA'}</p>
-          </div>
-          <div className="rounded-[22px] border border-slate-100 bg-white p-4 shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Seats Left</p>
-            <p className="mt-2 text-lg font-black text-emerald-600">{bus.availableSeats || 0}</p>
-          </div>
-        </div>
-
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Journey Summary</p>
-              <h3 className="mt-1 text-lg font-black text-slate-900">{displayRoute.fromCity} to {displayRoute.toCity}</h3>
-            </div>
-            <div className="rounded-full bg-orange-50 px-3 py-2 text-[11px] font-black text-orange-600">
-              {formatDurationBrief(bus.duration)}
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-3">
-            <div className="flex items-center justify-between rounded-[20px] border border-slate-100 bg-slate-50 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <CalendarDays size={14} className="text-slate-400" />
-                <span className="text-sm font-bold text-slate-700">{formatTravelDate(date)}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                <Clock3 size={14} className="text-slate-400" />
-                {bus.departure} to {bus.arrival}
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-[20px] border border-slate-100 bg-slate-50 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Armchair size={14} className="text-slate-400" />
-                <span className="text-sm font-bold text-slate-700">{bus.type}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                <Ticket size={14} className="text-slate-400" />
-                Rs {Number(bus.price || 0)} per seat
-              </div>
-            </div>
-            {(bus.driverName || bus.driverPhone) ? (
-              <div className="flex items-center justify-between rounded-[20px] border border-slate-100 bg-slate-50 px-4 py-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Bus Staff</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{bus.driverName || 'Assigned crew'}</p>
-                </div>
-                {bus.driverPhone ? (
-                  <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                    <Phone size={14} className="text-slate-400" />
-                    {bus.driverPhone}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Stops & Boarding Points</p>
-          <div className="mt-4 space-y-3">
-            {routeStops.length > 0 ? routeStops.map((stop, index) => (
-              <div key={stop.id || `${bus.id}-stop-${index}`} className="rounded-[22px] border border-slate-100 bg-slate-50/80 px-4 py-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <MapPin size={14} className="text-orange-500" />
-                      <p className="truncate text-sm font-black text-slate-900">{stop.city || stop.pointName || `Stop ${index + 1}`}</p>
-                    </div>
-                    <p className="mt-1 truncate text-[12px] font-semibold text-slate-500">{stop.pointName || 'Point not set'}</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <span className={`inline-flex rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wider ${stopBadgeTone[stop.stopType] || stopBadgeTone.both}`}>
-                      {stop.stopType === 'both' ? 'BP + DP' : stop.stopType === 'drop' ? 'DP' : 'BP'}
-                    </span>
-                    <p className="mt-1 text-[11px] font-bold text-slate-500">{stop.arrivalTime || stop.departureTime || '--:--'}</p>
-                  </div>
-                </div>
-              </div>
-            )) : (
-              <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm font-semibold text-slate-500">
-                No stop details added for this bus yet.
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <ShieldCheck size={16} className="text-emerald-500" />
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Policies & Comfort</p>
-          </div>
-
-          {Array.isArray(bus.amenities) && bus.amenities.length > 0 ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {bus.amenities.map((amenity) => (
-                <span key={amenity} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-black text-slate-700">
-                  {amenity}
-                </span>
+            <div className="zb-scroll-x p-3">
+              {gallery.map((src, index) => (
+                <button key={src} type="button" onClick={() => setActiveImage(index)} className="shrink-0 overflow-hidden rounded-xl" style={{ outline: index === activeImage ? '2px solid var(--zb-accent)' : 'none' }}>
+                  <img src={src} alt="" className="h-14 w-20 object-cover" />
+                </button>
               ))}
             </div>
           ) : null}
-
-          <div className="mt-4 space-y-3">
-            {bus.boardingPolicy ? (
-              <div className="rounded-[20px] border border-slate-100 bg-slate-50 px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Boarding Policy</p>
-                <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{bus.boardingPolicy}</p>
+          <div className="p-4">
+            <TripLine departure={bus.departure} arrival={bus.arrival} fromLabel={bus.fromCity} toLabel={bus.toCity} duration={bus.duration} />
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div className="zb-soft p-3 text-center">
+                <p className="zb-text text-base font-extrabold">{bus.availableSeats ?? '-'}</p>
+                <p className="zb-muted text-[10px] font-bold">seats left</p>
               </div>
-            ) : null}
-            {bus.cancellationPolicy ? (
-              <div className="rounded-[20px] border border-slate-100 bg-slate-50 px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Cancellation Policy</p>
-                <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{bus.cancellationPolicy}</p>
+              <div className="zb-soft p-3 text-center">
+                <p className="zb-text text-base font-extrabold">{formatDuration(bus.duration) || 'Direct'}</p>
+                <p className="zb-muted text-[10px] font-bold">journey</p>
               </div>
-            ) : null}
-            {bus.luggagePolicy ? (
-              <div className="rounded-[20px] border border-slate-100 bg-slate-50 px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Luggage Policy</p>
-                <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{bus.luggagePolicy}</p>
+              <div className="zb-soft p-3 text-center">
+                {Number(bus.ratingCount || 0) > 0 ? (
+                  <p className="text-base font-extrabold zb-accent-text"><Star size={13} className="mb-0.5 inline" fill="currentColor" /> {Number(bus.rating).toFixed(1)}</p>
+                ) : (
+                  <p className="zb-text text-base font-extrabold">New</p>
+                )}
+                <p className="zb-muted text-[10px] font-bold">{Number(bus.ratingCount || 0) > 0 ? `${bus.ratingCount} ratings` : 'on ZI Bus'}</p>
               </div>
-            ) : null}
+            </div>
           </div>
         </div>
+
+        {dhabas.length ? (
+          <div className="zb-card p-4">
+            <SectionTitle icon={UtensilsCrossed} title="Food on this bus" hint="Pre-order at checkout. Ready when the bus halts." />
+            <div className="mt-3 space-y-2">
+              {dhabas.map((dhaba) => (
+                <div key={dhaba.id} className="zb-soft flex items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="zb-text truncate text-sm font-extrabold">{dhaba.name}</p>
+                    <p className="zb-muted truncate text-[11px] font-semibold">
+                      {[dhaba.highway, dhaba.city].filter(Boolean).join(' · ')} · {dhaba.menu.length} dishes
+                    </p>
+                  </div>
+                  <span className="zb-badge is-food shrink-0">
+                    ~{new Date(dhaba.expectedArrivalAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {stops.length ? (
+          <div className="zb-card p-4">
+            <SectionTitle icon={MapPin} title="Stops" hint="You’ll choose your boarding and dropping point next." />
+            <ol className="mt-3">
+              {stops.map((stop, index) => (
+                <li key={stop.id || index} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <span className={`zb-dot ${stop.stopType === 'drop' ? 'is-end' : 'is-start'} mt-1.5`} />
+                    {index < stops.length - 1 ? <span className="my-1 w-px flex-1" style={{ background: 'var(--zb-line)' }} /> : null}
+                  </div>
+                  <div className="flex min-w-0 flex-1 items-start justify-between gap-3 pb-4">
+                    <div className="min-w-0">
+                      <p className="zb-text truncate text-sm font-extrabold">{stop.pointName || stop.city}</p>
+                      <p className="zb-muted truncate text-[11px] font-semibold">{stop.city}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="zb-text text-sm font-extrabold">{stop.departureTime || stop.arrivalTime || '--:--'}</p>
+                      <span className={`zb-badge ${STOP_TONE[stop.stopType] || 'is-blue'} mt-1`}>{STOP_LABEL[stop.stopType] || 'Stop'}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+
+        {bus.amenities?.length ? (
+          <div className="zb-card p-4">
+            <SectionTitle icon={Sparkles} title="On board" />
+            <div className="mt-3 flex flex-wrap gap-2">
+              {bus.amenities.map((amenity) => <span key={amenity} className="zb-badge">{amenity}</span>)}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="zb-card p-4">
+          <SectionTitle icon={ShieldCheck} title="Cancellation" />
+          {rules.length ? (
+            <div className="mt-3 overflow-hidden rounded-2xl" style={{ border: '1px solid var(--zb-line)' }}>
+              {rules.map((rule, index) => (
+                <div key={rule.id || index} className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderTop: index ? '1px solid var(--zb-line)' : 'none' }}>
+                  <span className="zb-text-2 text-xs font-semibold">{rule.label || `${rule.hoursBeforeDeparture}h+ before departure`}</span>
+                  <span className="text-xs font-extrabold zb-green-text">
+                    {rule.refundType === 'percentage' ? `${rule.refundValue}% back` : rule.refundType === 'fixed' ? `${formatRupees(rule.refundValue)} back` : 'No refund'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="zb-text-2 mt-2 text-sm font-medium">{bus.cancellationPolicy || 'See the ticket for cancellation terms.'}</p>
+          )}
+        </div>
+
+        {(bus.boardingPolicy || bus.luggagePolicy || bus.driverPhone) ? (
+          <div className="zb-card space-y-3 p-4">
+            {bus.boardingPolicy ? (
+              <p className="zb-text-2 flex gap-2 text-sm font-medium"><Clock3 size={16} className="zb-muted mt-0.5 shrink-0" /> {bus.boardingPolicy}</p>
+            ) : null}
+            {bus.luggagePolicy ? (
+              <p className="zb-text-2 flex gap-2 text-sm font-medium"><Luggage size={16} className="zb-muted mt-0.5 shrink-0" /> {bus.luggagePolicy}</p>
+            ) : null}
+            {bus.driverPhone ? (
+              <p className="zb-text-2 flex gap-2 text-sm font-medium"><Phone size={16} className="zb-muted mt-0.5 shrink-0" /> Bus crew: {bus.driverName || ''} {bus.driverPhone}</p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
-      <div className="fixed bottom-0 left-1/2 z-30 w-full max-w-lg -translate-x-1/2 border-t border-slate-100 bg-white/95 px-5 pb-8 pt-4 backdrop-blur-md">
-        <button
-          type="button"
-          onClick={() => navigate(`${routePrefix}/bus/seats`, { state: buildBusRouteState(state) })}
-          className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-slate-900 py-4 text-base font-black text-white shadow-lg"
-        >
-          Select Seats <ChevronRight size={18} />
-        </button>
-      </div>
-    </div>
+      <FooterBar
+        label="Fare from"
+        value={formatRupees(bus.price)}
+        note={`${bus.availableSeats ?? 0} seats left`}
+        actionLabel={<><Ticket size={17} /> Select seats</>}
+        disabled={!Number(bus.availableSeats || 0)}
+        onAction={() => navigate(`${routePrefix}/bus/seats`, { state: buildBusRouteState(state) })}
+      />
+    </BusScreen>
   );
 };
 

@@ -1,258 +1,164 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { CheckCircle2, Ticket, QrCode, Home, Share2, Phone, Route, BusFront } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { CheckCircle2, Home, MapPin, Navigation, Phone, Share2, Ticket, UtensilsCrossed } from 'lucide-react';
 import { scheduleBusBookingReminders } from '../../utils/upcomingRideReminderService';
 import userBusService from '../../services/busService';
+import { BusScreen, Skeleton, TripLine } from '../../components/bus/ZiBusUi';
+import { formatDay, formatRupees, routePrefixFor } from '../../components/bus/zibusFormat';
 import { toPlainData } from './busNavigationState';
-
-const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
-
-const formatTravelDate = (dateStr) => {
-  if (!dateStr) return '';
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    });
-  } catch (err) {
-    return dateStr;
-  }
-};
-
-const formatDurationCompact = (value = '') => {
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return 'Direct';
-  }
-
-  return raw
-    .replace(/days?/gi, 'd')
-    .replace(/hours?/gi, 'h')
-    .replace(/hrs?/gi, 'h')
-    .replace(/minutes?/gi, 'm')
-    .replace(/mins?/gi, 'm')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
-
-const formatBusRegistrationNumber = (value = '') => String(value || '').trim().toUpperCase();
 
 const BusConfirm = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const routePrefix = getRoutePrefix(location.pathname);
-  const state = location.state || {};
-  const { booking, fromCity, toCity, date } = state;
+  const routePrefix = routePrefixFor(location.pathname);
+  const { booking, fromCity, toCity, date } = location.state || {};
   const [ticket, setTicket] = useState(null);
 
   useEffect(() => {
-    if (booking?.bookingCode) {
-      scheduleBusBookingReminders(booking);
+    if (!booking?.bookingCode) {
+      navigate(`${routePrefix}/bus`, { replace: true });
+      return undefined;
     }
-  }, [booking]);
-
-  useEffect(() => {
-    if (!booking?.id) return undefined;
+    scheduleBusBookingReminders(booking);
     let active = true;
     userBusService
       .getTicket(booking.id)
-      .then((response) => {
-        if (active) setTicket(toPlainData(response?.data) || null);
-      })
+      .then((response) => active && setTicket(toPlainData(response?.data) || null))
       .catch(() => {});
     return () => {
       active = false;
     };
-  }, [booking?.id]);
+  }, [booking, navigate, routePrefix]);
 
-  const pnr = ticket?.pnr || booking?.pnr || booking?.bookingCode;
+  if (!booking?.bookingCode) return null;
 
-  if (!booking?.bookingCode) {
-    navigate(`${routePrefix}/bus`, { replace: true });
-    return null;
-  }
+  const pnr = ticket?.pnr || booking.pnr || booking.bookingCode;
+  const seats = ticket?.seats || booking.activeSeatLabels || booking.seatLabels || [];
+  const bus = booking.bus || {};
+  const total = Number(booking.amount || 0) + Number(booking.foodAmount || 0);
 
-  const handleShare = async () => {
+  const share = async () => {
+    const text = `ZI Bus ticket ${pnr}: ${bus.fromCity || fromCity} to ${bus.toCity || toCity}, ${formatDay(booking.travelDate || date)} ${bus.departure || ''}. Seat ${seats.join(', ')}.`;
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: 'Bus Ticket',
-          text: `ZI Bus PNR ${pnr} for ${booking.bus?.fromCity || fromCity} to ${booking.bus?.toCity || toCity} on ${booking.travelDate || date}. Seats: ${(booking.seatLabels || booking.seatIds || []).join(', ')}`,
-        });
-      }
+      if (navigator.share) await navigator.share({ title: 'ZI Bus ticket', text });
+      else await navigator.clipboard?.writeText(text);
     } catch {
-      // ignore share cancellation
+      // Share sheet closed.
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32">
-      <div className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-bold text-slate-900">E-Ticket</h1>
-          <button onClick={handleShare} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-colors">
-            <Share2 size={18} />
-          </button>
+    <BusScreen>
+      <div className="px-5 pt-10">
+        <div className="flex flex-col items-center text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: 'color-mix(in srgb, var(--zb-green) 18%, transparent)' }}>
+            <CheckCircle2 size={36} className="zb-green-text" />
+          </div>
+          <p className="zb-label mt-4 zb-green-text">Booking confirmed</p>
+          <h1 className="zb-h1 mt-1">You’re all set!</h1>
+          <p className="zb-muted mt-1 text-sm font-semibold">Ticket sent to {booking.passenger?.phone || 'your phone'}.</p>
         </div>
-      </div>
 
-      <div className="px-5 pt-10 flex flex-col items-center">
-        <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', damping: 20 }}
-          className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center shadow-lg mb-6"
-        >
-          <CheckCircle2 size={32} className="text-white" />
-        </motion.div>
-
-        <motion.div 
-          initial={{ y: 10, opacity: 0 }} 
-          animate={{ y: 0, opacity: 1 }} 
-          transition={{ delay: 0.1 }} 
-          className="text-center mb-10"
-        >
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Booking Confirmed</p>
-          <h2 className="text-2xl font-bold text-slate-900">Your ticket is ready</h2>
-        </motion.div>
-
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="w-full bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"
-        >
-          <div className="p-6 bg-slate-900 text-white relative">
-            <div className="flex justify-between items-center mb-8">
+        <div className="zb-card mt-6 overflow-hidden">
+          <div className="p-5" style={{ background: 'linear-gradient(140deg, var(--zb-hero-a), var(--zb-hero-b))' }}>
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">PNR Number</p>
-                <p className="text-lg font-bold tracking-widest">{pnr}</p>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.2em]" style={{ color: 'rgba(226,232,240,0.7)' }}>PNR</p>
+                <p className="zb-on-dark mt-1 text-2xl font-extrabold tracking-[0.12em]">{pnr}</p>
               </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Seat(s)</p>
-                  <p className="text-lg font-bold">{(booking.seatLabels || booking.seatIds || []).join(', ')}</p>
-                </div>
-              </div>
-
-              <h3 className="text-xl font-bold mb-1">{booking.bus?.operator}</h3>
-            <p className="text-xs font-medium text-slate-400">
-              {booking.bus?.type}
-              {booking.bus?.registrationNumber ? ` • ${formatBusRegistrationNumber(booking.bus.registrationNumber)}` : ''}
+              <button type="button" onClick={share} className="zb-glass flex h-10 w-10 items-center justify-center zb-on-dark" aria-label="Share ticket">
+                <Share2 size={17} />
+              </button>
+            </div>
+            <p className="zb-on-dark mt-3 text-sm font-bold">{bus.operator}</p>
+            <p className="text-xs font-semibold" style={{ color: 'rgba(226,232,240,0.7)' }}>
+              {bus.type}{bus.registrationNumber ? ` · ${String(bus.registrationNumber).toUpperCase()}` : ''}
             </p>
           </div>
 
-          <div className="p-6 space-y-8">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="text-xl font-bold text-slate-900">{booking.bus?.departure}</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 truncate">{booking.bus?.fromCity || fromCity}</p>
+          <div className="space-y-4 p-5">
+            <TripLine departure={bus.departure} arrival={bus.arrival} fromLabel={bus.fromCity || fromCity} toLabel={bus.toCity || toCity} duration={bus.duration} />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="zb-soft p-3">
+                <p className="zb-label">Date</p>
+                <p className="zb-text mt-1 text-sm font-extrabold">{formatDay(booking.travelDate || date)}</p>
               </div>
-              <div className="flex flex-col items-center flex-1 px-2">
-                <span className="text-[9px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-full">{formatDurationCompact(booking.bus?.duration)}</span>
-                <div className="w-full h-px border-t border-dashed border-slate-200 my-2" />
-                <span className="text-[9px] font-bold text-slate-400">{formatTravelDate(booking.travelDate || date)}</span>
-              </div>
-              <div className="flex-1 text-right">
-                <p className="text-xl font-bold text-slate-900">{booking.bus?.arrival}</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 truncate">{booking.bus?.toCity || toCity}</p>
+              <div className="zb-soft p-3">
+                <p className="zb-label">Seat{seats.length > 1 ? 's' : ''}</p>
+                <p className="zb-text mt-1 text-sm font-extrabold">{seats.join(', ')}</p>
               </div>
             </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <div className="flex items-center gap-2 text-slate-500">
-                  <BusFront size={15} />
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">Bus number</p>
-                </div>
-                <p className="mt-2 text-sm font-black text-slate-900">
-                  {booking.bus?.registrationNumber
-                    ? formatBusRegistrationNumber(booking.bus.registrationNumber)
-                    : 'Will be shared soon'}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                <div className="flex items-center gap-2 text-slate-500">
-                  <Phone size={15} />
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">Driver contact</p>
-                </div>
-                <p className="mt-2 text-sm font-black text-slate-900">{booking.bus?.driverPhone || booking.bus?.driverName || 'Assigned before departure'}</p>
-              </div>
+            <div className="zb-soft space-y-2 p-3">
+              <p className="flex items-start gap-2 text-sm">
+                <MapPin size={15} className="zb-green-text mt-0.5 shrink-0" />
+                <span className="zb-text font-bold">{bus.pickupLocation || bus.fromCity}</span>
+                {booking.boardingPoint?.time ? <span className="zb-muted ml-auto shrink-0 font-bold">{booking.boardingPoint.time}</span> : null}
+              </p>
+              <p className="flex items-start gap-2 text-sm">
+                <MapPin size={15} className="zb-red-text mt-0.5 shrink-0" />
+                <span className="zb-text font-bold">{bus.dropLocation || bus.toCity}</span>
+                {booking.droppingPoint?.time ? <span className="zb-muted ml-auto shrink-0 font-bold">{booking.droppingPoint.time}</span> : null}
+              </p>
             </div>
-
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-              <div className="flex items-center gap-2 text-slate-500">
-                <Route size={15} />
-                <p className="text-[10px] font-black uppercase tracking-[0.18em]">Pickup & drop</p>
-              </div>
-              <div className="mt-3 space-y-3">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">Pickup</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{booking.bus?.pickupLocation || booking.bus?.fromCity || fromCity}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-600">Drop</p>
-                  <p className="mt-1 text-sm font-black text-slate-900">{booking.bus?.dropLocation || booking.bus?.toCity || toCity}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 rounded-2xl p-5 flex justify-between items-center border border-slate-100">
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Passenger</p>
-                <p className="text-sm font-bold text-slate-900">
-                  {booking.passenger?.name}
-                  <span className="text-slate-400 ml-2 font-medium">
-                    ({booking.passenger?.age}{String(booking.passenger?.gender || '').charAt(0)})
-                  </span>
-                </p>
-                <p className="mt-2 text-xs font-bold text-slate-500">
-                  Paid ₹{Number(booking.amount || 0) + Number(booking.foodAmount || 0)}
-                </p>
-              </div>
-              {ticket?.qrDataUrl ? (
-                <img src={ticket.qrDataUrl} alt={`Ticket QR for PNR ${pnr}`} className="h-24 w-24 rounded-lg" />
-              ) : (
-                <QrCode size={48} className="text-slate-900" strokeWidth={1.5} />
-              )}
-            </div>
-
-            {ticket?.foodOrders?.length ? (
-              <div className="rounded-2xl border border-orange-100 bg-orange-50 p-5">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-600">Food on the way</p>
-                {ticket.foodOrders.map((order) => (
-                  <div key={order.id} className="mt-3">
-                    <p className="text-sm font-black text-slate-900">{order.dhabaName || 'Partner dhaba'}</p>
-                    <p className="text-xs font-semibold text-slate-600">
-                      {order.items.map((item) => `${item.quantity} × ${item.name}`).join(', ')}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : null}
           </div>
-        </motion.div>
+
+          <div className="zb-divider zb-ticket-notch mx-0" />
+
+          <div className="flex items-center gap-4 p-5">
+            {ticket?.qrDataUrl ? (
+              <img src={ticket.qrDataUrl} alt={`Ticket QR for PNR ${pnr}`} className="h-28 w-28 shrink-0 rounded-xl bg-white p-1" />
+            ) : (
+              <Skeleton height={112} className="w-28 shrink-0 !rounded-xl" />
+            )}
+            <div className="min-w-0">
+              <p className="zb-text text-sm font-extrabold">Show this at the bus door</p>
+              <p className="zb-muted mt-1 text-xs font-semibold">The conductor scans it to check you in.</p>
+              <p className="zb-text mt-2 text-sm font-extrabold">Paid {formatRupees(total)}</p>
+            </div>
+          </div>
+        </div>
+
+        {ticket?.foodOrders?.length ? (
+          <div className="zb-card mt-4 p-4">
+            <p className="zb-h2 flex items-center gap-2"><UtensilsCrossed size={17} className="zb-food-text" /> Food on the way</p>
+            {ticket.foodOrders.map((order) => (
+              <div key={order.id} className="zb-soft mt-3 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="zb-text truncate text-sm font-extrabold">{order.dhabaName || 'Partner dhaba'}</p>
+                  {order.expectedArrivalAt ? (
+                    <span className="zb-badge is-food">~{new Date(order.expectedArrivalAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                  ) : null}
+                </div>
+                <p className="zb-muted mt-1 text-xs font-semibold">{order.items.map((item) => `${item.quantity} × ${item.name}`).join(', ')}</p>
+              </div>
+            ))}
+            <p className="zb-muted mt-3 text-[11px] font-semibold">The dhaba starts cooking about 30 minutes before your bus arrives.</p>
+          </div>
+        ) : null}
+
+        <div className="zb-card mt-4 flex items-center gap-3 p-4">
+          <Navigation size={20} className="zb-accent-text shrink-0" />
+          <p className="zb-text-2 text-sm font-semibold">Live bus tracking opens in your ticket 1 hour before boarding.</p>
+        </div>
+        {bus.driverPhone ? (
+          <a href={`tel:${bus.driverPhone}`} className="zb-card mt-3 flex items-center gap-3 p-4">
+            <Phone size={18} className="zb-muted shrink-0" />
+            <span className="zb-text text-sm font-bold">Bus crew: {bus.driverName || ''} {bus.driverPhone}</span>
+          </a>
+        ) : null}
       </div>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg px-5 pb-8 pt-4 bg-white border-t border-slate-100 z-30 flex gap-4">
-        <motion.button
-          whileTap={{ scale: 0.98 }}
-          onClick={() => navigate(`${routePrefix}/profile/bus-bookings`)}
-          className="flex-1 bg-slate-50 text-slate-700 py-4 rounded-2xl text-sm font-bold border border-slate-100 transition-colors hover:bg-slate-100"
-        >
-          My Bookings
-        </motion.button>
-        <motion.button
-          whileTap={{ scale: 0.98 }}
-          onClick={() => navigate(`${routePrefix}` || '/')}
-          className="flex-[2] bg-slate-900 text-white py-4 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg"
-        >
-          <Home size={18} /> Home
-        </motion.button>
+      <div className="zb-footer">
+        <div className="flex gap-3">
+          <button type="button" className="zb-btn zb-btn-ghost flex-1" onClick={() => navigate(`${routePrefix}/bus`, { replace: true })}>
+            <Home size={17} /> Home
+          </button>
+          <button type="button" className="zb-btn zb-btn-primary flex-[1.4]" onClick={() => navigate(`${routePrefix}/profile/bus-bookings/${booking.id}`, { replace: true })}>
+            <Ticket size={17} /> View ticket
+          </button>
+        </div>
       </div>
-    </div>
+    </BusScreen>
   );
 };
 

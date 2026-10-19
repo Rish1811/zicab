@@ -1,23 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
-  Calendar,
+  ArrowUpDown,
+  BusFront,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
-  BusFront,
-  ArrowRightLeft,
-  Loader2,
-  Route,
   MapPin,
+  Navigation,
+  QrCode,
+  Radio,
   Search,
+  ShieldCheck,
   Ticket,
+  UtensilsCrossed,
   X,
 } from 'lucide-react';
 import userBusService from '../../services/busService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
-// ... removed BottomNavbar import ...
+import { BusScreen, SectionTitle, Skeleton } from '../../components/bus/ZiBusUi';
+import { addDays, formatDay, formatRupees, routePrefixFor, toDateKey } from '../../components/bus/zibusFormat';
 
 const isEnabledFlag = (value) => {
   if (typeof value === 'boolean') return value;
@@ -25,621 +27,357 @@ const isEnabledFlag = (value) => {
   return ['1', 'true', 'yes', 'on', 'enabled'].includes(String(value || '').trim().toLowerCase());
 };
 
-const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
+const normalizeCity = (value = '') => String(value).trim().toLowerCase();
+const unwrap = (response) => response?.data?.data || response?.data || response || null;
 
-const getDateOffset = (offset = 1) => {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return date.toISOString().split('T')[0];
+const HOW_IT_WORKS = [
+  { icon: BusFront, title: 'Pick your seat', text: 'Live seat map, updated the moment anyone books.' },
+  { icon: UtensilsCrossed, title: 'Add dhaba food', text: 'Pre-order at highway stops. Ready when the bus halts.' },
+  { icon: QrCode, title: 'Get PNR & QR', text: 'Instant e-ticket. Show the QR at the door.' },
+  { icon: Navigation, title: 'Track your bus', text: 'Live location from 1 hour before boarding.' },
+];
+
+const monthStart = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+const CalendarSheet = ({ value, onPick, onClose }) => {
+  const today = toDateKey();
+  const [month, setMonth] = useState(() => monthStart(new Date(`${value || today}T00:00:00`)));
+  const days = useMemo(() => {
+    const offset = (month.getDay() + 6) % 7; // Monday first
+    const start = new Date(month);
+    start.setDate(1 - offset);
+    return Array.from({ length: 42 }, (_, index) => {
+      const day = new Date(start);
+      day.setDate(start.getDate() + index);
+      return day;
+    });
+  }, [month]);
+
+  return (
+    <div className="zb-sheet-backdrop" onClick={onClose} role="presentation">
+      <div className="zb-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Choose travel date">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="zb-label">Date of journey</p>
+            <p className="zb-h2 mt-1">{month.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" className="zb-icon-btn" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} aria-label="Previous month">
+              <ChevronLeft size={18} />
+            </button>
+            <button type="button" className="zb-icon-btn" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} aria-label="Next month">
+              <ChevronRight size={18} />
+            </button>
+            <button type="button" className="zb-icon-btn" onClick={onClose} aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-1 text-center">
+          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => (
+            <span key={`${day}-${index}`} className="zb-muted py-1 text-[11px] font-bold">{day}</span>
+          ))}
+          {days.map((day) => {
+            const key = toDateKey(day);
+            const disabled = key < today;
+            const selected = key === value;
+            const inMonth = day.getMonth() === month.getMonth();
+            return (
+              <button
+                key={key}
+                type="button"
+                disabled={disabled}
+                onClick={() => onPick(key)}
+                className={`aspect-square rounded-xl text-sm font-bold ${selected ? 'zb-chip is-active justify-center !p-0' : ''}`}
+                style={selected ? undefined : { color: disabled ? 'var(--zb-line)' : inMonth ? 'var(--zb-text)' : 'var(--zb-muted)' }}
+              >
+                {day.getDate()}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 };
 
-const getTodayDate = () => getDateOffset(0);
-
-const getTomorrowDate = () => getDateOffset(1);
-
-const getNextWeekendDate = () => {
-  const date = new Date();
-  const day = date.getDay();
-
-  if (day === 6 || day === 0) {
-    return formatDateKey(date);
-  }
-
-  const daysUntilSaturday = (6 - day + 7) % 7;
-  date.setDate(date.getDate() + daysUntilSaturday);
-  return formatDateKey(date);
-};
-
-const getMonthStart = (value) => new Date(value.getFullYear(), value.getMonth(), 1);
-
-const addMonths = (value, amount) => new Date(value.getFullYear(), value.getMonth() + amount, 1);
-
-const formatDateKey = (value) => {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const buildCalendarDays = (monthDate) => {
-  const start = getMonthStart(monthDate);
-  const startOffset = (start.getDay() + 6) % 7;
-  const gridStart = new Date(start);
-  gridStart.setDate(start.getDate() - startOffset);
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const value = new Date(gridStart);
-    value.setDate(gridStart.getDate() + index);
-    return value;
-  });
-};
-
-const formatTravelDate = (value) => {
-  if (!value) return '';
-
-  const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
-};
-
-const normalizeCity = (value = '') => value.trim().toLowerCase();
-const getListKey = (value, index, prefix) => `${String(value || '').trim() || prefix}-${index}`;
-const getRouteKey = (route, index) => {
-  const fromCity = String(route?.fromCity || '').trim();
-  const toCity = String(route?.toCity || '').trim();
-  const operatorName = String(route?.operatorName || '').trim();
-  return `${fromCity || 'from'}-${toCity || 'to'}-${operatorName || index}`;
+const NextTripCard = ({ trip, tracking, onOpen }) => {
+  const live = tracking?.available && ['live', 'paused'].includes(tracking?.state);
+  return (
+    <button type="button" onClick={onOpen} className="zb-card w-full p-4 text-left">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="zb-label">Your next trip</p>
+          <p className="zb-text mt-1 truncate text-base font-extrabold">
+            {trip.bus?.fromCity || 'From'} → {trip.bus?.toCity || 'To'}
+          </p>
+          <p className="zb-muted mt-0.5 truncate text-xs font-semibold">
+            {formatDay(trip.travelDate)} · {trip.bus?.departure || '--:--'} · Seat {(trip.activeSeatLabels || trip.seatLabels || []).join(', ')}
+          </p>
+        </div>
+        {live ? (
+          <span className="zb-badge is-green"><Radio size={11} className="zb-pulse" /> Bus is live</span>
+        ) : tracking?.opensAt && tracking?.state === 'not_yet_open' ? (
+          <span className="zb-badge is-blue">Track from {new Date(tracking.opensAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+        ) : (
+          <span className="zb-badge is-green">Confirmed</span>
+        )}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="zb-badge is-accent"><Ticket size={11} /> PNR {trip.pnr || trip.bookingCode}</span>
+        {Number(trip.foodAmount || 0) > 0 ? <span className="zb-badge is-food"><UtensilsCrossed size={11} /> Food pre-booked</span> : null}
+        {trip.boardingPoint?.pointName ? <span className="zb-badge"><MapPin size={11} /> {trip.boardingPoint.pointName}</span> : null}
+      </div>
+    </button>
+  );
 };
 
 const BusHome = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
-  const routePrefix = useMemo(() => getRoutePrefix(location.pathname), [location.pathname]);
+  const routePrefix = useMemo(() => routePrefixFor(location.pathname), [location.pathname]);
   const busEnabled = isEnabledFlag(settings.transportRide?.enable_bus_service);
+  const today = toDateKey();
 
   const [fromCity, setFromCity] = useState('');
   const [toCity, setToCity] = useState('');
-  const [date, setDate] = useState(getTodayDate());
+  const [date, setDate] = useState(today);
   const [error, setError] = useState('');
-  const [routeSuggestions, setRouteSuggestions] = useState([]);
-  const [routesLoading, setRoutesLoading] = useState(false);
-  const [routesError, setRoutesError] = useState('');
+  const [routes, setRoutes] = useState([]);
+  const [routesLoading, setRoutesLoading] = useState(true);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(() => getMonthStart(new Date(getTomorrowDate())));
+  const [nextTrip, setNextTrip] = useState(null);
+  const [tracking, setTracking] = useState(null);
 
   useEffect(() => {
-    if (!busEnabled) {
-      setRouteSuggestions([]);
-      return;
-    }
-
+    if (!busEnabled) return undefined;
     let active = true;
-
-    const loadRoutes = async () => {
-      setRoutesLoading(true);
-      setRoutesError('');
-      try {
-        const response = await userBusService.getRoutes();
-        if (!active) return;
-        setRouteSuggestions(Array.isArray(response?.data?.results) ? response.data.results : []);
-      } catch (err) {
-        if (!active) return;
-        setRoutesError(err?.message || 'Failed to load route suggestions');
-      } finally {
-        if (active) {
-          setRoutesLoading(false);
-        }
-      }
-    };
-
-    loadRoutes();
-
+    userBusService
+      .getRoutes()
+      .then((response) => {
+        if (active) setRoutes(Array.isArray(response?.data?.results) ? response.data.results : []);
+      })
+      .catch(() => {})
+      .finally(() => active && setRoutesLoading(false));
     return () => {
       active = false;
     };
   }, [busEnabled]);
 
-  const cityOptions = useMemo(() => {
-    const cities = new Set();
+  // The rider's next confirmed trip, with its live-tracking state.
+  useEffect(() => {
+    if (!busEnabled || !localStorage.getItem('userToken')) return undefined;
+    let active = true;
+    (async () => {
+      try {
+        const response = await userBusService.getMyBookings({ page: 1, limit: 5, tripState: 'upcoming' });
+        const list = unwrap(response)?.results || response?.data?.results || [];
+        const trip = (Array.isArray(list) ? list : []).find((item) => item.status === 'confirmed');
+        if (!active || !trip) return;
+        setNextTrip(trip);
+        const live = unwrap(await userBusService.getLiveTracking(trip.id));
+        if (active) setTracking(live);
+      } catch {
+        // The home screen works without it.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [busEnabled]);
 
-    routeSuggestions.forEach((route) => {
-      const fromCity = String(route?.fromCity || '').trim();
-      const toCity = String(route?.toCity || '').trim();
-
-      if (fromCity) cities.add(fromCity);
-      if (toCity) cities.add(toCity);
-    });
-
-    return Array.from(cities).sort((left, right) => left.localeCompare(right));
-  }, [routeSuggestions]);
-
-  const matchingRoute = useMemo(
-    () =>
-      routeSuggestions.find(
-        (route) =>
-          normalizeCity(route.fromCity) === normalizeCity(fromCity) &&
-          normalizeCity(route.toCity) === normalizeCity(toCity),
-      ) || null,
-    [fromCity, routeSuggestions, toCity],
+  const cities = useMemo(
+    () => [...new Set(routes.flatMap((route) => [route.fromCity, route.toCity]).filter(Boolean))].sort(),
+    [routes],
   );
-
-  const hasTypedInvalidRoute =
-    fromCity.trim() &&
-    toCity.trim() &&
-    normalizeCity(fromCity) !== normalizeCity(toCity) &&
-    routeSuggestions.length > 0 &&
-    !matchingRoute;
-
-  const quickDates = useMemo(
-    () => [
-      { label: 'Today', value: getTodayDate() },
-      { label: 'Tomorrow', value: getDateOffset(1) },
-      { label: 'Day After', value: getDateOffset(2) },
-      { label: 'This Weekend', value: getNextWeekendDate() },
-    ],
-    [],
+  const matchingRoute = routes.find(
+    (route) => normalizeCity(route.fromCity) === normalizeCity(fromCity) && normalizeCity(route.toCity) === normalizeCity(toCity),
   );
+  const dateStrip = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(today, index)), [today]);
 
-  const filteredFromCities = useMemo(() => {
-    const source = normalizeCity(fromCity);
-    const destinations = new Set(
-      routeSuggestions
-        .filter((route) => (!toCity ? true : normalizeCity(route.toCity) === normalizeCity(toCity)))
-        .map((route) => route.fromCity)
-        .filter(Boolean),
-    );
-
-    return Array.from(destinations)
-      .filter((city) => (!source ? true : normalizeCity(city).includes(source)))
-      .slice(0, 6);
-  }, [fromCity, routeSuggestions, toCity]);
-
-  const filteredToCities = useMemo(() => {
-    const destination = normalizeCity(toCity);
-    const origins = new Set(
-      routeSuggestions
-        .filter((route) => (!fromCity ? true : normalizeCity(route.fromCity) === normalizeCity(fromCity)))
-        .map((route) => route.toCity)
-        .filter(Boolean),
-    );
-
-    return Array.from(origins)
-      .filter((city) => (!destination ? true : normalizeCity(city).includes(destination)))
-      .slice(0, 6);
-  }, [fromCity, routeSuggestions, toCity]);
-
-  const featuredRoutes = useMemo(() => routeSuggestions.slice(0, 6), [routeSuggestions]);
-  const minimumDate = useMemo(() => new Date(`${getTodayDate()}T00:00:00`), []);
-  const selectedDateValue = useMemo(() => (date ? new Date(`${date}T00:00:00`) : null), [date]);
-  const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
-  const monthLabel = useMemo(
-    () =>
-      calendarMonth.toLocaleDateString('en-IN', {
-        month: 'long',
-        year: 'numeric',
-      }),
-    [calendarMonth],
-  );
-
-  const handleSearch = () => {
-    const source = fromCity.trim();
-    const destination = toCity.trim();
-
-    if (!busEnabled) {
-      setError('Bus service is disabled right now.');
-      return;
-    }
-
-    if (!source || !destination) {
-      setError('Choose both source and destination first.');
-      return;
-    }
-
-    if (normalizeCity(source) === normalizeCity(destination)) {
-      setError('From and destination cannot be the same.');
-      return;
-    }
-
-    if (!date) {
-      setError('Select a travel date.');
-      return;
-    }
-
-    if (date < getTodayDate()) {
-      setError('Please select today or a future travel date.');
-      return;
-    }
-
-    if (!matchingRoute) {
-      setError('This route is not active yet. Pick one from the available routes below.');
-      return;
-    }
-
+  const goSearch = (from = fromCity, to = toCity) => {
+    if (!busEnabled) return setError('Bus booking is paused right now.');
+    if (!from.trim() || !to.trim()) return setError('Enter where you are leaving from and going to.');
+    if (normalizeCity(from) === normalizeCity(to)) return setError('From and To can’t be the same city.');
     setError('');
-    navigate(`${routePrefix}/bus/list`, {
-      state: {
-        fromCity: source,
-        toCity: destination,
-        date,
-      },
-    });
-  };
-
-  const fillRoute = (route) => {
-    setFromCity(route.fromCity || '');
-    setToCity(route.toCity || '');
-    setError('');
-
-    if (date) {
-      navigate(`${routePrefix}/bus/list`, {
-        state: {
-          fromCity: route.fromCity || '',
-          toCity: route.toCity || '',
-          date,
-        },
-      });
-    }
-  };
-
-  const swapCities = () => {
-    setFromCity(toCity);
-    setToCity(fromCity);
-    setError('');
-  };
-
-  const openCalendar = () => {
-    const activeDate = selectedDateValue && !Number.isNaN(selectedDateValue.getTime()) ? selectedDateValue : minimumDate;
-    setCalendarMonth(getMonthStart(activeDate));
-    setCalendarOpen(true);
-  };
-
-  const selectCalendarDate = (value) => {
-    const nextValue = formatDateKey(value);
-    if (nextValue < getTodayDate()) {
-      return;
-    }
-
-    setDate(nextValue);
-    setCalendarOpen(false);
-    setError('');
+    navigate(`${routePrefix}/bus/list`, { state: { fromCity: from.trim(), toCity: to.trim(), date } });
+    return undefined;
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 max-w-lg mx-auto font-sans pb-32 relative overflow-hidden">
-      <header className="bg-white px-5 pt-10 pb-4 sticky top-0 z-20 border-b border-slate-100 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center shadow-sm active:scale-95 transition-all"
-          >
-            <ArrowLeft size={18} className="text-slate-900" />
-          </button>
-          <div className="flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bus Tickets</p>
-            <h1 className="text-xl font-bold text-slate-900">Book your journey</h1>
-          </div>
-        </div>
-      </header>
-
-      <div className="px-5 pt-6 space-y-6">
-        <div className="rounded-3xl bg-slate-900 p-6 text-white shadow-xl shadow-slate-200">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold leading-tight">Travel with ease</h2>
-              <p className="mt-2 text-sm text-slate-300 font-medium">
-                Find and book bus tickets for your preferred routes in just a few clicks.
-              </p>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
-              <BusFront size={24} className="text-white" />
-            </div>
-          </div>
-
-          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-white/10 pt-4">
-            <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400">Routes</p>
-              <p className="mt-1 text-lg font-bold">{routeSuggestions.length || 0}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400">Cities</p>
-              <p className="mt-1 text-lg font-bold">{cityOptions.length || 0}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400">Date</p>
-              <p className="mt-1 text-sm font-bold">{formatTravelDate(date) || 'Choose'}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center">
-              <Search size={20} />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Search Buses</h3>
-              <p className="text-xs text-slate-500 font-medium">Find available buses on your route</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="relative">
-              <div className="absolute left-4 top-4 text-slate-400">
-                <MapPin size={16} />
-              </div>
-              <div className="pl-12 pr-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">From</label>
-                <input
-                  type="text"
-                  list="bus-route-cities"
-                  value={fromCity}
-                  onChange={(event) => setFromCity(event.target.value)}
-                  placeholder="Enter source city"
-                  className="w-full bg-transparent text-base font-semibold text-slate-900 focus:outline-none placeholder:text-slate-300"
-                />
-              </div>
-              
-              <div className="absolute right-6 top-1/2 -translate-y-1/2 z-10">
-                <button
-                  type="button"
-                  onClick={swapCities}
-                  className="w-10 h-10 rounded-full bg-white border border-slate-200 text-slate-600 flex items-center justify-center shadow-sm active:rotate-180 transition-transform duration-300"
-                >
-                  <ArrowRightLeft size={16} />
-                </button>
-              </div>
-            </div>
-
-            <div className="relative">
-              <div className="absolute left-4 top-4 text-slate-400">
-                <MapPin size={16} />
-              </div>
-              <div className="pl-12 pr-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">To</label>
-                <input
-                  type="text"
-                  list="bus-route-cities"
-                  value={toCity}
-                  onChange={(event) => setToCity(event.target.value)}
-                  placeholder="Enter destination city"
-                  className="w-full bg-transparent text-base font-semibold text-slate-900 focus:outline-none placeholder:text-slate-300"
-                />
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={openCalendar}
-              className="w-full flex items-center gap-4 pl-4 pr-4 py-3 bg-slate-50 rounded-2xl border border-slate-100 text-left"
-            >
-              <div className="text-slate-400">
-                <Calendar size={16} />
-              </div>
-              <div className="flex-1">
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Date of Journey</label>
-                <span className="text-base font-semibold text-slate-900">{formatTravelDate(date) || 'Choose date'}</span>
-              </div>
-              <span className="text-xs font-bold text-slate-400">Change</span>
+    <BusScreen>
+      <div className="px-5 pt-9">
+        <div className="zb-hero px-5 pb-24 pt-5">
+          <div className="flex items-center justify-between">
+            <button type="button" onClick={() => navigate(-1)} className="zb-glass flex h-10 w-10 items-center justify-center zb-on-dark" aria-label="Back">
+              <ChevronLeft size={20} />
+            </button>
+            <button type="button" onClick={() => navigate(`${routePrefix}/profile/bus-bookings`)} className="zb-glass flex items-center gap-2 px-3 py-2 text-xs font-bold zb-on-dark">
+              <Ticket size={14} /> My trips
             </button>
           </div>
-
-          <div className="space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quick dates</p>
-            <div className="flex flex-wrap gap-2">
-              {quickDates.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setDate(item.value)}
-                  className={`rounded-full px-4 py-2 text-xs font-bold transition-all ${
-                    date === item.value
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-50 text-slate-600 border border-slate-100 hover:border-slate-300'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <datalist id="bus-route-cities">
-            {cityOptions.map((city, index) => (
-              <option key={getListKey(city, index, 'city')} value={city} />
-            ))}
-          </datalist>
-
-          <div className="space-y-4">
-            {matchingRoute && (
-              <div className="rounded-2xl bg-emerald-50 border border-emerald-100 px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Route size={14} className="text-emerald-600" />
-                  <span className="text-xs font-bold text-emerald-700">Route available</span>
-                </div>
-                <span className="text-xs font-bold text-emerald-700">
-                  Starts at ₹{Number(matchingRoute.startingPrice || 0)}
-                </span>
-              </div>
-            )}
-
-            {hasTypedInvalidRoute && (
-              <div className="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3 text-xs font-bold text-slate-500">
-                This specific route is not available. Please check the list below.
-              </div>
-            )}
-
-            {error && (
-              <div className="rounded-2xl bg-rose-50 border border-rose-100 px-4 py-3 text-xs font-bold text-rose-600">
-                {error}
-              </div>
-            )}
-
-            {!busEnabled && (
-              <div className="rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-xs font-bold text-amber-700">
-                Bus service is currently disabled.
-              </div>
-            )}
-
-            <motion.button
-              whileTap={{ scale: 0.98 }}
-              onClick={handleSearch}
-              className="w-full bg-slate-900 text-white py-4 rounded-2xl text-base font-bold flex items-center justify-center gap-2 shadow-lg shadow-slate-200 active:scale-95 transition-all"
-            >
-              Search Buses <ChevronRight size={18} />
-            </motion.button>
-          </div>
+          <p className="mt-6 text-[11px] font-extrabold uppercase tracking-[0.3em] zb-accent-text">ZI Bus</p>
+          <h1 className="mt-1 text-[1.7rem] font-extrabold leading-tight zb-on-dark">Bus tickets,<br />hot food on the way.</h1>
+          <p className="mt-2 max-w-[18rem] text-sm font-medium zb-on-dark-2">
+            Live seats, highway dhaba meals and live bus tracking in one booking.
+          </p>
         </div>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-900">Popular Routes</h3>
-            {routesLoading && <Loader2 size={18} className="animate-spin text-slate-400" />}
+        <div className="zb-card relative -mt-16 mx-1 p-4 shadow-[0_20px_40px_-24px_rgba(0,0,0,0.5)]">
+          <div className="relative">
+            <label className="zb-soft flex items-center gap-3 px-4 py-3">
+              <span className="zb-dot is-start" />
+              <span className="min-w-0 flex-1">
+                <span className="zb-label block">From</span>
+                <input
+                  list="zb-cities"
+                  value={fromCity}
+                  onChange={(event) => setFromCity(event.target.value)}
+                  placeholder="Leaving from"
+                  className="zb-text w-full bg-transparent text-base font-bold outline-none"
+                />
+              </span>
+            </label>
+            <label className="zb-soft mt-2 flex items-center gap-3 px-4 py-3">
+              <span className="zb-dot is-end" />
+              <span className="min-w-0 flex-1">
+                <span className="zb-label block">To</span>
+                <input
+                  list="zb-cities"
+                  value={toCity}
+                  onChange={(event) => setToCity(event.target.value)}
+                  placeholder="Going to"
+                  className="zb-text w-full bg-transparent text-base font-bold outline-none"
+                />
+              </span>
+            </label>
+            <button
+              type="button"
+              onClick={() => { setFromCity(toCity); setToCity(fromCity); }}
+              className="zb-icon-btn absolute right-4 top-1/2 -translate-y-1/2"
+              aria-label="Swap cities"
+            >
+              <ArrowUpDown size={16} />
+            </button>
+            <datalist id="zb-cities">{cities.map((city) => <option key={city} value={city} />)}</datalist>
           </div>
 
-          <div className="space-y-3">
-            {featuredRoutes.map((route, index) => (
+          <div className="mt-3 flex items-center justify-between">
+            <p className="zb-label">Journey date</p>
+            <button type="button" onClick={() => setCalendarOpen(true)} className="flex items-center gap-1 text-xs font-bold zb-accent-text">
+              <CalendarDays size={14} /> {formatDay(date, { day: 'numeric', month: 'short', year: 'numeric' })}
+            </button>
+          </div>
+          <div className="zb-scroll-x mt-2 pb-1">
+            {dateStrip.map((key, index) => (
               <button
-                key={getRouteKey(route, index)}
+                key={key}
                 type="button"
-                onClick={() => fillRoute(route)}
-                className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-4 text-left shadow-sm active:scale-[0.99] transition-transform"
+                onClick={() => setDate(key)}
+                className={`zb-chip flex-col !gap-0 !px-3 !py-2 ${date === key ? 'is-active' : ''}`}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <h4 className="text-base font-bold text-slate-900 truncate">
-                      {route.fromCity} → {route.toCity}
-                    </h4>
-                    <p className="mt-1 text-xs font-medium text-slate-500 truncate">
-                      {route.operatorName || 'Multiple operators available'}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-[10px] font-bold uppercase text-slate-400">From</p>
-                    <p className="text-lg font-bold text-slate-900">₹{Number(route.startingPrice || 0)}</p>
-                  </div>
-                </div>
+                <span className="text-[10px] font-bold opacity-80">
+                  {index === 0 ? 'Today' : index === 1 ? 'Tmrw' : formatDay(key, { weekday: 'short' })}
+                </span>
+                <span className="text-base font-extrabold">{formatDay(key, { day: 'numeric' })}</span>
               </button>
             ))}
           </div>
 
-          {!routesLoading && !featuredRoutes.length && !routesError && (
-            <p className="text-center py-8 text-sm font-medium text-slate-400">No active routes found.</p>
-          )}
+          {matchingRoute ? (
+            <p className="mt-3 text-xs font-bold zb-green-text">
+              {matchingRoute.busCount || 1} bus{(matchingRoute.busCount || 1) > 1 ? 'es' : ''} on this route · from {formatRupees(matchingRoute.startingPrice)}
+            </p>
+          ) : null}
+          {error ? <p className="mt-3 text-xs font-bold zb-red-text">{error}</p> : null}
+          {!busEnabled ? <p className="mt-3 text-xs font-bold zb-red-text">Bus booking is paused right now.</p> : null}
 
-          {routesError && (
-            <p className="text-center py-8 text-sm font-medium text-rose-500">{routesError}</p>
-          )}
+          <button type="button" onClick={() => goSearch()} className="zb-btn zb-btn-primary mt-4 w-full">
+            <Search size={18} /> Search buses
+          </button>
         </div>
       </div>
 
-      {calendarOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-sm flex items-end justify-center p-4">
-          <motion.div 
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">Select Journey Date</p>
-                <h3 className="text-xl font-bold text-slate-900">{monthLabel}</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCalendarOpen(false)}
-                className="w-10 h-10 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-slate-100 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
+      <div className="zb-body mt-2">
+        {nextTrip ? (
+          <NextTripCard trip={nextTrip} tracking={tracking} onOpen={() => navigate(`${routePrefix}/profile/bus-bookings/${nextTrip.id}`)} />
+        ) : null}
 
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <button
-                type="button"
-                onClick={() => setCalendarMonth((current) => addMonths(current, -1))}
-                className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-50"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <div className="flex-1 text-center">
-                <span className="text-sm font-bold text-slate-900 px-4 py-2 bg-slate-50 rounded-full">
-                  {formatTravelDate(date)}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCalendarMonth((current) => addMonths(current, 1))}
-                className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-50"
-              >
-                <ChevronRight size={20} />
-              </button>
+        <div className="zb-card overflow-hidden">
+          <div className="flex items-center gap-4 p-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl" style={{ background: 'color-mix(in srgb, var(--zb-food) 18%, transparent)' }}>
+              <UtensilsCrossed size={22} className="zb-food-text" />
             </div>
-
-            <div className="grid grid-cols-7 gap-1 mb-6">
-              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
-                <div key={i} className="text-center text-[10px] font-bold text-slate-400 py-2">
-                  {day}
-                </div>
-              ))}
-              {calendarDays.map((day) => {
-                const key = formatDateKey(day);
-                const isCurrentMonth = day.getMonth() === calendarMonth.getMonth();
-                const isDisabled = key < getTodayDate();
-                const isSelected = key === date;
-
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled={isDisabled}
-                    onClick={() => selectCalendarDate(day)}
-                    className={`aspect-square rounded-xl text-sm font-bold transition-all flex items-center justify-center ${
-                      isSelected
-                        ? 'bg-slate-900 text-white shadow-lg'
-                        : isDisabled
-                          ? 'text-slate-200'
-                          : isCurrentMonth
-                            ? 'text-slate-800 hover:bg-slate-50'
-                            : 'text-slate-300'
-                    }`}
-                  >
-                    {day.getDate()}
-                  </button>
-                );
-              })}
+            <div className="min-w-0">
+              <p className="zb-text text-sm font-extrabold">Hungry on the highway?</p>
+              <p className="zb-muted text-xs font-semibold">
+                Pre-order thalis, snacks and chai from partner dhabas while you book. The kitchen starts cooking 30 minutes before your bus arrives.
+              </p>
             </div>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setDate(getTodayDate());
-                  setCalendarOpen(false);
-                }}
-                className="flex-1 py-3 rounded-2xl bg-slate-50 text-slate-700 text-sm font-bold border border-slate-100"
-              >
-                Tomorrow
-              </button>
-              <button
-                type="button"
-                onClick={() => setCalendarOpen(false)}
-                className="flex-1 py-3 rounded-2xl bg-slate-900 text-white text-sm font-bold"
-              >
-                Confirm
-              </button>
-            </div>
-          </motion.div>
+          </div>
         </div>
-      )}
-    </div>
+
+        <SectionTitle title="Popular routes" hint="Tap a route to see today’s buses" />
+        {routesLoading ? (
+          <div className="zb-scroll-x"><Skeleton height={104} className="min-w-[11rem]" /><Skeleton height={104} className="min-w-[11rem]" /></div>
+        ) : routes.length ? (
+          <div className="zb-scroll-x -mx-5 px-5 pb-1">
+            {routes.slice(0, 10).map((route) => (
+              <button
+                key={`${route.fromCity}-${route.toCity}`}
+                type="button"
+                onClick={() => { setFromCity(route.fromCity); setToCity(route.toCity); goSearch(route.fromCity, route.toCity); }}
+                className="zb-card min-w-[11.5rem] p-4 text-left"
+              >
+                <p className="zb-text truncate text-sm font-extrabold">{route.fromCity}</p>
+                <p className="zb-muted text-[11px] font-bold">to</p>
+                <p className="zb-text truncate text-sm font-extrabold">{route.toCity}</p>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="zb-muted text-[11px] font-bold">{route.busCount || 1} bus{(route.busCount || 1) > 1 ? 'es' : ''}</span>
+                  <span className="text-sm font-extrabold zb-accent-text">{formatRupees(route.startingPrice)}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="zb-muted text-sm font-semibold">No routes are live yet.</p>
+        )}
+
+        <SectionTitle title="How ZI Bus works" />
+        <div className="grid grid-cols-2 gap-3">
+          {HOW_IT_WORKS.map((step, index) => {
+            const StepIcon = step.icon;
+            const { title, text } = step;
+            return (
+            <div key={title} className="zb-card p-4">
+              <div className="flex items-center justify-between">
+                <StepIcon size={20} className="zb-accent-text" />
+                <span className="zb-muted text-xs font-extrabold">0{index + 1}</span>
+              </div>
+              <p className="zb-text mt-3 text-sm font-extrabold">{title}</p>
+              <p className="zb-muted mt-1 text-xs font-semibold leading-relaxed">{text}</p>
+            </div>
+            );
+          })}
+        </div>
+
+        <div className="zb-soft flex items-center gap-3 p-4">
+          <ShieldCheck size={20} className="zb-green-text shrink-0" />
+          <p className="zb-text-2 text-xs font-semibold">
+            Every seat can be sold only once, wherever it’s booked. If a payment goes through but the seat is lost, you get the full amount back automatically.
+          </p>
+        </div>
+      </div>
+
+      {calendarOpen ? (
+        <CalendarSheet
+          value={date}
+          onClose={() => setCalendarOpen(false)}
+          onPick={(key) => { setDate(key); setCalendarOpen(false); }}
+        />
+      ) : null}
+    </BusScreen>
   );
 };
 

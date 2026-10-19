@@ -77,11 +77,14 @@ const flattenBusBlueprintSeats = (blueprint = {}) =>
     .flatMap((row) => (Array.isArray(row) ? row : []))
     .filter((cell) => cell?.kind === 'seat' && cell?.id);
 
+// A zero or blank per-type price means "not set", so the bus fare applies.
+const positivePrice = (value) => (Number(value) > 0 ? Number(value) : undefined);
+
 const resolveBusSeatPrice = (busService = {}, seat = {}) => {
   const variantPricing = busService?.variantPricing || {};
   const defaultPrice = Number(busService?.seatPrice || 0);
   const variantKey = String(seat?.variant || 'seat').trim().toLowerCase();
-  const resolvedPrice = variantPricing?.[variantKey] ?? variantPricing?.seat ?? defaultPrice;
+  const resolvedPrice = positivePrice(variantPricing?.[variantKey]) ?? positivePrice(variantPricing?.seat) ?? defaultPrice;
 
   return Number.isFinite(Number(resolvedPrice)) ? Number(resolvedPrice) : defaultPrice;
 };

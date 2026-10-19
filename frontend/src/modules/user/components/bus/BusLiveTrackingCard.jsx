@@ -96,25 +96,25 @@ const BusLiveTrackingCard = ({ bookingId }) => {
 
   if (tracking.state === 'not_yet_open') {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-        <Clock size={18} className="shrink-0 text-slate-400" />
-        <p className="text-xs font-bold text-slate-600">
-          Live bus tracking starts at {formatTime(tracking.opensAt)}, one hour before boarding.
-        </p>
+      <div className="zb-card flex items-center gap-3 p-4">
+        <span className="zb-soft flex h-10 w-10 shrink-0 items-center justify-center"><Clock size={18} className="zb-accent-text" /></span>
+        <div className="min-w-0">
+          <p className="zb-text text-sm font-extrabold">Live tracking from {formatTime(tracking.opensAt)}</p>
+          <p className="zb-muted text-xs font-semibold">Opens 1 hour before your boarding time.</p>
+        </div>
       </div>
     );
   }
 
+  const live = tracking.state === 'live';
   return (
-    <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-white">
-      <div className="flex items-center justify-between gap-3 bg-emerald-50 px-4 py-3">
-        <span className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-emerald-700">
-          <Radio size={14} className={tracking.state === 'live' ? 'animate-pulse' : ''} />
-          {tracking.state === 'live' ? 'Bus is live' : tracking.state === 'paused' ? 'Tracking paused' : 'Waiting for the bus to start'}
+    <div className="zb-card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <span className={`zb-badge ${live ? 'is-green' : tracking.state === 'paused' ? 'is-accent' : 'is-blue'}`}>
+          <Radio size={12} className={live ? 'zb-pulse' : ''} />
+          {live ? 'Bus is live' : tracking.state === 'paused' ? 'Tracking paused' : 'Waiting for the bus to start'}
         </span>
-        {tracking.lastUpdatedAt ? (
-          <span className="text-[10px] font-bold text-emerald-700">Updated {formatTime(tracking.lastUpdatedAt)}</span>
-        ) : null}
+        {tracking.lastUpdatedAt ? <span className="zb-muted text-[11px] font-bold">Updated {formatTime(tracking.lastUpdatedAt)}</span> : null}
       </div>
 
       {position && isLoaded && HAS_VALID_GOOGLE_MAPS_KEY ? (
@@ -125,7 +125,7 @@ const BusLiveTrackingCard = ({ bookingId }) => {
           options={{ disableDefaultUI: true, zoomControl: true }}
         >
           {tracking.recentPath?.length > 1 ? (
-            <PolylineF path={tracking.recentPath} options={{ strokeColor: '#0f172a', strokeOpacity: 0.7, strokeWeight: 4 }} />
+            <PolylineF path={tracking.recentPath} options={{ strokeColor: '#FFC400', strokeOpacity: 0.9, strokeWeight: 4 }} />
           ) : null}
           <MarkerF position={position} />
         </GoogleMap>
@@ -134,14 +134,13 @@ const BusLiveTrackingCard = ({ bookingId }) => {
           href={`https://www.google.com/maps?q=${position.lat},${position.lng}`}
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-2 px-4 py-4 text-sm font-black text-slate-900"
+          className="zb-soft mx-4 mb-4 flex items-center justify-between gap-2 p-3"
         >
-          <Navigation size={16} /> Open bus location in Maps
+          <span className="zb-text flex items-center gap-2 text-sm font-extrabold"><Navigation size={16} className="zb-accent-text" /> See the bus on the map</span>
+          <span className="zb-muted text-[11px] font-bold">{position.lat.toFixed(3)}, {position.lng.toFixed(3)}</span>
         </a>
       ) : (
-        <p className="px-4 py-4 text-xs font-bold text-slate-500">
-          The driver hasn&apos;t started sharing location yet. This updates automatically.
-        </p>
+        <p className="zb-muted px-4 pb-4 text-xs font-semibold">The driver hasn&apos;t started sharing location yet. This updates by itself.</p>
       )}
     </div>
   );

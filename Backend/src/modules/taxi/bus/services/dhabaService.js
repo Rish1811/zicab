@@ -124,6 +124,24 @@ const emitToDhaba = (dhabaId, event, payload) => {
   getBusSocketServer()?.to(getDhabaRoom(dhabaId)).emit(event, payload);
 };
 
+/// How many live partner dhabas each bus run stops at, for badges on search
+/// results. Returns (busServiceId, scheduleId) => count.
+export const getFoodStopCounter = async (busServiceIds = []) => {
+  const dhabas = await Dhaba.find({
+    active: true,
+    acceptingOrders: true,
+    'busStops.busServiceId': { $in: busServiceIds },
+    'menu.0': { $exists: true },
+  })
+    .select('busStops')
+    .lean();
+
+  return (busServiceId, scheduleId) =>
+    dhabas.filter((dhaba) =>
+      (dhaba.busStops || []).some((link) => stopLinkMatches(link, busServiceId, scheduleId)),
+    ).length;
+};
+
 /// Dhabas this run stops at that can still take a pre-order, with their
 /// available menu and the expected arrival time.
 export const listDhabasForTrip = async ({ busServiceId, schedule, travelDate, now = new Date() }) => {
