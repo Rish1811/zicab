@@ -1,6 +1,7 @@
 import { getFirebaseMessaging } from '../../../config/firebase.js';
 import { Driver } from '../driver/models/Driver.js';
 import { User } from '../user/models/User.js';
+import { Dhaba } from '../bus/models/Dhaba.js';
 import { listEntityPushTokens } from './pushTokenService.js';
 
 const INVALID_TOKEN_CODES = new Set([
@@ -69,6 +70,24 @@ const collectAudienceTargets = async ({ sendTo, serviceLocationId }) => {
   }
 
   return targets;
+};
+
+const collectDhabaTargets = async (dhabaIds = []) => {
+  const normalizedIds = [...new Set(dhabaIds.map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!normalizedIds.length) {
+    return [];
+  }
+
+  const dhabas = await Dhaba.find({ _id: { $in: normalizedIds } })
+    .select('_id fcmTokenWeb fcmTokenMobile')
+    .lean();
+
+  return dhabas.flatMap((dhaba) =>
+    listEntityPushTokens(dhaba, 'dhaba').map((tokenEntry) => ({
+      ...tokenEntry,
+      entityId: String(dhaba._id),
+    })),
+  );
 };
 
 const removeInvalidTokens = async (invalidTargets = []) => {
@@ -377,6 +396,7 @@ export const sendPushNotificationToAudience = async ({
 export const sendPushNotificationToEntities = async ({
   userIds = [],
   driverIds = [],
+  dhabaIds = [],
   title,
   body,
   image = '',
@@ -385,7 +405,10 @@ export const sendPushNotificationToEntities = async ({
   /// note in `sendPushToTargets`.
   dataOnly = false,
 }) => {
-  const targets = await collectDirectTargets({ userIds, driverIds });
+  const targets = [
+    ...await collectDirectTargets({ userIds, driverIds }),
+    ...await collectDhabaTargets(dhabaIds),
+  ];
   return sendPushToTargets({
     targets,
     title,

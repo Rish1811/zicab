@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, User, Phone, Mail, ChevronRight, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, User, Phone, Mail, ChevronRight, Check, Loader2, Minus, Plus, UtensilsCrossed } from 'lucide-react';
 import userBusService from '../../services/busService';
 import { userAuthService } from '../../services/authService';
 import { buildBusRouteState, toPlainData } from './busNavigationState';
@@ -89,10 +89,53 @@ const BusDetails = () => {
     () => Math.round((((seatSubtotal * serviceTaxPercentage) / 100) + Number.EPSILON) * 100) / 100,
     [seatSubtotal, serviceTaxPercentage],
   );
-  const payableAmount = useMemo(
-    () => Math.round(((seatSubtotal + serviceTaxAmount) + Number.EPSILON) * 100) / 100,
-    [seatSubtotal, serviceTaxAmount],
+  const routeStops = useMemo(
+    () => (Array.isArray(pricingBus?.route?.stops) ? pricingBus.route.stops : []),
+    [pricingBus],
   );
+  const boardingOptions = useMemo(
+    () => routeStops.filter((stop) => ['pickup', 'both'].includes(stop?.stopType || 'both')),
+    [routeStops],
+  );
+  const droppingOptions = useMemo(
+    () => routeStops.filter((stop) => ['drop', 'both'].includes(stop?.stopType || 'both')),
+    [routeStops],
+  );
+  const [boardingStopId, setBoardingStopId] = useState('');
+  const [droppingStopId, setDroppingStopId] = useState('');
+  const [dhabas, setDhabas] = useState([]);
+  // { [dhabaId]: { [itemId]: quantity } }
+  const [foodCart, setFoodCart] = useState({});
+  const foodTotal = useMemo(
+    () => dhabas.reduce((sum, dhaba) => sum + dhaba.menu.reduce(
+      (inner, item) => inner + Number(item.price || 0) * Number(foodCart[dhaba.id]?.[item.id] || 0),
+      0,
+    ), 0),
+    [dhabas, foodCart],
+  );
+  const payableAmount = useMemo(
+    () => Math.round(((seatSubtotal + serviceTaxAmount + foodTotal) + Number.EPSILON) * 100) / 100,
+    [seatSubtotal, serviceTaxAmount, foodTotal],
+  );
+
+  const changeFoodQuantity = (dhabaId, itemId, delta) => {
+    setFoodCart((current) => {
+      const nextQty = Math.max(0, Math.min(20, Number(current[dhabaId]?.[itemId] || 0) + delta));
+      const nextDhaba = { ...(current[dhabaId] || {}), [itemId]: nextQty };
+      if (!nextQty) delete nextDhaba[itemId];
+      return { ...current, [dhabaId]: nextDhaba };
+    });
+  };
+
+  const buildFoodOrders = () =>
+    Object.entries(foodCart)
+      .map(([dhabaId, items]) => ({
+        dhabaId,
+        items: Object.entries(items || {})
+          .filter(([, quantity]) => quantity > 0)
+          .map(([itemId, quantity]) => ({ itemId, quantity })),
+      }))
+      .filter((entry) => entry.items.length > 0);
 
   const unwrapPayload = (response) => response?.data?.data || response?.data || response || {};
 
@@ -203,6 +246,35 @@ const BusDetails = () => {
     };
   }, [bus?.busServiceId, bus?.scheduleId, date]);
 
+  useEffect(() => {
+    if (!boardingStopId && boardingOptions.length) setBoardingStopId(String(boardingOptions[0].id));
+    if (!droppingStopId && droppingOptions.length) {
+      setDroppingStopId(String(droppingOptions[droppingOptions.length - 1].id));
+    }
+  }, [boardingOptions, droppingOptions, boardingStopId, droppingStopId]);
+
+  useEffect(() => {
+    if (!bus?.busServiceId || !bus?.scheduleId || !date) {
+      return undefined;
+    }
+
+    let active = true;
+    userBusService
+      .getTripDhabas({ busServiceId: bus.busServiceId, scheduleId: bus.scheduleId, date })
+      .then((response) => {
+        if (!active) return;
+        const list = toPlainData(response?.data);
+        setDhabas(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        // Food is optional; checkout works without it.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [bus?.busServiceId, bus?.scheduleId, date]);
+
   const applySelfProfile = () => {
     setTravellerMode('self');
     setName(profileData?.name || '');
@@ -250,6 +322,9 @@ const BusDetails = () => {
         travelDate: date,
         seatIds: selectedSeats.map((seat) => seat.id),
         passenger,
+        boardingStopId: boardingStopId || undefined,
+        droppingStopId: droppingStopId || undefined,
+        foodOrders: buildFoodOrders(),
       });
       const order = unwrapPayload(orderResponse);
 
@@ -344,6 +419,103 @@ const BusDetails = () => {
             </div>
           </div>
         </div>
+
+        {boardingOptions.length || droppingOptions.length ? (
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
+            <h3 className="text-lg font-bold text-slate-900">Boarding & Dropping</h3>
+            {[
+              { label: 'Boarding point', tone: 'text-emerald-600', options: boardingOptions, value: boardingStopId, onChange: setBoardingStopId, timeKey: 'departureTime' },
+              { label: 'Dropping point', tone: 'text-rose-600', options: droppingOptions, value: droppingStopId, onChange: setDroppingStopId, timeKey: 'arrivalTime' },
+            ].filter((group) => group.options.length).map((group) => (
+              <div key={group.label} className="space-y-2">
+                <p className={`text-[10px] font-black uppercase tracking-wider ${group.tone}`}>{group.label}</p>
+                <div className="space-y-2">
+                  {group.options.map((stop) => {
+                    const selected = String(group.value) === String(stop.id);
+                    return (
+                      <button
+                        key={stop.id}
+                        type="button"
+                        onClick={() => group.onChange(String(stop.id))}
+                        className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
+                          selected ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-100 bg-slate-50 text-slate-800'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-black">{stop.pointName || stop.city}</span>
+                          <span className={`block truncate text-[11px] font-semibold ${selected ? 'text-white/70' : 'text-slate-500'}`}>{stop.city}</span>
+                        </span>
+                        <span className="shrink-0 text-xs font-black">{stop[group.timeKey] || stop.departureTime || stop.arrivalTime || ''}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {dhabas.length ? (
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Pre-book food on the way</h3>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Optional. Your order is ready when the bus halts at the dhaba.</p>
+              </div>
+              <UtensilsCrossed size={20} className="shrink-0 text-orange-500" />
+            </div>
+            {dhabas.map((dhaba) => (
+              <div key={dhaba.id} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-slate-900">{dhaba.name}</p>
+                    <p className="truncate text-[11px] font-semibold text-slate-500">
+                      {[dhaba.highway, dhaba.city].filter(Boolean).join(' • ')}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-orange-50 px-2 py-1 text-[10px] font-black text-orange-600">
+                    ~{new Date(dhaba.expectedArrivalAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {dhaba.menu.map((item) => {
+                    const quantity = Number(foodCart[dhaba.id]?.[item.id] || 0);
+                    return (
+                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className={`h-3 w-3 shrink-0 rounded-sm border-2 ${item.isVeg ? 'border-emerald-600' : 'border-rose-600'}`} />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-900">{item.name}</p>
+                            <p className="text-[11px] font-bold text-slate-500">{CURRENCY_SYMBOL}{formatMoney(item.price)}</p>
+                          </div>
+                        </div>
+                        {quantity > 0 ? (
+                          <div className="flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 px-1">
+                            <button type="button" onClick={() => changeFoodQuantity(dhaba.id, item.id, -1)} className="p-1.5 text-slate-700" aria-label={`Remove one ${item.name}`}>
+                              <Minus size={14} />
+                            </button>
+                            <span className="w-4 text-center text-sm font-black text-slate-900">{quantity}</span>
+                            <button type="button" onClick={() => changeFoodQuantity(dhaba.id, item.id, 1)} className="p-1.5 text-slate-700" aria-label={`Add one ${item.name}`}>
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => changeFoodQuantity(dhaba.id, item.id, 1)}
+                            className="shrink-0 rounded-xl border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-black text-orange-600"
+                          >
+                            Add
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-6">
           <div className="flex items-center justify-between gap-3">
@@ -513,6 +685,12 @@ const BusDetails = () => {
               <span className="font-semibold">Service tax ({serviceTaxPercentage}%)</span>
               <span className="font-bold text-slate-900">{CURRENCY_SYMBOL}{formatMoney(serviceTaxAmount)}</span>
             </div>
+            {foodTotal > 0 ? (
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="font-semibold">Dhaba food</span>
+                <span className="font-bold text-slate-900">{CURRENCY_SYMBOL}{formatMoney(foodTotal)}</span>
+              </div>
+            ) : null}
             <div className="border-t border-dashed border-slate-200 pt-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Payable Amount</span>

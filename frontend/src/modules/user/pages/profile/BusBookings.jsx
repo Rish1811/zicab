@@ -223,7 +223,7 @@ const BusBookings = () => {
                 <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">PNR</p>
-                    <p className="text-[11px] font-black tracking-widest text-slate-900">{booking.bookingCode}</p>
+                    <p className="text-[11px] font-black tracking-widest text-slate-900">{booking.pnr || booking.bookingCode}</p>
                   </div>
                   <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${statusTone[booking.status] || 'bg-white text-slate-400 border-slate-200'}`}>
                     {booking.status}

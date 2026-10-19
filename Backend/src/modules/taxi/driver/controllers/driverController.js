@@ -13,6 +13,8 @@ import { WithdrawalRequest } from "../../admin/models/WithdrawalRequest.js";
 import { Ride } from "../../user/models/Ride.js";
 import { BusBooking } from "../../user/models/BusBooking.js";
 import { BusSeatHold } from "../../user/models/BusSeatHold.js";
+import { publishBusSeatChange } from "../../bus/services/busSeatSyncService.js";
+import { cancelAndRefundFoodForBooking } from "../../bus/services/dhabaService.js";
 import { Owner } from "../../admin/models/Owner.js";
 import { BusService } from "../../admin/models/BusService.js";
 import { PoolingVehicle } from "../../admin/models/PoolingVehicle.js";
@@ -5955,12 +5957,22 @@ export const createBusDriverReservation = async (req, res) => {
       { ordered: true },
     );
   } catch (error) {
+    await BusSeatHold.deleteMany({ bookingId: booking._id });
     await BusBooking.deleteOne({ _id: booking._id });
     if (error?.code === 11000) {
       throw new ApiError(409, "One or more selected seats were just booked");
     }
     throw error;
   }
+
+  publishBusSeatChange({
+    busServiceId: busService._id,
+    scheduleId,
+    travelDate,
+    change: "booked",
+    seatIds,
+    bookingId: booking._id,
+  });
 
   res.status(201).json({
     success: true,
@@ -9537,6 +9549,17 @@ export const cancelOwnerBusBookingSeats = async (req, res) => {
     status: { $in: ["held", "booked"] },
     seatId: { $in: seatsToCancel.map((item) => item.seatId) },
   });
+  publishBusSeatChange({
+    busServiceId: booking.busServiceId,
+    scheduleId: booking.scheduleId,
+    travelDate: booking.travelDate,
+    change: "released",
+    seatIds: seatsToCancel.map((item) => item.seatId),
+    bookingId: booking._id,
+  });
+  if (remainingActiveSeatCount <= 0) {
+    await cancelAndRefundFoodForBooking(booking, { reason: "Cancelled by the bus operator", by: "owner" });
+  }
 
   const hydratedBooking = await BusBooking.findById(booking._id)
     .populate("userId", "name phone email")

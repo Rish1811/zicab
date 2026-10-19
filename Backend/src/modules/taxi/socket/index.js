@@ -30,6 +30,8 @@ import { findZoneByPickup } from '../services/matchingService.js';
 import { acceptRideAssignment, createRideRecord, getRideRoom, submitRideBid } from '../services/rideService.js';
 import { SOCKET_EVENTS } from './events.js';
 import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
+import { registerBusSocketHandlers } from '../bus/socket/busSocketHandlers.js';
+import { setBusSeatSocketServer } from '../bus/services/busSeatSyncService.js';
 import { authorizeRideRoomAccess } from './middleware/rideRoomAuth.js';
 import { attachSocketAuth } from './middleware/socketAuth.js';
 import { clearDriverRoute } from './services/driverRouteService.js';
@@ -167,6 +169,7 @@ export const configureTaxiSocketServer = async (httpServer) => {
   attachSocketAuth(io);
   setSocketServer(io);
   setSupportChatServer(io);
+  setBusSeatSocketServer(io);
 
   io.on('connection', async (socket) => {
     const identity = socket.auth;
@@ -256,6 +259,7 @@ export const configureTaxiSocketServer = async (httpServer) => {
     );
 
     registerRideSocketHandlers({ io, socket, onAsync });
+    registerBusSocketHandlers({ socket, onAsync });
 
     socket.on(
       'locationUpdate',

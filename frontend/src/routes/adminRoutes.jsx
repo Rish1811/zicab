@@ -12,6 +12,10 @@ import {
   AdminBusBookingManager,
   AdminChat,
   AdminBusCommissionManager,
+  AdminZibusBookingChannels,
+  AdminZibusDhabaOrders,
+  AdminZibusDhabaPartners,
+  AdminZibusSeatInventory,
   AdminBusServiceDetails,
   AdminBusServiceManager,
   AdminCareerApplications,
@@ -219,6 +223,10 @@ const adminRoutes = (
       <Route path="bus-service/edit/:id" element={<AdminBusServiceManager mode="edit" />} />
       <Route path="bus-service/commission" element={<AdminBusCommissionManager />} />
       <Route path="bus-service/bookings" element={<AdminBusBookingManager />} />
+      <Route path="bus-service/inventory" element={<AdminZibusSeatInventory />} />
+      <Route path="bus-service/channels" element={<AdminZibusBookingChannels />} />
+      <Route path="bus-service/dhabas" element={<AdminZibusDhabaPartners />} />
+      <Route path="bus-service/dhaba-orders" element={<AdminZibusDhabaOrders />} />
       <Route path="bus-service/:id" element={<AdminBusServiceDetails />} />
       <Route path="pooling" element={<Navigate to="/admin/pooling/routes" replace />} />
       <Route path="pooling/routes" element={<AdminPoolingManager />} />

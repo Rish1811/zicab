@@ -207,6 +207,10 @@ export const AdminPendingBusDrivers = lazy(() => import('../modules/admin/pages/
 export const AdminBusServiceDetails = lazy(() => import('../modules/admin/pages/bus-service/BusServiceDetails'));
 export const AdminBusBookingManager = lazy(() => import('../modules/admin/pages/bus-service/BusBookingManager'));
 export const AdminBusCommissionManager = lazy(() => import('../modules/admin/pages/bus-service/BusCommissionManager'));
+export const AdminZibusDhabaPartners = lazy(() => import('../modules/admin/pages/zibus/DhabaPartners'));
+export const AdminZibusDhabaOrders = lazy(() => import('../modules/admin/pages/zibus/DhabaOrdersAdmin'));
+export const AdminZibusBookingChannels = lazy(() => import('../modules/admin/pages/zibus/BookingChannels'));
+export const AdminZibusSeatInventory = lazy(() => import('../modules/admin/pages/zibus/SeatInventory'));
 export const AdminOwnerDashboard = lazy(() => import('../modules/admin/pages/owners/OwnerDashboard'));
 export const AdminManageOwners = lazy(() => import('../modules/admin/pages/owners/ManageOwners'));
 export const AdminPendingOwners = lazy(() => import('../modules/admin/pages/owners/PendingOwners'));
@@ -272,3 +276,9 @@ export const AdminAdmins = lazy(() => import('../modules/admin/pages/management/
 export const AdminAdminCreate = lazy(() => import('../modules/admin/pages/management/AdminCreate'));
 export const AdminUserAppManagement = lazy(() => import('../modules/admin/pages/settings/AdminUserAppManagement'));
 export const UserAppLayout = lazy(() => import('../modules/user/components/UserAppLayout'));
+
+// ZI Bus dhaba partner panel
+export const DhabaLogin = lazy(() => import('../modules/dhaba/pages/DhabaLogin'));
+export const DhabaLayout = lazy(() => import('../modules/dhaba/pages/DhabaLayout'));
+export const DhabaOrders = lazy(() => import('../modules/dhaba/pages/DhabaOrders'));
+export const DhabaMenu = lazy(() => import('../modules/dhaba/pages/DhabaMenu'));

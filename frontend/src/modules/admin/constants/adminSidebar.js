@@ -111,6 +111,10 @@ export const ADMIN_SIDEBAR_SECTIONS = [
           { label: 'Pending Bus Drivers', path: '/admin/bus-service/pending-drivers', permission: 'bus_service.view' },
           { label: 'Bus Commission', path: '/admin/bus-service/commission', permission: 'bus_service.view' },
           { label: 'Bus Bookings', path: '/admin/bus-service/bookings', permission: 'bus_service.view' },
+          { label: 'Seat Inventory', path: '/admin/bus-service/inventory', permission: 'bus_service.view' },
+          { label: 'Booking Channels', path: '/admin/bus-service/channels', permission: 'bus_service.view' },
+          { label: 'Dhaba Partners', path: '/admin/bus-service/dhabas', permission: 'bus_service.view' },
+          { label: 'Dhaba Food Orders', path: '/admin/bus-service/dhaba-orders', permission: 'bus_service.view' },
         ],
       },
       {

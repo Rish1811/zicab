@@ -4,6 +4,7 @@ import driverRoutes from './driverRoutes';
 import ownerRoutes from './ownerRoutes';
 import publicRoutes from './publicRoutes';
 import userRoutes from './userRoutes';
+import dhabaRoutes from './dhabaRoutes';
 
 const AppRoutes = () => (
   <Routes>
@@ -11,6 +12,7 @@ const AppRoutes = () => (
     {userRoutes}
     {driverRoutes}
     {ownerRoutes}
+    {dhabaRoutes}
     {adminRoutes}
   </Routes>
 );

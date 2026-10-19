@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import userBusService from '../../services/busService';
+import BusLiveTrackingCard from '../../components/bus/BusLiveTrackingCard';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -104,6 +105,24 @@ const BusBookingDetail = () => {
   const [selectedRating, setSelectedRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [savingReview, setSavingReview] = useState(false);
+  const [ticket, setTicket] = useState(null);
+
+  useEffect(() => {
+    if (!id || booking?.status !== 'confirmed') {
+      setTicket(null);
+      return undefined;
+    }
+    let active = true;
+    userBusService
+      .getTicket(id)
+      .then((response) => {
+        if (active) setTicket(unwrapPayload(response));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [id, booking?.status]);
 
   useEffect(() => {
     let active = true;
@@ -206,7 +225,7 @@ const BusBookingDetail = () => {
           </button>
           <div className="flex-1">
             <h1 className="text-lg font-bold text-slate-900">Ticket Details</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Booking ID: {booking?.bookingCode || '...'}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PNR: {booking?.pnr || booking?.bookingCode || '...'}</p>
           </div>
         </div>
       </div>
@@ -236,7 +255,7 @@ const BusBookingDetail = () => {
               <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
                 <div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">PNR Number</p>
-                  <p className="text-sm font-black tracking-widest">{booking.bookingCode}</p>
+                  <p className="text-sm font-black tracking-widest">{booking.pnr || booking.bookingCode}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Status</p>
@@ -247,6 +266,38 @@ const BusBookingDetail = () => {
               </div>
 
               <div className="p-6 space-y-6">
+                {booking.status === 'confirmed' ? <BusLiveTrackingCard bookingId={booking.id} /> : null}
+
+                {ticket?.qrDataUrl ? (
+                  <div className="flex items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <img src={ticket.qrDataUrl} alt={`Ticket QR for PNR ${ticket.pnr}`} className="h-24 w-24 rounded-lg bg-white" />
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Show at boarding</p>
+                      <p className="mt-1 text-lg font-black tracking-widest text-slate-900">{ticket.pnr}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Seats {ticket.seats.join(', ')}</p>
+                    </div>
+                  </div>
+                ) : null}
+
+                {ticket?.foodOrders?.length ? (
+                  <div className="rounded-2xl border border-orange-100 bg-orange-50 p-4">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-orange-600">Food pre-booked</p>
+                    {ticket.foodOrders.map((order) => (
+                      <div key={order.id} className="mt-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-slate-900">{order.dhabaName || 'Partner dhaba'}</p>
+                          <p className="text-xs font-semibold text-slate-600">
+                            {order.items.map((item) => `${item.quantity} × ${item.name}`).join(', ')}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase text-orange-600">
+                          {String(order.status || '').replace('_', ' ')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
                 {/* Route Header */}
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex-1">

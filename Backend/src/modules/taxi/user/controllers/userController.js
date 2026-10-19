@@ -24,6 +24,15 @@ import {
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { BusSeatHold } from '../models/BusSeatHold.js';
 import { BusBooking } from '../models/BusBooking.js';
+import { publishBusSeatChange, releaseExpiredBusHolds } from '../../bus/services/busSeatSyncService.js';
+import {
+  cancelAndRefundFoodForBooking,
+  cancelDhabaOrdersForBooking,
+  confirmDhabaOrdersForBooking,
+  createPendingDhabaOrders,
+  priceFoodSelection,
+} from '../../bus/services/dhabaService.js';
+import { refundRazorpayPayment } from '../../bus/services/busRefundService.js';
 import { RentalBookingRequest } from '../../admin/models/RentalBookingRequest.js';
 import { RentalQuoteRequest } from '../../admin/models/RentalQuoteRequest.js';
 import { RentalVehicleType } from '../../admin/models/RentalVehicleType.js';
@@ -823,33 +832,7 @@ const cleanupExpiredBusSeatHolds = async () => {
   }
 
   busSeatHoldCleanupPromise = (async () => {
-    const now = new Date();
-
-    const expiredBookings = await BusBooking.find({
-      status: 'pending',
-      expiresAt: { $lte: now },
-    })
-      .select('_id')
-      .lean();
-
-    if (expiredBookings.length > 0) {
-      const bookingIds = expiredBookings.map((item) => item._id);
-      await BusBooking.updateMany(
-        { _id: { $in: bookingIds } },
-        { $set: { status: 'expired' } },
-      );
-      await BusSeatHold.deleteMany({
-        bookingId: { $in: bookingIds },
-        status: 'held',
-        expiresAt: { $lte: now },
-      });
-    }
-
-    await BusSeatHold.deleteMany({
-      status: 'held',
-      expiresAt: { $lte: now },
-    });
-
+    await releaseExpiredBusHolds();
     lastBusSeatHoldCleanupAt = Date.now();
   })()
     .finally(() => {
@@ -1042,8 +1025,12 @@ const serializeBusBooking = (booking, busService = null) => {
   return {
   id: String(booking._id),
   bookingCode: booking.bookingCode || '',
+  pnr: booking.pnr || '',
   status: booking.status || 'pending',
   bookingSource: booking.bookingSource || 'user',
+  foodAmount: Number(booking.foodAmount || 0),
+  boardingPoint: booking.boardingPoint?.stopId ? booking.boardingPoint : null,
+  droppingPoint: booking.droppingPoint?.stopId ? booking.droppingPoint : null,
   reservedByDriverId: booking.reservedByDriverId ? String(booking.reservedByDriverId) : '',
   travelDate: booking.travelDate || '',
   scheduleId: booking.scheduleId || '',
@@ -1124,8 +1111,12 @@ const serializeBusBooking = (booking, busService = null) => {
     registrationNumber: booking.routeSnapshot?.registrationNumber || busService?.registrationNumber || '',
     driverName: booking.routeSnapshot?.driverName || busService?.driverName || '',
     driverPhone: booking.routeSnapshot?.driverPhone || busService?.driverPhone || '',
-    pickupLocation: formatBusStopLabel(primaryPickupStop, booking.routeSnapshot?.originCity || ''),
-    dropLocation: formatBusStopLabel(primaryDropStop, booking.routeSnapshot?.destinationCity || ''),
+    pickupLocation: booking.boardingPoint?.stopId
+      ? formatBusStopLabel(booking.boardingPoint, booking.routeSnapshot?.originCity || '')
+      : formatBusStopLabel(primaryPickupStop, booking.routeSnapshot?.originCity || ''),
+    dropLocation: booking.droppingPoint?.stopId
+      ? formatBusStopLabel(booking.droppingPoint, booking.routeSnapshot?.destinationCity || '')
+      : formatBusStopLabel(primaryDropStop, booking.routeSnapshot?.destinationCity || ''),
     routeStops: Array.isArray(busService?.route?.stops) ? busService.route.stops : [],
   },
   createdAt: booking.createdAt || null,
@@ -3405,6 +3396,31 @@ export const createBusBookingOrder = async (req, res) => {
     throw new ApiError(400, `Seat ${invalidSeat} is not available for booking`);
   }
 
+  const routeStops = Array.isArray(busService.route?.stops) ? busService.route.stops : [];
+  const pickBusStop = (stopId, allowedTypes, label, preferArrival) => {
+    const id = toCleanString(stopId);
+    if (!id) {
+      return null;
+    }
+    const stop = routeStops.find((item) => String(item?.id || '') === id);
+    if (!stop || !allowedTypes.includes(String(stop.stopType || 'both'))) {
+      throw new ApiError(400, `Selected ${label} point is not valid for this bus`);
+    }
+    return {
+      stopId: id,
+      city: stop.city || '',
+      pointName: stop.pointName || '',
+      time: preferArrival
+        ? stop.arrivalTime || stop.departureTime || ''
+        : stop.departureTime || stop.arrivalTime || '',
+    };
+  };
+  const boardingPoint = pickBusStop(req.body?.boardingStopId, ['pickup', 'both'], 'boarding', false);
+  const droppingPoint = pickBusStop(req.body?.droppingStopId, ['drop', 'both'], 'dropping', true);
+  if (boardingPoint && droppingPoint && boardingPoint.stopId === droppingPoint.stopId) {
+    throw new ApiError(400, 'Boarding and dropping points must be different');
+  }
+
   const baseAmount = Math.round(
     seatIds.reduce((sum, seatId) => sum + resolveBusSeatPrice(busService, seatCellMap.get(seatId)), 0) * 100,
   ) / 100;
@@ -3416,8 +3432,16 @@ export const createBusBookingOrder = async (req, res) => {
   const serviceTaxAmount = Math.round(((baseAmount * serviceTaxPercentage) / 100) * 100) / 100;
   const amount = Math.round((baseAmount + serviceTaxAmount) * 100) / 100;
 
+  // Optional dhaba pre-order, charged in the same payment as the seats.
+  const food = await priceFoodSelection({
+    busServiceId,
+    schedule,
+    travelDate,
+    foodOrders: req.body?.foodOrders,
+  });
+
   const { keyId, keySecret } = await resolveRazorpayCredentials();
-  const amountPaise = Math.round(amount * 100);
+  const amountPaise = Math.round((amount + food.total) * 100);
   const compactUserId = String(userId || '').replace(/[^a-zA-Z0-9]/g, '').slice(-8) || 'usr';
   const receipt = `ubus_${compactUserId}_${Date.now().toString(36)}`;
 
@@ -3451,6 +3475,9 @@ export const createBusBookingOrder = async (req, res) => {
     seatLabels: seatIds.map((seatId) => seatCellMap.get(seatId)?.label || seatId),
     passenger,
     amount,
+    foodAmount: food.total,
+    ...(boardingPoint ? { boardingPoint } : {}),
+    ...(droppingPoint ? { droppingPoint } : {}),
     currency: busService.fareCurrency || 'INR',
     status: 'pending',
     expiresAt,
@@ -3495,12 +3522,25 @@ export const createBusBookingOrder = async (req, res) => {
       { ordered: true },
     );
   } catch (error) {
+    // ordered:true stops at the first clash, so seats before it were
+    // already locked; free them rather than leave them held for 10 minutes.
+    await BusSeatHold.deleteMany({ bookingId: booking._id, status: 'held' });
     await BusBooking.deleteOne({ _id: booking._id });
     if (error?.code === 11000) {
       throw new ApiError(409, 'One or more selected seats were just booked by someone else');
     }
     throw error;
   }
+
+  await createPendingDhabaOrders({ booking, busService, lines: food.lines });
+  publishBusSeatChange({
+    busServiceId,
+    scheduleId,
+    travelDate,
+    change: 'held',
+    seatIds,
+    bookingId: booking._id,
+  });
 
   res.status(201).json({
     success: true,
@@ -3559,48 +3599,82 @@ export const verifyBusBookingPayment = async (req, res) => {
     });
   }
 
+  // The rider has paid but can't have the seats: release them and give the
+  // whole payment (seats + food) back instead of keeping it.
+  const failPaidBooking = async (status, paymentStatus, message) => {
+    booking.status = status;
+    booking.payment.paymentId = paymentId;
+    booking.payment.status = paymentStatus;
+    await booking.save();
+    await BusSeatHold.deleteMany({ bookingId: booking._id, status: { $in: ['held', 'booked'] } });
+    await cancelDhabaOrdersForBooking(booking._id, { reason: 'Seat payment could not be completed' });
+    publishBusSeatChange({
+      busServiceId: booking.busServiceId,
+      scheduleId: booking.scheduleId,
+      travelDate: booking.travelDate,
+      change: 'released',
+      seatIds: booking.seatIds,
+      bookingId: booking._id,
+    });
+
+    try {
+      const refund = await refundRazorpayPayment({
+        paymentId,
+        amount: Number(booking.amount || 0) + Number(booking.foodAmount || 0),
+        notes: { bookingCode: booking.bookingCode, reason: paymentStatus },
+      });
+      if (refund?.id) {
+        booking.payment.status = `${paymentStatus}_refunded`;
+        await booking.save();
+      }
+    } catch (refundError) {
+      console.error('[bus] auto-refund failed', booking.bookingCode, refundError.message);
+    }
+
+    throw new ApiError(409, `${message} Your payment will be refunded.`);
+  };
+
   if (String(booking.status) !== 'pending') {
+    // The sweeper expired it while the rider was still paying.
+    if (String(booking.status) === 'expired' && !String(booking.payment?.status || '').endsWith('_refunded')) {
+      await failPaidBooking('expired', 'expired', 'Seat hold expired before payment verification.');
+    }
     throw new ApiError(409, 'Bus booking is no longer payable');
   }
 
   if (booking.expiresAt && booking.expiresAt <= new Date()) {
-    booking.status = 'expired';
-    booking.payment.status = 'expired';
-    await booking.save();
-    await BusSeatHold.deleteMany({ bookingId: booking._id, status: 'held' });
-    throw new ApiError(409, 'Seat hold expired before payment verification');
+    await failPaidBooking('expired', 'expired', 'Seat hold expired before payment verification.');
   }
 
-  const holds = await BusSeatHold.find({
-    bookingId: booking._id,
-    status: 'held',
-    expiresAt: { $gt: new Date() },
-  }).lean();
+  // Lock in the seats atomically, and only while the hold is still live, so
+  // the expiry sweeper can't release a seat in the gap between a check and
+  // the update.
+  const lockResult = await BusSeatHold.updateMany(
+    { bookingId: booking._id, status: 'held', expiresAt: { $gt: new Date() } },
+    { $set: { status: 'booked', expiresAt: null } },
+  );
 
-  if (holds.length !== booking.seatIds.length) {
-    booking.status = 'failed';
-    booking.payment.status = 'seat_conflict';
-    await booking.save();
-    await BusSeatHold.deleteMany({ bookingId: booking._id, status: 'held' });
-    throw new ApiError(409, 'Some selected seats are no longer reserved for this payment');
+  if (lockResult.modifiedCount !== booking.seatIds.length) {
+    await failPaidBooking('failed', 'seat_conflict', 'Some selected seats are no longer reserved for this payment.');
   }
 
   booking.status = 'confirmed';
+  booking.expiresAt = null;
   booking.payment.paymentId = paymentId;
   booking.payment.signature = signature;
   booking.payment.status = 'paid';
   booking.payment.paidAt = new Date();
   await booking.save();
 
-  await BusSeatHold.updateMany(
-    { bookingId: booking._id, status: 'held' },
-    {
-      $set: {
-        status: 'booked',
-        expiresAt: null,
-      },
-    },
-  );
+  await confirmDhabaOrdersForBooking(booking);
+  publishBusSeatChange({
+    busServiceId: booking.busServiceId,
+    scheduleId: booking.scheduleId,
+    travelDate: booking.travelDate,
+    change: 'booked',
+    seatIds: booking.seatIds,
+    bookingId: booking._id,
+  });
 
   res.status(201).json({
     success: true,
@@ -3862,6 +3936,18 @@ export const cancelMyBusBooking = async (req, res) => {
     status: { $in: ['held', 'booked'] },
     seatId: { $in: seatsToCancel.map((item) => item.seatId) },
   });
+  publishBusSeatChange({
+    busServiceId: booking.busServiceId,
+    scheduleId: booking.scheduleId,
+    travelDate: booking.travelDate,
+    change: 'released',
+    seatIds: seatsToCancel.map((item) => item.seatId),
+    bookingId: booking._id,
+  });
+
+  if (remainingActiveSeatCount <= 0) {
+    await cancelAndRefundFoodForBooking(booking, { reason: 'Passenger cancelled the trip', by: 'user' });
+  }
 
   res.status(200).json({
     success: true,

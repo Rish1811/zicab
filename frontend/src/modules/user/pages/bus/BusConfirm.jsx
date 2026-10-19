@@ -1,8 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle2, Ticket, QrCode, Home, Share2, Phone, Route, BusFront } from 'lucide-react';
 import { scheduleBusBookingReminders } from '../../utils/upcomingRideReminderService';
+import userBusService from '../../services/busService';
+import { toPlainData } from './busNavigationState';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
 
@@ -44,12 +46,29 @@ const BusConfirm = () => {
   const routePrefix = getRoutePrefix(location.pathname);
   const state = location.state || {};
   const { booking, fromCity, toCity, date } = state;
+  const [ticket, setTicket] = useState(null);
 
   useEffect(() => {
     if (booking?.bookingCode) {
       scheduleBusBookingReminders(booking);
     }
   }, [booking]);
+
+  useEffect(() => {
+    if (!booking?.id) return undefined;
+    let active = true;
+    userBusService
+      .getTicket(booking.id)
+      .then((response) => {
+        if (active) setTicket(toPlainData(response?.data) || null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [booking?.id]);
+
+  const pnr = ticket?.pnr || booking?.pnr || booking?.bookingCode;
 
   if (!booking?.bookingCode) {
     navigate(`${routePrefix}/bus`, { replace: true });
@@ -61,7 +80,7 @@ const BusConfirm = () => {
       if (navigator.share) {
         await navigator.share({
           title: 'Bus Ticket',
-          text: `Ticket ${booking.bookingCode} for ${booking.bus?.fromCity || fromCity} to ${booking.bus?.toCity || toCity} on ${booking.travelDate || date}. Seats: ${(booking.seatLabels || booking.seatIds || []).join(', ')}`,
+          text: `ZI Bus PNR ${pnr} for ${booking.bus?.fromCity || fromCity} to ${booking.bus?.toCity || toCity} on ${booking.travelDate || date}. Seats: ${(booking.seatLabels || booking.seatIds || []).join(', ')}`,
         });
       }
     } catch {
@@ -110,7 +129,7 @@ const BusConfirm = () => {
             <div className="flex justify-between items-center mb-8">
               <div>
                 <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">PNR Number</p>
-                <p className="text-lg font-bold tracking-widest">{booking.bookingCode}</p>
+                <p className="text-lg font-bold tracking-widest">{pnr}</p>
               </div>
                 <div className="text-right">
                   <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Seat(s)</p>
@@ -189,10 +208,30 @@ const BusConfirm = () => {
                     ({booking.passenger?.age}{String(booking.passenger?.gender || '').charAt(0)})
                   </span>
                 </p>
-                <p className="mt-2 text-xs font-bold text-slate-500">Paid ₹{Number(booking.amount || 0)}</p>
+                <p className="mt-2 text-xs font-bold text-slate-500">
+                  Paid ₹{Number(booking.amount || 0) + Number(booking.foodAmount || 0)}
+                </p>
               </div>
-              <QrCode size={48} className="text-slate-900" strokeWidth={1.5} />
+              {ticket?.qrDataUrl ? (
+                <img src={ticket.qrDataUrl} alt={`Ticket QR for PNR ${pnr}`} className="h-24 w-24 rounded-lg" />
+              ) : (
+                <QrCode size={48} className="text-slate-900" strokeWidth={1.5} />
+              )}
             </div>
+
+            {ticket?.foodOrders?.length ? (
+              <div className="rounded-2xl border border-orange-100 bg-orange-50 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-600">Food on the way</p>
+                {ticket.foodOrders.map((order) => (
+                  <div key={order.id} className="mt-3">
+                    <p className="text-sm font-black text-slate-900">{order.dhabaName || 'Partner dhaba'}</p>
+                    <p className="text-xs font-semibold text-slate-600">
+                      {order.items.map((item) => `${item.quantity} × ${item.name}`).join(', ')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </motion.div>
       </div>

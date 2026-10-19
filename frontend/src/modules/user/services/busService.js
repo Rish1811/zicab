@@ -65,6 +65,21 @@ export const userBusService = {
     }),
 
   verifyBookingPayment: (payload) => api.post('/users/bus-bookings/verify', payload),
+
+  getTripDhabas: ({ busServiceId, scheduleId, date }) =>
+    api.get(`/users/buses/${busServiceId}/dhabas`, {
+      params: { scheduleId, date: normalizeTravelDate(date) },
+    }),
+
+  getTicket: (bookingId) => api.get(`/users/bus-bookings/${bookingId}/ticket`),
+
+  getLiveTracking: (bookingId) => api.get(`/users/bus-bookings/${bookingId}/live`),
 };
+
+export const BUS_SEAT_EVENTS = Object.freeze({
+  WATCH: 'bus:watch',
+  UNWATCH: 'bus:unwatch',
+  SEATS_UPDATED: 'bus:seats:updated',
+});
 
 export default userBusService;

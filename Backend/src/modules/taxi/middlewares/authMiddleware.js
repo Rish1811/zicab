@@ -7,6 +7,7 @@ import { Driver } from '../driver/models/Driver.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
 import { PoolingVehicle } from '../admin/models/PoolingVehicle.js';
 import { User } from '../user/models/User.js';
+import { Dhaba } from '../bus/models/Dhaba.js';
 import { verifyAccessToken } from '../services/tokenService.js';
 import {
   normalizeAdminPermissions,
@@ -23,6 +24,7 @@ const roleModelMap = {
   service_center: ServiceStore,
   service_center_staff: ServiceCenterStaff,
   user: User,
+  dhaba: Dhaba,
 };
 
 const normalizeRole = (role = '') => {
@@ -141,6 +143,10 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
         String(entity.status || '').toLowerCase() === 'inactive')
     ) {
       throw new ApiError(403, 'Service center staff account is inactive');
+    }
+
+    if (normalizedRole === 'dhaba' && entity.active === false) {
+      throw new ApiError(403, 'Dhaba account is inactive');
     }
 
     attachResolvedAuth(req, payload);

@@ -10,6 +10,8 @@ import ExcelJS from 'exceljs';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
 import { BusSeatHold } from '../../user/models/BusSeatHold.js';
+import { publishBusSeatChange } from '../../bus/services/busSeatSyncService.js';
+import { cancelAndRefundFoodForBooking } from '../../bus/services/dhabaService.js';
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
 import { getOrLoadCachedValue, invalidateCachedPrefix, invalidateCachedValue } from '../../../../utils/cache.js';
 import { getMailConfigStatus, sendEmail } from '../../services/mailService.js';
@@ -1240,12 +1242,22 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
       { ordered: true },
     );
   } catch (error) {
+    await BusSeatHold.deleteMany({ bookingId: booking._id });
     await BusBooking.deleteOne({ _id: booking._id });
     if (error?.code === 11000) {
       throw new ApiError(409, 'One or more selected seats were just booked');
     }
     throw error;
   }
+
+  publishBusSeatChange({
+    busServiceId: busService._id,
+    scheduleId,
+    travelDate,
+    change: 'booked',
+    seatIds,
+    bookingId: booking._id,
+  });
 
   const hydratedBooking = await BusBooking.findById(booking._id)
     .populate('userId', 'name phone email')
@@ -1344,6 +1356,17 @@ export const cancelAdminBusBookingSeats = asyncHandler(async (req, res) => {
     status: { $in: ['held', 'booked'] },
     seatId: { $in: seatsToCancel.map((item) => item.seatId) },
   });
+  publishBusSeatChange({
+    busServiceId: booking.busServiceId,
+    scheduleId: booking.scheduleId,
+    travelDate: booking.travelDate,
+    change: 'released',
+    seatIds: seatsToCancel.map((item) => item.seatId),
+    bookingId: booking._id,
+  });
+  if (remainingActiveSeatCount <= 0) {
+    await cancelAndRefundFoodForBooking(booking, { reason: 'Cancelled by ZI Bus admin', by: 'admin' });
+  }
 
   const hydratedBooking = await BusBooking.findById(booking._id)
     .populate('userId', 'name phone email')

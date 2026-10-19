@@ -17,8 +17,15 @@ const busSeatHoldSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TaxiUser',
-      required: true,
+      default: null,
       index: true,
+    },
+    // Where the lock came from: 'zibus' for our own apps and panels, or the
+    // code of the external channel that sold the seat.
+    source: {
+      type: String,
+      default: 'zibus',
+      trim: true,
     },
     scheduleId: {
       type: String,

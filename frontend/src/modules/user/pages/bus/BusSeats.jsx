@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react';
-import userBusService from '../../services/busService';
+import userBusService, { BUS_SEAT_EVENTS } from '../../services/busService';
+import { socketService } from '../../../../shared/api/socket';
 import { buildBusRouteState, toPlainData } from './busNavigationState';
 
 const getRoutePrefix = (pathname = '') => (pathname.startsWith('/taxi/user') ? '/taxi/user' : '');
@@ -11,6 +12,14 @@ const getDisplayRoute = (bus, fallbackFromCity = '', fallbackToCity = '') => ({
   fromCity: bus?.route?.originCity || bus?.fromCity || fallbackFromCity,
   toCity: bus?.route?.destinationCity || bus?.toCity || fallbackToCity,
 });
+
+const normalizeIsoDate = (value) => {
+  const raw = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+};
 
 const seatLegend = [
   { key: 'available', label: 'Available' },
@@ -124,6 +133,11 @@ const BusSeats = () => {
   const [error, setError] = useState('');
   const [seatLayout, setSeatLayout] = useState(null);
   const [selectedSeats, setSelectedSeats] = useState([]);
+  const [seatNotice, setSeatNotice] = useState('');
+  const selectedSeatsRef = useRef(selectedSeats);
+  useEffect(() => {
+    selectedSeatsRef.current = selectedSeats;
+  }, [selectedSeats]);
   const displayRoute = getDisplayRoute(seatLayout?.bus || bus, fromCity, toCity);
 
   useEffect(() => {
@@ -161,6 +175,70 @@ const BusSeats = () => {
       active = false;
     };
   }, [bus?.busServiceId, bus?.scheduleId, date, navigate, routePrefix]);
+
+  // Live seat map: seats sold or released anywhere (this app, the operator's
+  // counter, or another booking platform) flip here without a refresh.
+  useEffect(() => {
+    if (!bus?.busServiceId || !bus?.scheduleId || !date) {
+      return undefined;
+    }
+
+    const watch = {
+      busServiceId: bus.busServiceId,
+      scheduleId: bus.scheduleId,
+      travelDate: normalizeIsoDate(date),
+    };
+    const socket = socketService.connect({ role: 'user' });
+    const sendWatch = () => socketService.emit(BUS_SEAT_EVENTS.WATCH, watch);
+
+    const handleUpdate = (payload) => {
+      if (
+        String(payload?.busServiceId) !== String(watch.busServiceId) ||
+        String(payload?.scheduleId) !== String(watch.scheduleId) ||
+        String(payload?.travelDate) !== String(watch.travelDate)
+      ) {
+        return;
+      }
+
+      const unavailable = new Set((payload.unavailableSeatIds || []).map(String));
+      setSeatLayout((current) => {
+        if (!current?.blueprint) return current;
+        const remap = (rows = []) =>
+          rows.map((row) =>
+            (Array.isArray(row) ? row : []).map((cell) =>
+              cell?.kind === 'seat'
+                ? { ...cell, status: unavailable.has(String(cell.id)) ? 'booked' : 'available' }
+                : cell,
+            ),
+          );
+        return {
+          ...current,
+          availableSeats: payload.availableSeats,
+          blueprint: {
+            ...current.blueprint,
+            lowerDeck: remap(current.blueprint.lowerDeck),
+            upperDeck: remap(current.blueprint.upperDeck),
+          },
+        };
+      });
+
+      const lost = selectedSeatsRef.current.filter((seat) => unavailable.has(String(seat.id)));
+      if (lost.length) {
+        setSeatNotice(`Seat ${lost.map((seat) => seat.label || seat.id).join(', ')} was just booked by someone else.`);
+        setSelectedSeats((current) => current.filter((seat) => !unavailable.has(String(seat.id))));
+      }
+    };
+
+    socketService.on(BUS_SEAT_EVENTS.SEATS_UPDATED, handleUpdate);
+    socketService.on('connect', sendWatch);
+    if (socket?.connected) sendWatch();
+
+    return () => {
+      socketService.emit(BUS_SEAT_EVENTS.UNWATCH, {});
+      socketService.off(BUS_SEAT_EVENTS.SEATS_UPDATED, handleUpdate);
+      socketService.off('connect', sendWatch);
+    };
+  }, [bus?.busServiceId, bus?.scheduleId, date]);
 
   const toggleSeat = (seat) => {
     if (!seat || seat.status === 'booked') return;
@@ -207,8 +285,23 @@ const BusSeats = () => {
           </div>
         ) : null}
 
+        {seatNotice ? (
+          <div className="flex items-start justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-700">
+            <span>{seatNotice}</span>
+            <button type="button" onClick={() => setSeatNotice('')} className="shrink-0 text-xs text-amber-600 underline">
+              Dismiss
+            </button>
+          </div>
+        ) : null}
+
         {!loading && !error ? (
           <>
+            <div className="flex items-center justify-between rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+              <span className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-emerald-700">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /> Live seat status
+              </span>
+              <span className="text-xs font-bold text-emerald-700">{Number(seatLayout?.availableSeats ?? 0)} seats left</span>
+            </div>
             <SeatDeck
               title="Lower Deck"
               rows={seatLayout?.blueprint?.lowerDeck || []}
