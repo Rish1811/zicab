@@ -284,3 +284,5 @@ export const DhabaLogin = lazy(() => import('../modules/dhaba/pages/DhabaLogin')
 export const DhabaLayout = lazy(() => import('../modules/dhaba/pages/DhabaLayout'));
 export const DhabaOrders = lazy(() => import('../modules/dhaba/pages/DhabaOrders'));
 export const DhabaMenu = lazy(() => import('../modules/dhaba/pages/DhabaMenu'));
+export const DhabaRegister = lazy(() => import('../modules/dhaba/pages/DhabaRegister'));
+export const DhabaEarnings = lazy(() => import('../modules/dhaba/pages/DhabaEarnings'));

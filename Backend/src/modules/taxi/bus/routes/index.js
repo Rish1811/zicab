@@ -53,6 +53,20 @@ import {
   listTripDhabas,
   verifyBusTicket,
 } from '../controllers/busPassengerController.js';
+import {
+  adminAddDhabaMenuItem,
+  adminApproveDhaba,
+  adminDeleteDhabaMenuItem,
+  adminDeleteDhabaPayout,
+  adminGetDhabaLedger,
+  adminListDhabaMenu,
+  adminListDhabaPayouts,
+  adminRecordDhabaPayout,
+  adminRejectDhaba,
+  adminUpdateDhabaMenuItem,
+  getMyDhabaLedger,
+  registerDhaba,
+} from '../controllers/dhabaPartnerController.js';
 import { authenticateChannel } from '../services/busChannelService.js';
 
 export const busModuleRouter = Router();
@@ -76,6 +90,16 @@ busModuleRouter.get('/bus-tickets/manifest', asCrew, asyncHandler(getBusCrewMani
 // Dhaba partner panel
 const asDhaba = authenticate(['dhaba']);
 busModuleRouter.post('/dhaba/login', loginRateLimit, asyncHandler(loginDhaba));
+// Public "Register your dhaba"; capped per IP since it is unauthenticated.
+const dhabaRegisterRateLimit = createRateLimitMiddleware({
+  scope: 'dhaba_register',
+  max: 5,
+  windowMs: 60 * 60 * 1000,
+  modes: ['ip'],
+  message: 'Too many registration attempts. Please try again in an hour.',
+});
+busModuleRouter.post('/dhaba/register', dhabaRegisterRateLimit, asyncHandler(registerDhaba));
+busModuleRouter.get('/dhaba/ledger', authenticate(['dhaba']), asyncHandler(getMyDhabaLedger));
 busModuleRouter.get('/dhaba/me', asDhaba, asyncHandler(getMyDhaba));
 busModuleRouter.patch('/dhaba/me', asDhaba, asyncHandler(updateMyDhaba));
 busModuleRouter.post('/dhaba/me/push-token', asDhaba, asyncHandler(saveMyDhabaPushToken));
@@ -94,6 +118,16 @@ busModuleRouter.post('/admin/zibus/dhabas', asAdmin, asyncHandler(adminCreateDha
 busModuleRouter.patch('/admin/zibus/dhabas/:id', asAdmin, asyncHandler(adminUpdateDhaba));
 busModuleRouter.delete('/admin/zibus/dhabas/:id', asAdmin, asyncHandler(adminDeleteDhaba));
 busModuleRouter.get('/admin/zibus/dhaba-orders', asAdmin, asyncHandler(adminListDhabaOrders));
+busModuleRouter.post('/admin/zibus/dhabas/:id/approve', asAdmin, asyncHandler(adminApproveDhaba));
+busModuleRouter.post('/admin/zibus/dhabas/:id/reject', asAdmin, asyncHandler(adminRejectDhaba));
+busModuleRouter.get('/admin/zibus/dhabas/:id/menu', asAdmin, asyncHandler(adminListDhabaMenu));
+busModuleRouter.post('/admin/zibus/dhabas/:id/menu', asAdmin, asyncHandler(adminAddDhabaMenuItem));
+busModuleRouter.patch('/admin/zibus/dhabas/:id/menu/:itemId', asAdmin, asyncHandler(adminUpdateDhabaMenuItem));
+busModuleRouter.delete('/admin/zibus/dhabas/:id/menu/:itemId', asAdmin, asyncHandler(adminDeleteDhabaMenuItem));
+busModuleRouter.get('/admin/zibus/dhaba-payouts', asAdmin, asyncHandler(adminListDhabaPayouts));
+busModuleRouter.get('/admin/zibus/dhabas/:id/ledger', asAdmin, asyncHandler(adminGetDhabaLedger));
+busModuleRouter.post('/admin/zibus/dhabas/:id/payouts', asAdmin, asyncHandler(adminRecordDhabaPayout));
+busModuleRouter.delete('/admin/zibus/dhabas/:id/payouts/:payoutId', asAdmin, asyncHandler(adminDeleteDhabaPayout));
 busModuleRouter.get('/admin/zibus/channels', asAdmin, asyncHandler(adminListChannels));
 busModuleRouter.post('/admin/zibus/channels', asAdmin, asyncHandler(adminCreateChannel));
 busModuleRouter.patch('/admin/zibus/channels/:id', asAdmin, asyncHandler(adminUpdateChannel));

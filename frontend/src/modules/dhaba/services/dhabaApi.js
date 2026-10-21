@@ -28,6 +28,8 @@ const data = (response) => response?.data?.__raw ?? response?.data ?? response;
 
 export const dhabaApi = {
   login: (phone, password) => api.post('/dhaba/login', { phone, password }).then(data),
+  register: (payload) => api.post('/dhaba/register', payload).then(data),
+  ledger: () => api.get('/dhaba/ledger', auth()).then(data),
   me: () => api.get('/dhaba/me', auth()).then(data),
   updateMe: (payload) => api.patch('/dhaba/me', payload, auth()).then(data),
   menu: () => api.get('/dhaba/menu', auth()).then(data),

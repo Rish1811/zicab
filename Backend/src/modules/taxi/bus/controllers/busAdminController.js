@@ -57,6 +57,11 @@ const applyDhabaFields = async (dhaba, body = {}) => {
   text('city', 80);
   text('highway', 80);
   text('image', 500);
+  if (body.fssaiNumber !== undefined) {
+    const fssai = String(body.fssaiNumber || '').replace(/\s/g, '');
+    if (fssai && !/^\d{14}$/.test(fssai)) throw new ApiError(400, 'FSSAI licence number must be 14 digits');
+    dhaba.fssaiNumber = fssai;
+  }
 
   if (body.phone !== undefined) {
     const phone = normalizeDhabaPhone(body.phone);
@@ -73,7 +78,13 @@ const applyDhabaFields = async (dhaba, body = {}) => {
     if (!Number.isFinite(value) || value < 0 || value > 100) throw new ApiError(400, 'Commission must be 0-100%');
     dhaba.commissionPercent = value;
   }
-  if (body.active !== undefined) dhaba.active = Boolean(body.active);
+  if (body.active !== undefined) {
+    // A self-registered dhaba goes live through Approve, not the active switch.
+    if (body.active && dhaba.approvalStatus && dhaba.approvalStatus !== 'approved') {
+      throw new ApiError(409, 'Approve this registration before activating it');
+    }
+    dhaba.active = Boolean(body.active);
+  }
   if (body.acceptingOrders !== undefined) dhaba.acceptingOrders = Boolean(body.acceptingOrders);
 
   const stops = await readBusStops(body.busStops);
@@ -91,6 +102,11 @@ export const adminListDhabas = async (req, res) => {
   if (search) {
     const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     filter.$or = [{ name: pattern }, { phone: pattern }, { city: pattern }, { highway: pattern }];
+  }
+  const approval = String(req.query?.approval || '').trim();
+  if (['pending', 'approved', 'rejected'].includes(approval)) {
+    // Dhabas from before self-registration have no approvalStatus and count as approved.
+    filter.approvalStatus = approval === 'approved' ? { $in: ['approved', null] } : approval;
   }
 
   const dhabas = await Dhaba.find(filter).sort({ createdAt: -1 }).limit(500).lean();

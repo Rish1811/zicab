@@ -38,6 +38,13 @@ export const loginDhaba = async (req, res) => {
   if (!dhaba || !(await comparePassword(password, dhaba.password))) {
     throw new ApiError(401, 'Incorrect phone or password');
   }
+  if (dhaba.approvalStatus === 'pending') {
+    throw new ApiError(403, 'Your registration is under review. You can sign in once ZI Bus approves it.');
+  }
+  if (dhaba.approvalStatus === 'rejected') {
+    const reason = dhaba.rejectionReason ? ` Reason: ${dhaba.rejectionReason}` : '';
+    throw new ApiError(403, `Your registration was not approved.${reason} You can register again with corrected details.`);
+  }
   if (dhaba.active === false) {
     throw new ApiError(403, 'This dhaba account has been deactivated. Contact ZI Bus support.');
   }
@@ -77,7 +84,7 @@ export const saveMyDhabaPushToken = async (req, res) => {
   ok(res, { saved: true });
 };
 
-const readMenuItemInput = (body = {}, { partial = false } = {}) => {
+export const readMenuItemInput = (body = {}, { partial = false } = {}) => {
   const item = {};
   if (!partial || body.name !== undefined) {
     item.name = String(body.name || '').trim().slice(0, 100);

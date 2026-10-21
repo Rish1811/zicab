@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
-import { ClipboardList, Loader2, LogOut, UtensilsCrossed } from 'lucide-react';
+import { ClipboardList, IndianRupee, Loader2, LogOut, UtensilsCrossed } from 'lucide-react';
 import { dhabaApi, getDhabaToken, setDhabaToken } from '../services/dhabaApi';
 
 const DhabaLayout = () => {
@@ -79,6 +79,9 @@ const DhabaLayout = () => {
           </NavLink>
           <NavLink to="/dhaba/menu" className={tabClass}>
             <UtensilsCrossed size={14} /> Menu
+          </NavLink>
+          <NavLink to="/dhaba/earnings" className={tabClass}>
+            <IndianRupee size={14} /> Earnings
           </NavLink>
         </nav>
       </header>

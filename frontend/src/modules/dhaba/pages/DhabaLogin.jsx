@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Loader2, UtensilsCrossed } from 'lucide-react';
 import { dhabaApi, setDhabaToken } from '../services/dhabaApi';
 
@@ -73,8 +73,11 @@ const DhabaLogin = () => {
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : null} Sign in
         </button>
-        <p className="text-center text-[11px] font-semibold text-slate-400">
-          Accounts are created by the ZI Bus team. Contact support to join.
+        <p className="text-center text-xs font-semibold text-slate-500">
+          New to ZI Bus?{' '}
+          <Link to="/dhaba/register" className="font-black text-orange-600">
+            Register your dhaba
+          </Link>
         </p>
       </form>
     </div>

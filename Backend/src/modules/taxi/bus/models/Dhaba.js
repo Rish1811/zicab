@@ -46,6 +46,20 @@ const dhabaSchema = new mongoose.Schema(
       lng: { type: Number, default: null },
     },
     image: { type: String, default: '', trim: true },
+    photos: { type: [String], default: [] },
+    fssaiNumber: { type: String, default: '', trim: true },
+    // Self-registered dhabas start 'pending' (and inactive) until an admin
+    // approves them; dhabas an admin creates are approved straight away.
+    approvalStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'approved',
+      index: true,
+    },
+    registeredVia: { type: String, enum: ['admin', 'self'], default: 'admin' },
+    rejectionReason: { type: String, default: '', trim: true },
+    reviewedAt: { type: Date, default: null },
+    reviewedBy: { type: String, default: '' },
     // Platform share of each food order, in percent.
     commissionPercent: { type: Number, default: 10, min: 0, max: 100 },
     menu: { type: [menuItemSchema], default: [] },
