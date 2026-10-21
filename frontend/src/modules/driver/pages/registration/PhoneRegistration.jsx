@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Briefcase, CheckCircle2, ChevronRight, Smartphone } from 'lucide-react';
+import { Briefcase, CheckCircle2, ChevronRight, Smartphone, UtensilsCrossed } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -310,6 +310,36 @@ const PhoneRegistration = () => {
               Existing numbers continue through login OTP. New numbers start a fresh registration automatically.
             </p>
           </motion.div>
+
+          {!isOwnerPortal && (
+            <div className="rounded-[28px] border border-orange-100 bg-white/90 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-500">
+                  <UtensilsCrossed size={20} strokeWidth={2.5} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-slate-900">Dhaba owner?</p>
+                  <p className="text-xs font-medium text-slate-500">Take food pre-orders from ZI Bus passengers.</p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/dhaba/login${phone.length === 10 ? `?phone=${phone}` : ''}`)}
+                  className="rounded-2xl bg-slate-900 py-3 text-xs font-black uppercase tracking-wider text-white"
+                >
+                  Dhaba login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/dhaba/register${phone.length === 10 ? `?phone=${phone}` : ''}`)}
+                  className="rounded-2xl border border-orange-200 bg-orange-50 py-3 text-xs font-black uppercase tracking-wider text-orange-700"
+                >
+                  Register dhaba
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="text-center">
             <button

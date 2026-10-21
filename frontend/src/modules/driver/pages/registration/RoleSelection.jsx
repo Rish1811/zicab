@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Briefcase, Building2, BusFront, CarFront, ChevronRight, UserRound } from 'lucide-react';
+import { Briefcase, Building2, BusFront, CarFront, ChevronRight, UserRound, UtensilsCrossed } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -52,6 +52,13 @@ const ROLE_OPTIONS = [
     Icon: UserRound,
     color: 'text-rose-500',
   },
+  {
+    id: 'dhaba_owner',
+    label: 'Dhaba Owner',
+    description: 'Register your highway dhaba to take food pre-orders from ZI Bus passengers.',
+    Icon: UtensilsCrossed,
+    color: 'text-orange-500',
+  },
 ];
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
@@ -84,6 +91,12 @@ const RoleSelection = () => {
   }
 
   const handleContinue = async () => {
+    // Dhaba partners have their own account and portal, not a driver profile.
+    if (selectedRole === 'dhaba_owner') {
+      navigate(`/dhaba/register${phone.length === 10 ? `?phone=${phone}` : ''}`);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -195,6 +208,11 @@ const RoleSelection = () => {
                     {id === 'service_center_staff' && (
                       <p className={`mt-3 text-xs font-black uppercase tracking-[0.16em] ${active ? 'text-rose-200' : 'text-rose-600'}`}>
                         Pick your center and request access
+                      </p>
+                    )}
+                    {id === 'dhaba_owner' && (
+                      <p className={`mt-3 text-xs font-black uppercase tracking-[0.16em] ${active ? 'text-orange-200' : 'text-orange-600'}`}>
+                        Opens the dhaba partner registration
                       </p>
                     )}
                     {id === 'pooling_driver' && (

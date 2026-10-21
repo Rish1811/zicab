@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, UtensilsCrossed } from 'lucide-react';
 import { dhabaApi, setDhabaToken } from '../services/dhabaApi';
 
 const DhabaLogin = () => {
   const navigate = useNavigate();
-  const [phone, setPhone] = useState('');
+  const [searchParams] = useSearchParams();
+  const [phone, setPhone] = useState(() => (searchParams.get('phone') || '').replace(/\D/g, '').slice(-10));
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

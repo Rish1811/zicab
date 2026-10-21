@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Autocomplete, GoogleMap, MarkerF } from '@react-google-maps/api';
 import {
   BadgeCheck,
@@ -98,7 +98,8 @@ const EMPTY = {
 const DhabaRegister = () => {
   const { isLoaded } = useAppGoogleMapsLoader();
   const mapsReady = isLoaded && HAS_VALID_GOOGLE_MAPS_KEY && Boolean(window.google?.maps);
-  const [form, setForm] = useState(EMPTY);
+  const [searchParams] = useSearchParams();
+  const [form, setForm] = useState(() => ({ ...EMPTY, phone: (searchParams.get('phone') || '').replace(/\D/g, '').slice(-10) }));
   const [location, setLocation] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [agree, setAgree] = useState(false);
