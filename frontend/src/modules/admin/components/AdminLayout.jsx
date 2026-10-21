@@ -9,6 +9,7 @@ import { useSettings } from '../../../shared/context/SettingsContext';
 import { getSupportConversations, markSupportMessagesRead } from '../../shared/chat/chatApi';
 import { adminService } from '../services/adminService';
 import { isMenuAllowed } from '../constants/adminAccess';
+import { zibusAdminService } from '../services/zibusAdminService';
 import { ADMIN_SIDEBAR_SECTIONS } from '../constants/adminSidebar';
 import toast from 'react-hot-toast';
 import AdminSplashScreen from './AdminSplashScreen';
@@ -634,6 +635,7 @@ const AdminLayout = () => {
   const [bookingsFeed, setBookingsFeed] = useState([]);
   const [chatNotifications, setChatNotifications] = useState([]);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [pendingDhabaCount, setPendingDhabaCount] = useState(0);
   const [rideRequestUnreadTotal, setRideRequestUnreadTotal] = useState(0);
   const [bookingUnreadTotal, setBookingUnreadTotal] = useState(0);
   const [rideRequestPage, setRideRequestPage] = useState(1);
@@ -857,9 +859,31 @@ const AdminLayout = () => {
       '/admin/trips': rideRequestUnreadCount,
       '/admin/owners/bookings': bookingUnreadCount,
       '/admin/chat': effectiveChatUnreadCount,
+      '/admin/dhabas/pending': pendingDhabaCount,
     }),
-    [bookingUnreadCount, effectiveChatUnreadCount, rideRequestUnreadCount],
+    [bookingUnreadCount, effectiveChatUnreadCount, pendingDhabaCount, rideRequestUnreadCount],
   );
+
+  // Dhaba registrations waiting for review; refreshed on navigation and every 2 minutes.
+  const canSeeDhabas = useMemo(
+    () => flattenSearchEntries(flattenItems(sidebarSections)).some((entry) => entry.path === '/admin/dhabas/pending'),
+    [sidebarSections],
+  );
+  useEffect(() => {
+    if (!canSeeDhabas) return undefined;
+    let alive = true;
+    const load = () =>
+      zibusAdminService
+        .pendingDhabaCount()
+        .then((data) => { if (alive) setPendingDhabaCount(Number(data?.count || 0)); })
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 120000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [canSeeDhabas, location.pathname]);
   const pageTitle = resolvePageTitle(location.pathname, sidebarSections, appName);
   const searchEntries = useMemo(() => flattenSearchEntries(flattenItems(sidebarSections)), [sidebarSections]);
   const filteredSearchEntries = useMemo(() => {

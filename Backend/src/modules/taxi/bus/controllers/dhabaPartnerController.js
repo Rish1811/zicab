@@ -137,6 +137,11 @@ export const registerDhaba = async (req, res) => {
 
 // ---------------------------------------------------------------- approval
 
+/// For the admin sidebar badge.
+export const adminCountPendingDhabas = async (_req, res) => {
+  ok(res, { count: await Dhaba.countDocuments({ approvalStatus: 'pending' }) });
+};
+
 export const adminApproveDhaba = async (req, res) => {
   const dhaba = await loadDhaba(req.params.id);
   if (req.body?.commissionPercent !== undefined) {

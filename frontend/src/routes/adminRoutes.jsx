@@ -227,8 +227,13 @@ const adminRoutes = (
       <Route path="bus-service/inventory" element={<AdminZibusSeatInventory />} />
       <Route path="bus-service/operators" element={<AdminZibusBusOperators />} />
       <Route path="bus-service/channels" element={<AdminZibusBookingChannels />} />
-      <Route path="bus-service/dhabas" element={<AdminZibusDhabaPartners />} />
-      <Route path="bus-service/dhaba-orders" element={<AdminZibusDhabaOrders />} />
+      <Route path="bus-service/dhabas" element={<Navigate to="/admin/dhabas" replace />} />
+      <Route path="bus-service/dhaba-orders" element={<Navigate to="/admin/dhabas/orders" replace />} />
+      <Route path="dhabas" element={<AdminZibusDhabaPartners />} />
+      <Route path="dhabas/pending" element={<AdminZibusDhabaPartners />} />
+      <Route path="dhabas/rejected" element={<AdminZibusDhabaPartners />} />
+      <Route path="dhabas/payouts" element={<AdminZibusDhabaPartners />} />
+      <Route path="dhabas/orders" element={<AdminZibusDhabaOrders />} />
       <Route path="bus-service/:id" element={<AdminBusServiceDetails />} />
       <Route path="pooling" element={<Navigate to="/admin/pooling/routes" replace />} />
       <Route path="pooling/routes" element={<AdminPoolingManager />} />

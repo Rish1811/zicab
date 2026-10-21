@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { BookOpen, Copy, IndianRupee, Loader2, Pencil, Plus, Search, Trash2, UtensilsCrossed, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getAdminBuses } from '../../services/busService';
@@ -24,6 +24,13 @@ const EMPTY = {
   active: true,
   acceptingOrders: true,
   busStops: [],
+};
+
+const TAB_PATHS = {
+  partners: '/admin/dhabas',
+  pending: '/admin/dhabas/pending',
+  rejected: '/admin/dhabas/rejected',
+  payouts: '/admin/dhabas/payouts',
 };
 
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 focus:border-blue-400 focus:outline-none';
@@ -193,7 +200,10 @@ const DhabaPartners = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null);
-  const [tab, setTab] = useState('partners');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const tab = Object.keys(TAB_PATHS).find((key) => TAB_PATHS[key] === location.pathname.replace(/\/+$/, '')) || 'partners';
+  const setTab = (key) => navigate(TAB_PATHS[key]);
   const [menuFor, setMenuFor] = useState(null);
   const [ledgerFor, setLedgerFor] = useState(null);
   const [payoutsKey, setPayoutsKey] = useState(0);
@@ -274,7 +284,7 @@ const DhabaPartners = () => {
             <button type="button" onClick={copyRegisterLink} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700">
               <Copy size={14} /> Copy registration link
             </button>
-            <Link to="/admin/bus-service/dhaba-orders" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700">
+            <Link to="/admin/dhabas/orders" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700">
               Food orders
             </Link>
             <button type="button" onClick={() => setEditing({})} className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black text-white">

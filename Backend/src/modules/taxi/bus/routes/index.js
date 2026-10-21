@@ -56,6 +56,7 @@ import {
 import {
   adminAddDhabaMenuItem,
   adminApproveDhaba,
+  adminCountPendingDhabas,
   adminDeleteDhabaMenuItem,
   adminDeleteDhabaPayout,
   adminGetDhabaLedger,
@@ -118,6 +119,7 @@ busModuleRouter.post('/admin/zibus/dhabas', asAdmin, asyncHandler(adminCreateDha
 busModuleRouter.patch('/admin/zibus/dhabas/:id', asAdmin, asyncHandler(adminUpdateDhaba));
 busModuleRouter.delete('/admin/zibus/dhabas/:id', asAdmin, asyncHandler(adminDeleteDhaba));
 busModuleRouter.get('/admin/zibus/dhaba-orders', asAdmin, asyncHandler(adminListDhabaOrders));
+busModuleRouter.get('/admin/zibus/dhabas/pending-count', asAdmin, asyncHandler(adminCountPendingDhabas));
 busModuleRouter.post('/admin/zibus/dhabas/:id/approve', asAdmin, asyncHandler(adminApproveDhaba));
 busModuleRouter.post('/admin/zibus/dhabas/:id/reject', asAdmin, asyncHandler(adminRejectDhaba));
 busModuleRouter.get('/admin/zibus/dhabas/:id/menu', asAdmin, asyncHandler(adminListDhabaMenu));

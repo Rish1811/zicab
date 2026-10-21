@@ -8,6 +8,7 @@ export const zibusAdminService = {
   updateDhaba: (id, payload) => api.patch(`/admin/zibus/dhabas/${id}`, payload).then(data),
   deleteDhaba: (id) => api.delete(`/admin/zibus/dhabas/${id}`).then(data),
   listDhabaOrders: (params = {}) => api.get('/admin/zibus/dhaba-orders', { params }).then(data),
+  pendingDhabaCount: () => api.get('/admin/zibus/dhabas/pending-count').then(data),
   approveDhaba: (id, payload = {}) => api.post(`/admin/zibus/dhabas/${id}/approve`, payload).then(data),
   rejectDhaba: (id, reason) => api.post(`/admin/zibus/dhabas/${id}/reject`, { reason }).then(data),
   dhabaMenu: (id) => api.get(`/admin/zibus/dhabas/${id}/menu`).then(data),

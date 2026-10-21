@@ -23,6 +23,7 @@ import {
   TrendingUp,
   UserCog,
   Users,
+  UtensilsCrossed,
   Wallet,
 } from 'lucide-react';
 
@@ -114,8 +115,17 @@ export const ADMIN_SIDEBAR_SECTIONS = [
           { label: 'Bus Operators', path: '/admin/bus-service/operators', permission: 'bus_service.view' },
           { label: 'Seat Inventory', path: '/admin/bus-service/inventory', permission: 'bus_service.view' },
           { label: 'Booking Channels', path: '/admin/bus-service/channels', permission: 'bus_service.view' },
-          { label: 'Dhaba Partners', path: '/admin/bus-service/dhabas', permission: 'bus_service.view' },
-          { label: 'Dhaba Food Orders', path: '/admin/bus-service/dhaba-orders', permission: 'bus_service.view' },
+        ],
+      },
+      {
+        icon: UtensilsCrossed,
+        label: 'Dhaba & Food',
+        subItems: [
+          { label: 'Dhaba Partners', path: '/admin/dhabas', permission: 'bus_service.view' },
+          { label: 'Pending Approvals', path: '/admin/dhabas/pending', permission: 'bus_service.view' },
+          { label: 'Rejected Applications', path: '/admin/dhabas/rejected', permission: 'bus_service.view' },
+          { label: 'Food Orders', path: '/admin/dhabas/orders', permission: 'bus_service.view' },
+          { label: 'Payouts & Commission', path: '/admin/dhabas/payouts', permission: 'bus_service.view' },
         ],
       },
       {
