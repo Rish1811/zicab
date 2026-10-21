@@ -8,6 +8,7 @@ import { BusChannel } from '../models/BusChannel.js';
 import { BusChannelEvent } from '../models/BusChannelEvent.js';
 import { findSchedule, flattenBlueprintSeats } from '../utils/busTime.js';
 import { getTripSeatSnapshot, onBusSeatChange, publishBusSeatChange } from './busSeatSyncService.js';
+import { resolveScheduleRoute } from '../utils/busRoutes.js';
 
 // Multi-platform seat synchronisation.
 //
@@ -198,6 +199,9 @@ export const listChannelBuses = async (channel) => {
         departureTime: schedule.departureTime,
         arrivalTime: schedule.arrivalTime,
         activeDays: schedule.activeDays || [],
+        routeKey: schedule.routeKey || 'main',
+        originCity: resolveScheduleRoute(bus, schedule).originCity || '',
+        destinationCity: resolveScheduleRoute(bus, schedule).destinationCity || '',
       })),
     capacity: Number(bus.capacity || 0),
   }));
@@ -298,11 +302,11 @@ export const createChannelBooking = async (channel, body = {}) => {
     status: hold ? 'pending' : 'confirmed',
     expiresAt,
     routeSnapshot: {
-      originCity: busService.route?.originCity || '',
-      destinationCity: busService.route?.destinationCity || '',
+      originCity: resolveScheduleRoute(busService, schedule).originCity || '',
+      destinationCity: resolveScheduleRoute(busService, schedule).destinationCity || '',
       departureTime: schedule.departureTime || '',
       arrivalTime: schedule.arrivalTime || '',
-      durationHours: busService.route?.durationHours || '',
+      durationHours: resolveScheduleRoute(busService, schedule).durationHours || '',
       busName: busService.busName || '',
       operatorName: busService.operatorName || '',
       coachType: busService.coachType || '',

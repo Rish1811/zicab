@@ -18,6 +18,7 @@ import { getMailConfigStatus, sendEmail } from '../../services/mailService.js';
 // Used ~40 times below but never imported: those paths threw ReferenceError
 // instead of the intended 4xx.
 import { ApiError } from '../../../../utils/ApiError.js';
+import { resolveScheduleRoute } from '../../bus/utils/busRoutes.js';
 
 const PUBLIC_BOOTSTRAP_CACHE_TTL_MS = 30_000;
 // These three public config caches all have a 30s TTL, and every one of them is
@@ -1208,11 +1209,11 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     status: 'confirmed',
     expiresAt: null,
     routeSnapshot: {
-      originCity: busService.route?.originCity || '',
-      destinationCity: busService.route?.destinationCity || '',
+      originCity: resolveScheduleRoute(busService, schedule).originCity || '',
+      destinationCity: resolveScheduleRoute(busService, schedule).destinationCity || '',
       departureTime: schedule?.departureTime || '',
       arrivalTime: schedule?.arrivalTime || '',
-      durationHours: busService.route?.durationHours || '',
+      durationHours: resolveScheduleRoute(busService, schedule).durationHours || '',
       busName: busService.busName || '',
       operatorName: busService.operatorName || '',
       coachType: busService.coachType || '',

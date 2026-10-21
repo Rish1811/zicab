@@ -15,6 +15,7 @@ import { BusBooking } from "../../user/models/BusBooking.js";
 import { BusSeatHold } from "../../user/models/BusSeatHold.js";
 import { publishBusSeatChange } from "../../bus/services/busSeatSyncService.js";
 import { publishBusLiveLocation } from "../../bus/services/busTicketService.js";
+import { resolveScheduleRoute } from "../../bus/utils/busRoutes.js";
 import { cancelAndRefundFoodForBooking } from "../../bus/services/dhabaService.js";
 import { Owner } from "../../admin/models/Owner.js";
 import { BusService } from "../../admin/models/BusService.js";
@@ -5796,9 +5797,9 @@ export const getBusDriverSeatLayout = async (req, res) => {
       bus: {
         operatorName: busService.operatorName || "",
         busName: busService.busName || "",
-        routeName: busService.route?.routeName || "",
-        fromCity: busService.route?.originCity || "",
-        toCity: busService.route?.destinationCity || "",
+        routeName: resolveScheduleRoute(busService, schedule).routeName || "",
+        fromCity: resolveScheduleRoute(busService, schedule).originCity || "",
+        toCity: resolveScheduleRoute(busService, schedule).destinationCity || "",
         departureTime: schedule?.departureTime || "",
         arrivalTime: schedule?.arrivalTime || "",
       },
@@ -5921,11 +5922,11 @@ export const createBusDriverReservation = async (req, res) => {
     status: "confirmed",
     expiresAt: null,
     routeSnapshot: {
-      originCity: busService.route?.originCity || "",
-      destinationCity: busService.route?.destinationCity || "",
+      originCity: resolveScheduleRoute(busService, schedule).originCity || "",
+      destinationCity: resolveScheduleRoute(busService, schedule).destinationCity || "",
       departureTime: schedule?.departureTime || "",
       arrivalTime: schedule?.arrivalTime || "",
-      durationHours: busService.route?.durationHours || "",
+      durationHours: resolveScheduleRoute(busService, schedule).durationHours || "",
       busName: busService.busName || "",
       operatorName: busService.operatorName || "",
       coachType: busService.coachType || "",

@@ -63,6 +63,11 @@ const busStopSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    // Geocoded point, used to auto-compute distance and stop timings.
+    coords: {
+      type: new mongoose.Schema({ lat: Number, lng: Number }, { _id: false }),
+      default: null,
+    },
   },
   { _id: false },
 );
@@ -208,6 +213,12 @@ const busScheduleSchema = new mongoose.Schema(
     activeDays: {
       type: [String],
       default: [],
+    },
+    // Which route this slot runs: 'main', 'return' or an extraRoutes[].id.
+    routeKey: {
+      type: String,
+      default: 'main',
+      trim: true,
     },
     status: {
       type: String,
@@ -499,10 +510,35 @@ const busServiceSchema = new mongoose.Schema(
         type: [busStopSchema],
         default: [],
       },
+      autoTimings: {
+        type: Boolean,
+        default: true,
+      },
     },
     returnRouteEnabled: {
       type: Boolean,
       default: false,
+    },
+    // Additional routes the same bus runs; schedules pick one via routeKey.
+    extraRoutes: {
+      type: [
+        new mongoose.Schema(
+          {
+            id: { type: String, required: true, trim: true },
+            routeName: { type: String, default: '', trim: true },
+            originCity: { type: String, default: '', trim: true },
+            destinationCity: { type: String, default: '', trim: true },
+            originCoords: { type: busRoutePointSchema, default: null },
+            destinationCoords: { type: busRoutePointSchema, default: null },
+            distanceKm: { type: String, default: '', trim: true },
+            durationHours: { type: String, default: '', trim: true },
+            stops: { type: [busStopSchema], default: [] },
+            autoTimings: { type: Boolean, default: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
     },
     returnRoute: {
       routeName: {
@@ -541,6 +577,10 @@ const busServiceSchema = new mongoose.Schema(
       stops: {
         type: [busStopSchema],
         default: [],
+      },
+      autoTimings: {
+        type: Boolean,
+        default: true,
       },
     },
     schedules: {

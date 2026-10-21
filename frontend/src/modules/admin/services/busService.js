@@ -94,6 +94,7 @@ const createEmptyRoute = () => ({
   distanceKm: '',
   durationHours: '',
   stops: [],
+  autoTimings: true,
 });
 
 const normalizeDeckConfig = (value = {}, fallback = {}) => {
@@ -293,6 +294,7 @@ export const createBusDraft = () => ({
     destinationCoords: null,
     distanceKm: '',
     durationHours: '',
+    autoTimings: true,
     stops: [
       {
         id: createId('stop'),
@@ -314,6 +316,7 @@ export const createBusDraft = () => ({
   },
   returnRouteEnabled: false,
   returnRoute: createEmptyRoute(),
+  extraRoutes: [],
   schedules: [
     {
       id: createId('schedule'),
@@ -322,6 +325,7 @@ export const createBusDraft = () => ({
       arrivalTime: '06:15',
       activeDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
       status: 'active',
+      routeKey: 'main',
     },
   ],
   status: 'draft',
@@ -388,6 +392,13 @@ export const normalizeBusCatalog = (catalog = []) =>
             ? bus.returnRoute.stops
             : [],
       },
+      extraRoutes: (Array.isArray(bus.extraRoutes) ? bus.extraRoutes : []).map((item) => ({
+        ...createEmptyRoute(),
+        ...item,
+        originCoords: normalizeLatLng(item?.originCoords),
+        destinationCoords: normalizeLatLng(item?.destinationCoords),
+        stops: Array.isArray(item?.stops) ? item.stops : [],
+      })),
       schedules:
         Array.isArray(bus.schedules) && bus.schedules.length > 0 ? bus.schedules : fallbackDraft.schedules,
       amenities:

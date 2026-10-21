@@ -706,7 +706,37 @@ const normalizeBusStop = (stop = {}, index = 0) => ({
   stopType: ['pickup', 'drop', 'both'].includes(stop.stopType) ? stop.stopType : 'pickup',
   arrivalTime: sanitizeBusText(stop.arrivalTime),
   departureTime: sanitizeBusText(stop.departureTime),
+  coords: sanitizeBusCoords(stop.coords),
 });
+
+// One route shape for the main, return and extra routes. Fields missing from
+// `source` fall back to `fallback` (the stored route when updating).
+const normalizeBusRoute = (source = {}, fallback = {}) => {
+  const from = source && typeof source === 'object' ? source : {};
+  const base = fallback && typeof fallback === 'object' ? fallback : {};
+  const stops = Array.isArray(from.stops) ? from.stops : Array.isArray(base.stops) ? base.stops : [];
+  return {
+    routeName: sanitizeBusText(from.routeName, base.routeName || ''),
+    originCity: sanitizeBusText(from.originCity, base.originCity || ''),
+    destinationCity: sanitizeBusText(from.destinationCity, base.destinationCity || ''),
+    originCoords: sanitizeBusCoords(from.originCoords ?? base.originCoords),
+    destinationCoords: sanitizeBusCoords(from.destinationCoords ?? base.destinationCoords),
+    distanceKm: sanitizeBusText(from.distanceKm, base.distanceKm || ''),
+    durationHours: sanitizeBusText(from.durationHours, base.durationHours || ''),
+    stops: stops.map((stop, index) => normalizeBusStop(stop, index)),
+    autoTimings: Boolean(from.autoTimings ?? base.autoTimings ?? true),
+  };
+};
+
+const normalizeBusExtraRoutes = (routes, fallback = []) => {
+  const list = Array.isArray(routes) ? routes : Array.isArray(fallback) ? fallback : [];
+  return list
+    .map((item, index) => ({
+      id: sanitizeBusText(item?.id, `route-${Date.now()}-${index}`),
+      ...normalizeBusRoute(item),
+    }))
+    .filter((item) => item.originCity && item.destinationCity);
+};
 
 const normalizeBusSchedule = (schedule = {}, index = 0) => ({
   id: sanitizeBusText(schedule.id, `schedule-${Date.now()}-${index}`),
@@ -717,6 +747,7 @@ const normalizeBusSchedule = (schedule = {}, index = 0) => ({
     ? schedule.activeDays.filter((day) => BUS_DAY_OPTIONS.includes(day))
     : [],
   status: ['active', 'paused', 'draft'].includes(schedule.status) ? schedule.status : 'active',
+  routeKey: sanitizeBusText(schedule.routeKey, 'main') || 'main',
 });
 
 const normalizeBusCancellationRule = (rule = {}, index = 0) => ({
@@ -747,41 +778,19 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
     upperDeck: normalizeBusDeck(payload.blueprint?.upperDeck ?? existing.blueprint?.upperDeck ?? []),
   };
 
-  const route = {
-    routeName: sanitizeBusText(payload.route?.routeName, existing.route?.routeName || ''),
-    originCity: sanitizeBusText(payload.route?.originCity, existing.route?.originCity || ''),
-    destinationCity: sanitizeBusText(payload.route?.destinationCity, existing.route?.destinationCity || ''),
-    originCoords: sanitizeBusCoords(payload.route?.originCoords ?? existing.route?.originCoords),
-    destinationCoords: sanitizeBusCoords(payload.route?.destinationCoords ?? existing.route?.destinationCoords),
-    distanceKm: sanitizeBusText(payload.route?.distanceKm, existing.route?.distanceKm || ''),
-    durationHours: sanitizeBusText(payload.route?.durationHours, existing.route?.durationHours || ''),
-    stops: Array.isArray(payload.route?.stops)
-      ? payload.route.stops.map((stop, index) => normalizeBusStop(stop, index))
-      : Array.isArray(existing.route?.stops)
-        ? existing.route.stops.map((stop, index) => normalizeBusStop(stop, index))
-        : [],
-  };
+  const route = normalizeBusRoute(payload.route, existing.route);
+  const returnRoute = normalizeBusRoute(payload.returnRoute, existing.returnRoute);
+  const extraRoutes = normalizeBusExtraRoutes(payload.extraRoutes, existing.extraRoutes);
 
-  const returnRoute = {
-    routeName: sanitizeBusText(payload.returnRoute?.routeName, existing.returnRoute?.routeName || ''),
-    originCity: sanitizeBusText(payload.returnRoute?.originCity, existing.returnRoute?.originCity || ''),
-    destinationCity: sanitizeBusText(payload.returnRoute?.destinationCity, existing.returnRoute?.destinationCity || ''),
-    originCoords: sanitizeBusCoords(payload.returnRoute?.originCoords ?? existing.returnRoute?.originCoords),
-    destinationCoords: sanitizeBusCoords(payload.returnRoute?.destinationCoords ?? existing.returnRoute?.destinationCoords),
-    distanceKm: sanitizeBusText(payload.returnRoute?.distanceKm, existing.returnRoute?.distanceKm || ''),
-    durationHours: sanitizeBusText(payload.returnRoute?.durationHours, existing.returnRoute?.durationHours || ''),
-    stops: Array.isArray(payload.returnRoute?.stops)
-      ? payload.returnRoute.stops.map((stop, index) => normalizeBusStop(stop, index))
-      : Array.isArray(existing.returnRoute?.stops)
-        ? existing.returnRoute.stops.map((stop, index) => normalizeBusStop(stop, index))
-        : [],
-  };
-
-  const schedules = Array.isArray(payload.schedules)
+  const routeKeys = new Set(['main', ...extraRoutes.map((item) => item.id)]);
+  const returnRouteEnabled = Boolean(payload.returnRouteEnabled ?? existing.returnRouteEnabled ?? false);
+  if (returnRouteEnabled) routeKeys.add('return');
+  const schedules = (Array.isArray(payload.schedules)
     ? payload.schedules.map((schedule, index) => normalizeBusSchedule(schedule, index))
     : Array.isArray(existing.schedules)
       ? existing.schedules.map((schedule, index) => normalizeBusSchedule(schedule, index))
-      : [];
+      : []
+  ).map((schedule) => (routeKeys.has(schedule.routeKey) ? schedule : { ...schedule, routeKey: 'main' }));
 
   const cancellationRules = Array.isArray(payload.cancellationRules)
     ? payload.cancellationRules.map((rule, index) => normalizeBusCancellationRule(rule, index))
@@ -848,8 +857,9 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
         : [],
     blueprint,
     route,
-    returnRouteEnabled: Boolean(payload.returnRouteEnabled ?? existing.returnRouteEnabled ?? false),
+    returnRouteEnabled,
     returnRoute,
+    extraRoutes,
     schedules,
     capacity,
     status: ['draft', 'active', 'paused'].includes(payload.status) ? payload.status : existing.status || 'draft',
@@ -898,31 +908,10 @@ const serializeBusService = (item = {}) => ({
     lowerDeck: normalizeBusDeck(item.blueprint?.lowerDeck || []),
     upperDeck: normalizeBusDeck(item.blueprint?.upperDeck || []),
   },
-  route: {
-    routeName: item.route?.routeName || '',
-    originCity: item.route?.originCity || '',
-    destinationCity: item.route?.destinationCity || '',
-    originCoords: sanitizeBusCoords(item.route?.originCoords),
-    destinationCoords: sanitizeBusCoords(item.route?.destinationCoords),
-    distanceKm: item.route?.distanceKm || '',
-    durationHours: item.route?.durationHours || '',
-    stops: Array.isArray(item.route?.stops)
-      ? item.route.stops.map((stop, index) => normalizeBusStop(stop, index))
-      : [],
-  },
+  route: normalizeBusRoute(item.route),
   returnRouteEnabled: Boolean(item.returnRouteEnabled),
-  returnRoute: {
-    routeName: item.returnRoute?.routeName || '',
-    originCity: item.returnRoute?.originCity || '',
-    destinationCity: item.returnRoute?.destinationCity || '',
-    originCoords: sanitizeBusCoords(item.returnRoute?.originCoords),
-    destinationCoords: sanitizeBusCoords(item.returnRoute?.destinationCoords),
-    distanceKm: item.returnRoute?.distanceKm || '',
-    durationHours: item.returnRoute?.durationHours || '',
-    stops: Array.isArray(item.returnRoute?.stops)
-      ? item.returnRoute.stops.map((stop, index) => normalizeBusStop(stop, index))
-      : [],
-  },
+  returnRoute: normalizeBusRoute(item.returnRoute),
+  extraRoutes: normalizeBusExtraRoutes(item.extraRoutes),
   schedules: Array.isArray(item.schedules)
     ? item.schedules.map((schedule, index) => normalizeBusSchedule(schedule, index))
     : [],

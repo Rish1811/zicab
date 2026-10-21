@@ -68,6 +68,7 @@ import {
   summarizePhonePeRequestBody,
 } from '../../services/paymentDiagnostics.js';
 import { getRequestClientIp } from '../../../../utils/clientIp.js';
+import { listBusRoutes, withScheduleRoute } from '../../bus/utils/busRoutes.js';
 
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say', '']);
 
@@ -988,9 +989,10 @@ const formatBusStopLabel = (stop = null, fallback = '') => {
   ].filter(Boolean).join(', ') || fallback;
 };
 
-const serializeBusBooking = (booking, busService = null) => {
-  const quote = busService ? computeBusCancellationQuote({ booking, busService }) : null;
-  const schedule = busService ? findBusSchedule(busService, booking?.scheduleId) : null;
+const serializeBusBooking = (booking, rawBusService = null) => {
+  const quote = rawBusService ? computeBusCancellationQuote({ booking, busService: rawBusService }) : null;
+  const schedule = rawBusService ? findBusSchedule(rawBusService, booking?.scheduleId) : null;
+  const busService = withScheduleRoute(rawBusService, schedule);
   const arrivalTime = schedule?.arrivalTime || booking?.routeSnapshot?.arrivalTime || '';
   const departureTime = schedule?.departureTime || booking?.routeSnapshot?.departureTime || '';
   let arrivalDateTime = parseBusDateTime(booking?.travelDate, arrivalTime);
@@ -3184,10 +3186,15 @@ export const searchBuses = async (req, res) => {
     throw new ApiError(400, 'fromCity and toCity are required');
   }
 
+  const fromRegex = buildBusCityRegex(fromCity);
+  const toRegex = buildBusCityRegex(toCity);
   const items = await BusService.find({
     status: 'active',
-    'route.originCity': buildBusCityRegex(fromCity),
-    'route.destinationCity': buildBusCityRegex(toCity),
+    $or: [
+      { 'route.originCity': fromRegex, 'route.destinationCity': toRegex },
+      { returnRouteEnabled: true, 'returnRoute.originCity': fromRegex, 'returnRoute.destinationCity': toRegex },
+      { extraRoutes: { $elemMatch: { originCity: fromRegex, destinationCity: toRegex } } },
+    ],
   }).lean();
 
   if (items.length === 0) {
@@ -3224,11 +3231,15 @@ export const searchBuses = async (req, res) => {
 
     return schedules
       .filter((schedule) => isScheduleAvailableOnDate(schedule, travelDate))
-      .map((schedule) => {
+      .map((schedule) => ({ schedule, routedBus: withScheduleRoute(busService, schedule) }))
+      .filter(({ routedBus }) =>
+        fromRegex.test(toCleanString(routedBus.route?.originCity)) &&
+        toRegex.test(toCleanString(routedBus.route?.destinationCity)))
+      .map(({ schedule, routedBus }) => {
         const reservedSeats = reservedCountMap.get(`${String(busService._id)}:${String(schedule.id)}`) || 0;
         return {
           ...serializeBusSearchResult({
-            busService,
+            busService: routedBus,
             schedule,
             travelDate,
             availableSeats: totalSeats - reservedSeats,
@@ -3252,14 +3263,14 @@ export const getBusRouteSuggestions = async (_req, res) => {
   await ensureBusServiceEnabled();
 
   const items = await BusService.find({ status: 'active' })
-    .select('route operatorName seatPrice createdAt')
+    .select('route returnRouteEnabled returnRoute extraRoutes operatorName seatPrice createdAt')
     .sort({ createdAt: -1 })
     .lean();
 
   const seenRoutes = new Map();
   const results = [];
 
-  items.forEach((busService) => {
+  items.flatMap((busService) => listBusRoutes(busService).map((route) => ({ ...busService, route }))).forEach((busService) => {
     const fromCity = toCleanString(busService.route?.originCity);
     const toCity = toCleanString(busService.route?.destinationCity);
 
@@ -3356,7 +3367,7 @@ export const getBusSeatLayout = async (req, res) => {
       travelDate,
       availableSeats,
       bus: serializeBusSearchResult({
-        busService,
+        busService: withScheduleRoute(busService, schedule),
         schedule,
         travelDate,
         availableSeats,
@@ -3416,7 +3427,8 @@ export const createBusBookingOrder = async (req, res) => {
     throw new ApiError(400, `Seat ${invalidSeat} is not available for booking`);
   }
 
-  const routeStops = Array.isArray(busService.route?.stops) ? busService.route.stops : [];
+  const scheduleRoute = withScheduleRoute(busService, schedule).route || {};
+  const routeStops = Array.isArray(scheduleRoute.stops) ? scheduleRoute.stops : [];
   const pickBusStop = (stopId, allowedTypes, label, preferArrival) => {
     const id = toCleanString(stopId);
     if (!id) {
@@ -3502,11 +3514,11 @@ export const createBusBookingOrder = async (req, res) => {
     status: 'pending',
     expiresAt,
     routeSnapshot: {
-      originCity: busService.route?.originCity || '',
-      destinationCity: busService.route?.destinationCity || '',
+      originCity: scheduleRoute.originCity || '',
+      destinationCity: scheduleRoute.destinationCity || '',
       departureTime: schedule.departureTime || '',
       arrivalTime: schedule.arrivalTime || '',
-      durationHours: busService.route?.durationHours || '',
+      durationHours: scheduleRoute.durationHours || '',
       busName: busService.busName || '',
       operatorName: busService.operatorName || '',
       coachType: busService.coachType || '',
