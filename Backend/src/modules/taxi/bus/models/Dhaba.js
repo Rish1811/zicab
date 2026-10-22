@@ -4,6 +4,9 @@ const menuItemSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     description: { type: String, default: '', trim: true },
+    // The shared food category (FoodCategory) the dish is filed under.
+    // `category` keeps its name as text for older app builds.
+    categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxiFoodCategory', default: null },
     category: { type: String, default: 'Meals', trim: true },
     price: { type: Number, required: true, min: 0 },
     isVeg: { type: Boolean, default: true },

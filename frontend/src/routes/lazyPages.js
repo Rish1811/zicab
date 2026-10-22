@@ -209,6 +209,7 @@ export const AdminBusBookingManager = lazy(() => import('../modules/admin/pages/
 export const AdminBusCommissionManager = lazy(() => import('../modules/admin/pages/bus-service/BusCommissionManager'));
 export const AdminZibusDhabaPartners = lazy(() => import('../modules/admin/pages/zibus/DhabaPartners'));
 export const AdminZibusDhabaOrders = lazy(() => import('../modules/admin/pages/zibus/DhabaOrdersAdmin'));
+export const AdminZibusFoodCategories = lazy(() => import('../modules/admin/pages/zibus/FoodCategories'));
 export const AdminZibusBookingChannels = lazy(() => import('../modules/admin/pages/zibus/BookingChannels'));
 export const AdminZibusSeatInventory = lazy(() => import('../modules/admin/pages/zibus/SeatInventory'));
 export const AdminZibusBusOperators = lazy(() => import('../modules/admin/pages/zibus/BusOperators'));

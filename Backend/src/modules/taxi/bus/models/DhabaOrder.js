@@ -28,6 +28,9 @@ const orderItemSchema = new mongoose.Schema(
     price: { type: Number, required: true },
     quantity: { type: Number, required: true, min: 1 },
     isVeg: { type: Boolean, default: true },
+    // Snapshots, so order screens keep the dish photo and section.
+    image: { type: String, default: '' },
+    category: { type: String, default: '' },
   },
   { _id: false },
 );

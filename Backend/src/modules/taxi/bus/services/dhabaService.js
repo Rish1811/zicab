@@ -9,6 +9,7 @@ import { refundRazorpayPayment } from './busRefundService.js';
 import { Dhaba } from '../models/Dhaba.js';
 import { DHABA_STATUS_TRANSITIONS, DhabaOrder } from '../models/DhabaOrder.js';
 import { haversineKm, resolveTripWindow } from '../utils/busTime.js';
+import { groupMenuByCategory, listFoodCategories } from './foodCategoryService.js';
 import { getBusSocketServer, onBusBookingsExpired } from './busSeatSyncService.js';
 
 export const DHABA_SOCKET_EVENTS = Object.freeze({
@@ -46,6 +47,7 @@ export const serializeMenuItem = (item) => ({
   id: String(item._id),
   name: item.name,
   description: item.description || '',
+  categoryId: item.categoryId ? String(item.categoryId) : '',
   category: item.category || 'Meals',
   price: Number(item.price || 0),
   isVeg: item.isVeg !== false,
@@ -103,6 +105,8 @@ export const serializeDhabaOrder = (order, { forDhaba = false } = {}) => ({
     price: Number(item.price || 0),
     quantity: Number(item.quantity || 0),
     isVeg: item.isVeg !== false,
+    image: item.image || '',
+    category: item.category || '',
   })),
   amount: Number(order.amount || 0),
   ...(forDhaba
@@ -156,11 +160,14 @@ export const listDhabasForTrip = async ({ busServiceId, schedule, travelDate, no
     return [];
   }
 
-  const dhabas = await Dhaba.find({
-    active: true,
-    acceptingOrders: true,
-    'busStops.busServiceId': busServiceId,
-  }).lean();
+  const [dhabas, categories] = await Promise.all([
+    Dhaba.find({
+      active: true,
+      acceptingOrders: true,
+      'busStops.busServiceId': busServiceId,
+    }).lean(),
+    listFoodCategories(),
+  ]);
 
   const earliest = now.getTime() + MIN_ORDER_LEAD_MINUTES * 60_000;
 
@@ -176,7 +183,11 @@ export const listDhabasForTrip = async ({ busServiceId, schedule, travelDate, no
         return null;
       }
 
-      const menu = (dhaba.menu || []).filter((item) => item.available !== false).map(serializeMenuItem);
+      const available = (dhaba.menu || []).filter((item) => item.available !== false).map(serializeMenuItem);
+      // Main categories with their dishes nested, in the admin's order. A
+      // switched-off category hides its dishes, so they can't be ordered.
+      const grouped = groupMenuByCategory(available, categories);
+      const menu = grouped.flatMap((group) => group.items);
       if (!menu.length) {
         return null;
       }
@@ -184,6 +195,7 @@ export const listDhabasForTrip = async ({ busServiceId, schedule, travelDate, no
       return {
         ...serializeDhaba(dhaba, { includeMenu: false }),
         menu,
+        categories: grouped,
         expectedArrivalAt,
         haltMinutes: Number(link.haltMinutes || 0),
       };
@@ -240,6 +252,8 @@ export const priceFoodSelection = async ({ busServiceId, schedule, travelDate, f
         price: menuItem.price,
         quantity: requestedItem.quantity,
         isVeg: menuItem.isVeg,
+        image: menuItem.image || '',
+        category: menuItem.category || '',
       };
     });
 

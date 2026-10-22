@@ -16,6 +16,7 @@ import {
   AdminZibusBusOperators,
   AdminZibusDhabaOrders,
   AdminZibusDhabaPartners,
+  AdminZibusFoodCategories,
   AdminZibusSeatInventory,
   AdminBusServiceDetails,
   AdminBusServiceManager,
@@ -234,6 +235,7 @@ const adminRoutes = (
       <Route path="dhabas/rejected" element={<AdminZibusDhabaPartners />} />
       <Route path="dhabas/payouts" element={<AdminZibusDhabaPartners />} />
       <Route path="dhabas/orders" element={<AdminZibusDhabaOrders />} />
+      <Route path="dhabas/food-categories" element={<AdminZibusFoodCategories />} />
       <Route path="bus-service/:id" element={<AdminBusServiceDetails />} />
       <Route path="pooling" element={<Navigate to="/admin/pooling/routes" replace />} />
       <Route path="pooling/routes" element={<AdminPoolingManager />} />

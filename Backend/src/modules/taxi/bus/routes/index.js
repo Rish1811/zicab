@@ -31,6 +31,7 @@ import {
   deleteMenuItem,
   getMyDhaba,
   getMyOrderSummary,
+  listMyFoodCategories,
   listMyMenu,
   listMyOrders,
   loginDhaba,
@@ -67,6 +68,11 @@ import {
   adminUpdateDhabaMenuItem,
   getMyDhabaLedger,
   registerDhaba,
+  adminListFoodCategories,
+  adminCreateFoodCategory,
+  adminUpdateFoodCategory,
+  adminDeleteFoodCategory,
+  adminReorderFoodCategories,
 } from '../controllers/dhabaPartnerController.js';
 import { authenticateChannel } from '../services/busChannelService.js';
 
@@ -105,6 +111,7 @@ busModuleRouter.get('/dhaba/me', asDhaba, asyncHandler(getMyDhaba));
 busModuleRouter.patch('/dhaba/me', asDhaba, asyncHandler(updateMyDhaba));
 busModuleRouter.post('/dhaba/me/push-token', asDhaba, asyncHandler(saveMyDhabaPushToken));
 busModuleRouter.get('/dhaba/menu', asDhaba, asyncHandler(listMyMenu));
+busModuleRouter.get('/dhaba/food-categories', asDhaba, asyncHandler(listMyFoodCategories));
 busModuleRouter.post('/dhaba/menu', asDhaba, asyncHandler(addMenuItem));
 busModuleRouter.patch('/dhaba/menu/:itemId', asDhaba, asyncHandler(updateMenuItem));
 busModuleRouter.delete('/dhaba/menu/:itemId', asDhaba, asyncHandler(deleteMenuItem));
@@ -122,6 +129,11 @@ busModuleRouter.get('/admin/zibus/dhaba-orders', asAdmin, asyncHandler(adminList
 busModuleRouter.get('/admin/zibus/dhabas/pending-count', asAdmin, asyncHandler(adminCountPendingDhabas));
 busModuleRouter.post('/admin/zibus/dhabas/:id/approve', asAdmin, asyncHandler(adminApproveDhaba));
 busModuleRouter.post('/admin/zibus/dhabas/:id/reject', asAdmin, asyncHandler(adminRejectDhaba));
+busModuleRouter.get('/admin/zibus/food-categories', asAdmin, asyncHandler(adminListFoodCategories));
+busModuleRouter.post('/admin/zibus/food-categories', asAdmin, asyncHandler(adminCreateFoodCategory));
+busModuleRouter.post('/admin/zibus/food-categories/reorder', asAdmin, asyncHandler(adminReorderFoodCategories));
+busModuleRouter.patch('/admin/zibus/food-categories/:id', asAdmin, asyncHandler(adminUpdateFoodCategory));
+busModuleRouter.delete('/admin/zibus/food-categories/:id', asAdmin, asyncHandler(adminDeleteFoodCategory));
 busModuleRouter.get('/admin/zibus/dhabas/:id/menu', asAdmin, asyncHandler(adminListDhabaMenu));
 busModuleRouter.post('/admin/zibus/dhabas/:id/menu', asAdmin, asyncHandler(adminAddDhabaMenuItem));
 busModuleRouter.patch('/admin/zibus/dhabas/:id/menu/:itemId', asAdmin, asyncHandler(adminUpdateDhabaMenuItem));

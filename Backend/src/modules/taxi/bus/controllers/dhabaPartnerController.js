@@ -6,7 +6,14 @@ import { Dhaba } from '../models/Dhaba.js';
 import { DhabaPayout } from '../models/DhabaPayout.js';
 import { serializeDhaba, serializeMenuItem } from '../services/dhabaService.js';
 import { computeDhabaLedgers, getDhabaLedger, serializeDhabaPayout } from '../services/dhabaLedgerService.js';
-import { normalizeDhabaPhone, readMenuItemInput } from './dhabaController.js';
+import {
+  createFoodCategory,
+  deleteFoodCategory,
+  listFoodCategoriesWithCounts,
+  reorderFoodCategories,
+  updateFoodCategory,
+} from '../services/foodCategoryService.js';
+import { normalizeDhabaPhone, readMenuItemPayload } from './dhabaController.js';
 
 const ok = (res, data, status = 200) => res.status(status).json({ success: true, data });
 
@@ -176,6 +183,28 @@ export const adminRejectDhaba = async (req, res) => {
   ok(res, serializeDhaba(dhaba, { includeStops: true }));
 };
 
+// --------------------------------------------------------- food categories
+
+export const adminListFoodCategories = async (_req, res) => {
+  ok(res, await listFoodCategoriesWithCounts());
+};
+
+export const adminCreateFoodCategory = async (req, res) => {
+  ok(res, await createFoodCategory(req.body), 201);
+};
+
+export const adminUpdateFoodCategory = async (req, res) => {
+  ok(res, await updateFoodCategory(req.params.id, req.body));
+};
+
+export const adminDeleteFoodCategory = async (req, res) => {
+  ok(res, await deleteFoodCategory(req.params.id));
+};
+
+export const adminReorderFoodCategories = async (req, res) => {
+  ok(res, await reorderFoodCategories(req.body?.ids));
+};
+
 // -------------------------------------------------------------- admin menu
 
 export const adminListDhabaMenu = async (req, res) => {
@@ -188,7 +217,7 @@ export const adminAddDhabaMenuItem = async (req, res) => {
   if ((dhaba.menu || []).length >= 300) {
     throw new ApiError(400, 'Menu is limited to 300 items');
   }
-  dhaba.menu.push(readMenuItemInput(req.body));
+  dhaba.menu.push(await readMenuItemPayload(req.body, { dhabaId: dhaba._id }));
   await dhaba.save();
   ok(res, serializeMenuItem(dhaba.menu[dhaba.menu.length - 1]), 201);
 };
@@ -199,7 +228,7 @@ export const adminUpdateDhabaMenuItem = async (req, res) => {
   if (!item) {
     throw new ApiError(404, 'Menu item not found');
   }
-  Object.assign(item, readMenuItemInput(req.body, { partial: true }));
+  Object.assign(item, await readMenuItemPayload(req.body, { partial: true, dhabaId: dhaba._id }));
   await dhaba.save();
   ok(res, serializeMenuItem(item));
 };

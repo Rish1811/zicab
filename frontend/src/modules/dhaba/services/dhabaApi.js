@@ -36,6 +36,7 @@ export const dhabaApi = {
   addMenuItem: (payload) => api.post('/dhaba/menu', payload, auth()).then(data),
   updateMenuItem: (id, payload) => api.patch(`/dhaba/menu/${id}`, payload, auth()).then(data),
   deleteMenuItem: (id) => api.delete(`/dhaba/menu/${id}`, auth()).then(data),
+  foodCategories: () => api.get('/dhaba/food-categories', auth()).then(data),
   orders: (scope) => api.get('/dhaba/orders', { ...auth(), params: { scope } }).then(data),
   summary: () => api.get('/dhaba/orders/summary', auth()).then(data),
   setOrderStatus: (id, status, note = '') =>

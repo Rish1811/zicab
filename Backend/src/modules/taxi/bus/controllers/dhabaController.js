@@ -14,6 +14,12 @@ import {
   updateDhabaOrderStatus,
 } from '../services/dhabaService.js';
 import { getBusSocketServer } from '../services/busSeatSyncService.js';
+import {
+  listFoodCategories,
+  requireActiveFoodCategory,
+  resolveFoodImage,
+  serializeFoodCategory,
+} from '../services/foodCategoryService.js';
 
 export const normalizeDhabaPhone = (value) => String(value || '').replace(/\D/g, '').slice(-10);
 
@@ -105,6 +111,31 @@ export const readMenuItemInput = (body = {}, { partial = false } = {}) => {
   return item;
 };
 
+/// readMenuItemInput plus the parts that need the database: the dish is filed
+/// under a shared food category (required for a new dish), and a photo sent as
+/// a data URL is uploaded.
+export const readMenuItemPayload = async (body = {}, { partial = false, dhabaId = '' } = {}) => {
+  const item = readMenuItemInput(body, { partial });
+  const categoryId = body.categoryId ?? body.category_id;
+  if (categoryId !== undefined || !partial) {
+    const category = await requireActiveFoodCategory(categoryId);
+    item.categoryId = category._id;
+    item.category = category.name;
+  } else {
+    delete item.category;
+  }
+  if (body.image !== undefined) {
+    item.image = await resolveFoodImage(body.image, { prefix: 'dhaba-dish', suffix: `${dhabaId}-${Date.now()}` });
+  }
+  return item;
+};
+
+/// The shared categories a dhaba can file dishes under.
+export const listMyFoodCategories = async (_req, res) => {
+  const categories = await listFoodCategories({ activeOnly: true });
+  ok(res, categories.map((category) => serializeFoodCategory(category)));
+};
+
 export const listMyMenu = async (req, res) => {
   const dhaba = await loadMyDhaba(req);
   ok(res, (dhaba.menu || []).map(serializeMenuItem));
@@ -115,7 +146,7 @@ export const addMenuItem = async (req, res) => {
   if ((dhaba.menu || []).length >= 300) {
     throw new ApiError(400, 'Menu is limited to 300 items');
   }
-  dhaba.menu.push(readMenuItemInput(req.body));
+  dhaba.menu.push(await readMenuItemPayload(req.body, { dhabaId: dhaba._id }));
   await dhaba.save();
   ok(res, serializeMenuItem(dhaba.menu[dhaba.menu.length - 1]), 201);
 };
@@ -126,7 +157,7 @@ export const updateMenuItem = async (req, res) => {
   if (!item) {
     throw new ApiError(404, 'Menu item not found');
   }
-  Object.assign(item, readMenuItemInput(req.body, { partial: true }));
+  Object.assign(item, await readMenuItemPayload(req.body, { partial: true, dhabaId: dhaba._id }));
   await dhaba.save();
   ok(res, serializeMenuItem(item));
 };

@@ -124,6 +124,7 @@ export const ADMIN_SIDEBAR_SECTIONS = [
           { label: 'Dhaba Partners', path: '/admin/dhabas', permission: 'bus_service.view' },
           { label: 'Pending Approvals', path: '/admin/dhabas/pending', permission: 'bus_service.view' },
           { label: 'Rejected Applications', path: '/admin/dhabas/rejected', permission: 'bus_service.view' },
+          { label: 'Food Categories', path: '/admin/dhabas/food-categories', permission: 'bus_service.view' },
           { label: 'Food Orders', path: '/admin/dhabas/orders', permission: 'bus_service.view' },
           { label: 'Payouts & Commission', path: '/admin/dhabas/payouts', permission: 'bus_service.view' },
         ],
