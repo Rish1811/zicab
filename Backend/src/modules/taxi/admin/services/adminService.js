@@ -5445,16 +5445,48 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
     update.registerFor = normalizeDriverRegisterFor(transportTypeValue);
   }
 
-  const vehicleTypeValue = payload.vehicle_type ?? payload.vehicleType ?? payload.car_type;
-  if (vehicleTypeValue !== undefined) {
-    update.vehicleType = String(vehicleTypeValue || '').trim().toLowerCase() || 'car';
+  const serviceCategoriesValue = payload.service_categories ?? payload.serviceCategories;
+  if (serviceCategoriesValue !== undefined) {
+    update.serviceCategories = normalizeDriverServiceCategories(serviceCategoriesValue, update.registerFor || 'taxi');
   }
 
-  const vehicleTypeId =
+  // The cab types the driver gets requests for (ZI Cab AC, Non-AC, Cab + ...).
+  // A list replaces the whole enrolment, first entry primary - the same shape
+  // onboarding saves. The generic family and icon come from the first type, so
+  // an admin correction can't leave the marker or dispatch on the old one.
+  const vehicleTypeIdsValue = payload.vehicle_type_ids ?? payload.vehicleTypeIds;
+  const singleVehicleTypeId =
     payload.vehicle_type_id ?? payload.vehicleTypeId ?? payload.vehicleType?._id ?? payload.vehicleType?.id;
-  if (vehicleTypeId !== undefined) {
-    update.vehicleTypeId =
-      vehicleTypeId && mongoose.isValidObjectId(vehicleTypeId) ? toObjectId(vehicleTypeId) : null;
+  const requestedVehicleTypeIds = Array.isArray(vehicleTypeIdsValue)
+    ? vehicleTypeIdsValue
+    : singleVehicleTypeId !== undefined && singleVehicleTypeId !== null && typeof singleVehicleTypeId !== 'object'
+      ? [singleVehicleTypeId]
+      : null;
+
+  if (requestedVehicleTypeIds) {
+    const ids = [...new Set(requestedVehicleTypeIds.map((value) => String(value || '').trim()).filter(Boolean))];
+    if (!ids.length) {
+      throw new ApiError(400, 'Select at least one vehicle type');
+    }
+    if (ids.some((value) => !mongoose.isValidObjectId(value))) {
+      throw new ApiError(400, 'Invalid vehicle type');
+    }
+    const found = await Vehicle.find({ _id: { $in: ids } }).select('name icon_types').lean();
+    const ordered = ids.map((value) => found.find((item) => String(item._id) === value)).filter(Boolean);
+    if (ordered.length !== ids.length) {
+      throw new ApiError(404, 'Vehicle type not found');
+    }
+    const primary = ordered[0];
+    const family = String(primary.icon_types || primary.name || '').toLowerCase();
+    update.vehicleTypeIds = ordered.map((item) => item._id);
+    update.vehicleTypeId = primary._id;
+    update.vehicleType = family.includes('bike') ? 'bike' : family.includes('auto') ? 'auto' : 'car';
+    update.vehicleIconType = primary.icon_types || update.vehicleType;
+  } else {
+    const vehicleTypeValue = payload.vehicle_type ?? payload.vehicleType ?? payload.car_type;
+    if (vehicleTypeValue !== undefined && typeof vehicleTypeValue !== 'object') {
+      update.vehicleType = String(vehicleTypeValue || '').trim().toLowerCase() || 'car';
+    }
   }
 
   if (payload.vehicle_make !== undefined || payload.vehicleMake !== undefined || payload.car_make !== undefined) {

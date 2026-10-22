@@ -23,6 +23,7 @@ const serviceCategoryOptions = [
   { value: 'outstation', label: 'Outstation' },
   { value: 'delivery', label: 'Delivery' },
   { value: 'pooling', label: 'Pooling' },
+  { value: 'airport', label: 'Zi Airport' },
 ];
 
 const normalizeTransportTypeForSelect = (value, options = []) => {
@@ -103,6 +104,8 @@ const EditDriver = () => {
     transportType: 'taxi',
     serviceCategories: ['taxi'],
     vehicleType: '',
+    // Every cab type the driver is enrolled in; the first is the main one.
+    vehicleTypeIds: [],
     vehicleMake: '',
     vehicleModel: '',
     vehicleYear: '',
@@ -189,6 +192,12 @@ const EditDriver = () => {
               d.transport_type || d.register_for || d.registerFor || onboardingVehicle.registerFor || 'taxi',
             ),
             vehicleType: savedVehicleTypeId || savedVehicleTypeLabel || '',
+            vehicleTypeIds: (Array.isArray(d.vehicle_type_ids) && d.vehicle_type_ids.length
+              ? d.vehicle_type_ids
+              : [savedVehicleTypeId]
+            )
+              .map((value) => String(value?._id || value || ''))
+              .filter((value) => /^[a-f0-9]{24}$/i.test(value)),
             vehicleMake: d.car_make || d.vehicle_make || d.vehicleMake || onboardingVehicle.make || '',
             vehicleModel: d.car_model || d.vehicle_model || d.vehicleModel || onboardingVehicle.model || '',
             vehicleYear: d.car_year || d.vehicle_year || d.vehicleYear || onboardingVehicle.year || '',
@@ -256,7 +265,11 @@ const EditDriver = () => {
     });
 
     if (matchedVehicleType?._id) {
-      setFormData((prev) => ({ ...prev, vehicleType: String(matchedVehicleType._id) }));
+      setFormData((prev) => ({
+        ...prev,
+        vehicleType: String(matchedVehicleType._id),
+        vehicleTypeIds: prev.vehicleTypeIds.length ? prev.vehicleTypeIds : [String(matchedVehicleType._id)],
+      }));
     }
   }, [vehicleTypes, formData.vehicleType]);
 
@@ -291,6 +304,15 @@ const EditDriver = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const toggleVehicleType = (value) => {
+    setFormData((prev) => {
+      const nextIds = prev.vehicleTypeIds.includes(value)
+        ? prev.vehicleTypeIds.filter((item) => item !== value)
+        : [...prev.vehicleTypeIds, value];
+      return { ...prev, vehicleTypeIds: nextIds, vehicleType: nextIds[0] || '' };
+    });
+  };
+
   const toggleServiceCategory = (value) => {
     setFormData((prev) => {
       const exists = prev.serviceCategories.includes(value);
@@ -318,11 +340,15 @@ const EditDriver = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.vehicleTypeIds.length) {
+      setError('Select at least one vehicle type');
+      return;
+    }
     setIsLoading(true);
     setError('');
     
     try {
-      const selectedVehicleType = vehicleTypes.find((item) => String(getVehicleTypeId(item)) === String(formData.vehicleType));
+      const selectedVehicleType = vehicleTypes.find((item) => String(getVehicleTypeId(item)) === String(formData.vehicleTypeIds[0]));
       const selectedVehicleTypeLabel = selectedVehicleType
         ? getVehicleTypeLabel(selectedVehicleType)
         : vehicleTypeFallbackOption?.label || formData.vehicleType;
@@ -341,9 +367,9 @@ const EditDriver = () => {
         car_year: formData.vehicleYear,
         car_color: formData.vehicleColor,
         car_number: formData.vehicleNumber,
-        car_type: formData.vehicleType,
-        vehicle_type_id: formData.vehicleType,
-        vehicle_type: selectedVehicleTypeLabel,
+        // The server derives the driver's car/bike/auto family from these.
+        vehicle_type_ids: formData.vehicleTypeIds,
+        vehicle_type_id: formData.vehicleTypeIds[0],
         zone_id: formData.zoneId || null,
         service_location_id: formData.area,
         country: formData.country,
@@ -352,7 +378,8 @@ const EditDriver = () => {
             registerFor: formData.transportType.toLowerCase(),
             serviceCategories: formData.serviceCategories,
             locationId: formData.area,
-            vehicleTypeId: formData.vehicleType,
+            vehicleTypeId: formData.vehicleTypeIds[0],
+            vehicleTypeIds: formData.vehicleTypeIds,
             vehicleType: selectedVehicleTypeLabel,
             make: formData.vehicleMake,
             model: formData.vehicleModel,
@@ -613,24 +640,51 @@ const EditDriver = () => {
                 </p>
               </div>
 
-              <div>
-                <label className={labelClass}>Vehicle Type *</label>
-                <select 
-                  name="vehicleType"
-                  required
-                  value={formData.vehicleType}
-                  onChange={handleChange}
-                  className={inputClass}
-                >
-                  <option value="">Select Vehicle Type</option>
-                  {vehicleTypeFallbackOption &&
-                  !vehicleTypes.some((vt) => String(getVehicleTypeId(vt)) === String(vehicleTypeFallbackOption.value)) ? (
-                    <option value={vehicleTypeFallbackOption.value}>{vehicleTypeFallbackOption.label}</option>
+              <div className="md:col-span-2">
+                <label className={labelClass}>Vehicle Types *</label>
+                <div className="flex flex-wrap gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  {vehicleTypes.map((vt) => {
+                    const vtId = getVehicleTypeId(vt);
+                    const position = formData.vehicleTypeIds.indexOf(vtId);
+                    const selected = position !== -1;
+                    return (
+                      <button
+                        key={vtId}
+                        type="button"
+                        onClick={() => toggleVehicleType(vtId)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          selected
+                            ? 'bg-yellow-400 text-black'
+                            : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        {getVehicleTypeLabel(vt)}
+                        {position === 0 && formData.vehicleTypeIds.length > 1 ? ' (main)' : ''}
+                      </button>
+                    );
+                  })}
+                  {/* Saved types this transport type's list doesn't show
+                      (switched off, or on the other side) - still removable. */}
+                  {formData.vehicleTypeIds
+                    .filter((vtId) => !vehicleTypes.some((vt) => getVehicleTypeId(vt) === vtId))
+                    .map((vtId) => (
+                      <button
+                        key={vtId}
+                        type="button"
+                        onClick={() => toggleVehicleType(vtId)}
+                        title="Not in this list - click to remove"
+                        className="rounded-full px-3 py-1.5 text-xs font-semibold bg-yellow-200 text-black border border-yellow-400"
+                      >
+                        {vehicleTypeFallbackOption?.value === vtId ? vehicleTypeFallbackOption.label : 'Other type'} ✕
+                      </button>
+                    ))}
+                  {!vehicleTypes.length && !formData.vehicleTypeIds.length ? (
+                    <span className="text-xs text-gray-500">No vehicle types for this transport type.</span>
                   ) : null}
-                  {vehicleTypes.map(vt => (
-                    <option key={getVehicleTypeId(vt)} value={getVehicleTypeId(vt)}>{getVehicleTypeLabel(vt)}</option>
-                  ))}
-                </select>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Tick every cab type this driver runs (AC, Non-AC, Cab + ...). They get ride requests for all of them; the first ticked is the main one.
+                </p>
               </div>
 
               <div>
