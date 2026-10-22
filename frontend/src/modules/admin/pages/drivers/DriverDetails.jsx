@@ -662,8 +662,10 @@ const DriverDetails = () => {
       ),
     },
     {
-      label: 'Vehicle Type',
+      label: profile?.vehicle_types?.length > 1 ? 'Vehicle Types' : 'Vehicle Type',
+      // Every type the driver enrolled, not just the first one.
       value:
+        (profile?.vehicle_types || []).map((item) => item.name).filter(Boolean).join(', ') ||
         onboardingVehicle.vehicleType ||
         profile?.vehicle?.type ||
         profile?.vehicle_type ||

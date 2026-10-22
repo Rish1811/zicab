@@ -3023,6 +3023,9 @@ export const getCurrentDriver = async (req, res) => {
       gender: driver.gender,
       vehicleType: driver.vehicleType,
       vehicleTypeId: driver.vehicleTypeId,
+      // Every vehicle type the driver enrolled; vehicleTypeId is the first.
+      vehicleTypeIds: driver.vehicleTypeIds || [],
+      serviceCategories: driver.serviceCategories || [],
       vehicleIconType: driver.vehicleIconType,
       vehicleIconUrl,
       vehicleMake: driver.vehicleMake,

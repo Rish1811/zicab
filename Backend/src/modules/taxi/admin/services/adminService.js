@@ -482,7 +482,7 @@ const normalizeDriverVehicleFieldType = (value) => {
 
 const DRIVER_VEHICLE_FIELD_DEFINITIONS = {
   locationId: { label: 'Operating City', field_type: 'location_select', field_group: 'common', account_type: 'both', sort_order: 10 },
-  serviceCategories: { label: 'Service Category', field_type: 'multi_select', field_group: 'driver', account_type: 'individual', sort_order: 20, options: ['taxi', 'outstation', 'delivery', 'pooling'] },
+  serviceCategories: { label: 'Service Category', field_type: 'multi_select', field_group: 'driver', account_type: 'individual', sort_order: 20, options: ['taxi', 'outstation', 'delivery', 'pooling', 'airport'] },
   vehicleTypeId: { label: 'Vehicle Type', field_type: 'vehicle_type_select', field_group: 'driver', account_type: 'individual', sort_order: 30 },
   make: { label: 'Brand / Make', field_type: 'text', field_group: 'driver', account_type: 'individual', sort_order: 40, placeholder: 'e.g. Maruti Suzuki' },
   model: { label: 'Model', field_type: 'text', field_group: 'driver', account_type: 'individual', sort_order: 50, placeholder: 'Swift, Bolt' },
@@ -573,7 +573,7 @@ const normalizeDriverServiceCategories = (value, fallback = 'taxi') => {
     rawValues
       .map((item) => String(item || '').trim().toLowerCase())
       .flatMap((item) => item === 'both' ? ['taxi', 'outstation'] : item ? [item] : [])
-      .filter((item) => ['taxi', 'outstation', 'delivery', 'pooling'].includes(item)),
+      .filter((item) => ['taxi', 'outstation', 'delivery', 'pooling', 'airport'].includes(item)),
   )];
 
   if (normalized.length > 0) {
@@ -2669,6 +2669,7 @@ const serializeDriver = (driver) => ({
   service_categories: Array.isArray(driver.serviceCategories) ? driver.serviceCategories : [],
   vehicle_type: driver.vehicleType || '',
   vehicle_type_id: driver.vehicleTypeId || null,
+  vehicle_type_ids: Array.isArray(driver.vehicleTypeIds) ? driver.vehicleTypeIds : [],
   vehicleIconType: driver.vehicleIconType || driver.vehicleType || '',
   vehicleImage: driver.vehicleImage || '',
   vehicle_make: driver.vehicleMake || '',
@@ -5753,12 +5754,26 @@ export const getDriverProfile = async (id) => {
 
   const documentLabels = await buildDriverDocumentLabelMap();
 
+  // Every vehicle type the driver enrolled (they can pick several at
+  // onboarding), primary first.
+  const vehicleTypeIdList = [...new Set(
+    [driver.vehicleTypeId, ...(driver.vehicleTypeIds || [])].filter(Boolean).map(String),
+  )];
+  const vehicleTypeDocs = vehicleTypeIdList.length
+    ? await Vehicle.find({ _id: { $in: vehicleTypeIdList } }).select('name').lean()
+    : [];
+  const vehicleTypeNames = new Map(vehicleTypeDocs.map((item) => [String(item._id), item.name || '']));
+  const vehicleTypes = vehicleTypeIdList
+    .filter((typeId) => vehicleTypeNames.has(typeId))
+    .map((typeId) => ({ id: typeId, name: vehicleTypeNames.get(typeId) }));
+
   return {
     ...serializeDriver(driver),
+    vehicle_types: vehicleTypes,
     documents: labelDriverDocuments(driver.documents || {}, documentLabels),
     joined_at: driver.createdAt ? new Date(driver.createdAt).toLocaleString('en-IN') : 'N/A',
     vehicle: {
-      type: driver.vehicleType || driver.registerFor || '',
+      type: vehicleTypes.map((item) => item.name).join(', ') || driver.vehicleType || driver.registerFor || '',
       make: driver.vehicleMake || '',
       model: driver.vehicleModel || '',
       color: driver.vehicleColor || '',
@@ -7118,6 +7133,19 @@ export const getVehicleTypeById = async (id) => {
   };
 };
 
+/// The driver onboarding category a home-screen module stands for, or null
+/// for modules drivers don't enrol into here (bus, rental).
+const categoryForAppModule = (module = {}) => {
+  const transport = String(module.transport_type || '').toLowerCase();
+  const service = String(module.service_type || '').toLowerCase();
+  if (transport === 'delivery') return 'delivery';
+  if (service === 'outstation') return 'outstation';
+  if (service === 'bus' || service === 'rental') return null;
+  if (/airport/i.test(module.name || '')) return 'airport';
+  if (service === 'pooling') return 'pooling';
+  return 'taxi';
+};
+
 export const listPublicVehicleCatalog = async () => {
   if (publicVehicleCatalogCache.value && publicVehicleCatalogCache.expiresAt > Date.now()) {
     return publicVehicleCatalogCache.value;
@@ -7168,6 +7196,22 @@ export const listPublicVehicleCatalog = async () => {
   // bidding off left the toggle sitting in the app doing nothing.
   const bidRideSettings = await getBidRideSettings();
 
+  // The driver app's onboarding service categories, worked out from the
+  // modules each vehicle is offered under, so a driver can only enrol a
+  // vehicle for what it actually runs (an auto is never outstation).
+  const appModules = await TaxiAppModule.find({ active: { $ne: 0 } })
+    .select('name transport_type service_type')
+    .lean();
+  const moduleCategory = new Map(appModules.map((module) => [String(module._id), categoryForAppModule(module)]));
+  const serviceCategoriesFor = (item) => {
+    const fromModules = (Array.isArray(item.app_modules) ? item.app_modules : [])
+      .map((id) => moduleCategory.get(String(id)))
+      .filter(Boolean);
+    if (fromModules.length) return [...new Set(fromModules)];
+    // No modules set means every module, so everything its transport allows.
+    return item.transport_type === 'delivery' ? ['delivery'] : ['taxi', 'outstation', 'airport'];
+  };
+
   const results = items.map((item) => ({
     id: String(item._id),
     _id: item._id,
@@ -7183,6 +7227,7 @@ export const listPublicVehicleCatalog = async () => {
     // this vehicle is offered under. Empty means every module — see the
     // schema comment on Vehicle.app_modules for why.
     app_modules: Array.isArray(item.app_modules) ? item.app_modules.map(String) : [],
+    service_categories: serviceCategoriesFor(item),
     delivery_distance_pricing: normalizeDeliveryDistancePricing(item.delivery_distance_pricing),
     service_tax: normalizeDeliveryServiceTax(item.service_tax),
     ...normalizeVehicleCommissionConfig(item),
