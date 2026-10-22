@@ -53,8 +53,8 @@ const InputField = ({ label, name, value, onChange, placeholder, type = "text", 
 /// an ordinary city ride, so it follows the city rule.
 const BIDDING_SERVICES = [
   { key: 'city', label: 'City ride', hint: 'Includes airport pickups and drops' },
-  { key: 'outstation', label: 'Outstation', hint: 'Drivers quote their own fare' },
-  { key: 'parcel', label: 'Parcel and delivery', hint: 'Captains bid their price; the sender accepts a bid' },
+  { key: 'outstation', label: 'Outstation', hint: 'The rider raises their own fare, same as city rides' },
+  { key: 'parcel', label: 'Parcel and delivery', hint: 'The sender raises their own fare, same as city rides' },
 ];
 
 const ToggleRow = ({ label, hint, checked, onChange }) => (
@@ -246,7 +246,7 @@ const BidRideSettings = () => {
 
               <ToggleRow
                  label="Offer riders more fare while they wait"
-                 hint="Shows the &quot;nobody is accepting at this fare, add more&quot; card during the search, even if the rider did not switch bidding on when booking. They start at exactly the fare they were quoted. Outstation is not affected."
+                 hint="Shows the &quot;nobody is accepting at this fare, add more&quot; card during the search, even if the rider did not switch bidding on when booking. They start at exactly the fare they were quoted. Drivers never name their own price."
                  checked={incrementAlways}
                  onChange={(next) => handleChange('user_increment_always', next ? '1' : '0')}
               />

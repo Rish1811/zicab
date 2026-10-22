@@ -2617,6 +2617,13 @@ export const enableRideBidding = async ({ rideId, userId, userMaxBidFare }) => {
   if (!policy.allowed) {
     throw new ApiError(400, 'Bidding is not available for this booking');
   }
+  // Captains naming their price is switched off everywhere (see
+  // resolveBiddingPolicy): parcels negotiate like rides, the sender raises
+  // their own fare. Older app builds still offer "let captains bid" on a
+  // parcel; they get this instead of a switch to a mode we no longer run.
+  if (policy.mode !== 'driver_bid') {
+    throw new ApiError(409, 'Captains do not bid on ZI CAB. Use Raise fare to reach more captains.');
+  }
 
   const baseFare = Math.max(0, Math.round(Number(ride.baseFare || ride.fare || 0)));
   const stepAmount = normalizeBidStepAmount(bidRideSettings.user_bidding_amount_increase_or_decrease);

@@ -306,9 +306,6 @@ export const createRide = async (req, res) => {
     throw new ApiError(400, 'pickup and drop are required');
   }
 
-  console.log('--- TEMPORARY DEBUG LOG ---');
-  console.log('backend received vehicleType (ID):', vehicleTypeId);
-
   const resolvedVehicleTypeId = vehicleTypeId || (Array.isArray(vehicleTypeIds) ? vehicleTypeIds[0] : null);
   if (!resolvedVehicleTypeId) {
     throw new ApiError(400, 'vehicleTypeId is required');
@@ -1262,7 +1259,12 @@ export const getRideBiddingSettings = async (_req, res) => {
         userLowPercentage: toNumber(settings.user_bidding_low_percentage, 10),
         userHighPercentage: toNumber(settings.user_bidding_high_percentage, 20),
         userStepAmount: toNumber(settings.user_bidding_amount_increase_or_decrease, 10),
-        userFareIncreaseWaitMinutes: toNumber(settings.user_fare_increase_wait_minutes, 2),
+        // 0 is a real setting here (raise again straight away), so it can't
+        // fall back to the default like the amounts above.
+        userFareIncreaseWaitMinutes: Number.isFinite(Number(settings.user_fare_increase_wait_minutes))
+          && Number(settings.user_fare_increase_wait_minutes) >= 0
+          ? Number(settings.user_fare_increase_wait_minutes)
+          : 2,
       },
     },
   });
