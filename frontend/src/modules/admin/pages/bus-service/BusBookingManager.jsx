@@ -66,7 +66,11 @@ const formatMonthLabel = (value) => {
   });
 };
 
-const getTodayValue = () => new Date().toISOString().slice(0, 10);
+// Local date (IST), not UTC - before 5:30 AM the UTC date is still yesterday.
+const getTodayValue = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
 const getMonthValue = (value = getTodayValue()) => String(value || '').slice(0, 7);
 
 const formatScheduleTime = (schedule = {}) => {
@@ -553,45 +557,93 @@ const BusBookingManager = () => {
             />
           </div>
 
-          <div className="mb-3 grid grid-cols-7 gap-3 text-center text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+          <div className="mb-2 grid grid-cols-7 gap-1.5 text-center text-[10px] font-black uppercase tracking-[0.15em] text-slate-400 sm:gap-2">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label) => (
               <div key={label}>{label}</div>
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-3">
+          {/* Each day: date, a booking-count badge, then confirmed / pending
+              counts and seats - short enough to fit a narrow cell. */}
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
             {calendarLoading
               ? Array.from({ length: 35 }, (_, index) => (
-                  <div key={`loading-${index}`} className="h-20 rounded-[1.25rem] bg-slate-100 animate-pulse" />
+                  <div key={`loading-${index}`} className="h-[4.75rem] rounded-xl bg-slate-100 animate-pulse" />
                 ))
-              : calendarCells.map((cell) =>
-                  cell.isCurrentMonth ? (
+              : calendarCells.map((cell) => {
+                  if (!cell.isCurrentMonth) {
+                    return <div key={cell.id} className="h-[4.75rem] rounded-xl border border-dashed border-slate-100" />;
+                  }
+                  const total = Number(cell.metrics?.totalBookings || 0);
+                  const confirmed = Number(cell.metrics?.confirmedBookings || 0);
+                  const pending = Number(cell.metrics?.pendingBookings || 0);
+                  const seats = Number(cell.metrics?.totalSeats || 0);
+                  const selected = filters.travelDate === cell.date;
+                  const isToday = cell.date === getTodayValue();
+                  return (
                     <button
                       key={cell.id}
                       type="button"
                       onClick={() => setFilters((current) => ({ ...current, travelDate: cell.date }))}
-                      className={`h-20 rounded-[1.25rem] border p-2 text-left transition-all ${
-                        filters.travelDate === cell.date
-                          ? 'border-black bg-black text-yellow-400 shadow-lg'
-                          : 'border-slate-200 bg-slate-50/70 text-slate-900 hover:border-slate-300'
-                      }`}
+                      title={`${cell.date}: ${total} booking(s), ${confirmed} confirmed, ${pending} pending, ${seats} seat(s)`}
+                      className={`flex h-[4.75rem] min-w-0 flex-col overflow-hidden rounded-xl border p-1.5 text-left transition-all sm:p-2 ${
+                        selected
+                          ? 'border-black bg-black text-white shadow-lg'
+                          : total > 0
+                            ? 'border-slate-200 bg-white text-slate-900 hover:border-slate-400'
+                            : 'border-slate-100 bg-slate-50/60 text-slate-400 hover:border-slate-300'
+                      } ${isToday && !selected ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-black">{Number(cell.date.slice(-2))}</span>
-                        <span className="text-[10px] font-black uppercase tracking-wide">
-                          {cell.metrics?.totalBookings || 0} bk
+                      <div className="flex items-start justify-between gap-1">
+                        <span className={`text-sm font-black leading-none ${selected ? 'text-yellow-400' : ''}`}>
+                          {Number(cell.date.slice(-2))}
                         </span>
+                        {total > 0 ? (
+                          <span
+                            className={`rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                              selected ? 'bg-yellow-400 text-black' : 'bg-slate-900 text-white'
+                            }`}
+                          >
+                            {total}
+                          </span>
+                        ) : null}
                       </div>
-                      <div className="mt-4 space-y-1 text-[11px] font-bold">
-                        <p>{cell.metrics?.confirmedBookings || 0} confirmed</p>
-                        <p>{cell.metrics?.pendingBookings || 0} pending</p>
-                        <p>{cell.metrics?.totalSeats || 0} seats</p>
-                      </div>
+                      {total > 0 ? (
+                        <div className="mt-auto min-w-0 space-y-0.5 text-[10px] font-bold leading-tight">
+                          <div className="flex flex-wrap items-center gap-x-1.5">
+                            {confirmed > 0 ? (
+                              <span className="flex items-center gap-0.5 text-emerald-500">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                {confirmed}
+                              </span>
+                            ) : null}
+                            {pending > 0 ? (
+                              <span className="flex items-center gap-0.5 text-amber-500">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                {pending}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className={`truncate ${selected ? 'text-slate-300' : 'text-slate-500'}`}>
+                            {seats} seat{seats === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="mt-auto text-[10px] font-semibold">No bookings</span>
+                      )}
                     </button>
-                  ) : (
-                    <div key={cell.id} className="h-20 rounded-[1.25rem] border border-dashed border-slate-100 bg-white/70" />
-                  ),
-                )}
+                  );
+                })}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[10px] font-black leading-none text-white">3</span>
+              bookings
+            </span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> confirmed</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> pending</span>
+            <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded ring-2 ring-yellow-400" /> today</span>
           </div>
         </div>
 
