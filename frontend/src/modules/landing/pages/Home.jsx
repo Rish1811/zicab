@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import useReveal from '../hooks/useReveal';
 import useEntrance from '../hooks/useEntrance';
@@ -88,10 +89,26 @@ const Home = ({ openBookingModal, setActiveTab }) => {
   const [drop, setDrop] = useState('');
   const [dateTime, setDateTime] = useState('');
   const [passengers, setPassengers] = useState('1 Passenger');
+  const navigate = useNavigate();
+  const todayKey = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  })();
+  const [busFrom, setBusFrom] = useState('');
+  const [busTo, setBusTo] = useState('');
+  const [busDate, setBusDate] = useState(todayKey);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     openBookingModal();
+  };
+
+  // ZI Bus: straight to the bus results for the route (sign-in is asked for
+  // there if needed).
+  const handleBusSearch = (e) => {
+    e.preventDefault();
+    if (!busFrom.trim() || !busTo.trim()) return;
+    navigate('/bus/list', { state: { fromCity: busFrom.trim(), toCity: busTo.trim(), date: busDate || todayKey } });
   };
 
 
@@ -217,6 +234,7 @@ const fallbackVehicles = [
                   { id: 'city', label: 'City Ride' },
                   { id: 'outstation', label: 'Outstation' },
                   { id: 'airport', label: 'Airport Transfer' },
+                  { id: 'bus', label: 'Bus' },
                 ].map((t) => (
                   <button
                     key={t.id}
@@ -228,6 +246,33 @@ const fallbackVehicles = [
                 ))}
               </div>
 
+              {tab === 'bus' ? (
+                <form onSubmit={handleBusSearch} className="booking-form">
+                  <div className="field-group">
+                    <label>From</label>
+                    <div className="field-input-wrap">
+                      <input type="text" placeholder="Leaving from (city)" value={busFrom} onChange={(e) => setBusFrom(e.target.value)} required />
+                      <MapPin className="field-icon" size={16} color="#00BBA9" />
+                    </div>
+                  </div>
+                  <div className="field-group">
+                    <label>To</label>
+                    <div className="field-input-wrap">
+                      <input type="text" placeholder="Going to (city)" value={busTo} onChange={(e) => setBusTo(e.target.value)} required />
+                      <MapPin className="field-icon" size={16} color="#00BBA9" />
+                    </div>
+                  </div>
+                  <div className="field-group">
+                    <label>Travel Date</label>
+                    <div className="field-input-wrap">
+                      <input type="date" min={todayKey} value={busDate} onChange={(e) => setBusDate(e.target.value)} required />
+                    </div>
+                  </div>
+                  <button type="submit" className="btn btn-teal w-full booking-submit-btn">
+                    Search Buses
+                  </button>
+                </form>
+              ) : (
               <form onSubmit={handleSearchSubmit} className="booking-form">
                 <div className="field-group">
                   <label>Pickup Location</label>
@@ -286,6 +331,7 @@ const fallbackVehicles = [
                   Find My Ride
                 </button>
               </form>
+              )}
             </div>
           </div>
         </div>
