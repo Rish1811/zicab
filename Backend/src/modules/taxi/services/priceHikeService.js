@@ -13,6 +13,7 @@ const SCALED_FIELDS = [
   'time_price',
   'outstation_base_price',
   'outstation_price_per_distance',
+  'outstation_round_trip_price_per_distance',
   'outstation_time_price',
 ];
 

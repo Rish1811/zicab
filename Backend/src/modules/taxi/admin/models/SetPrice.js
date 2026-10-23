@@ -188,6 +188,12 @@ const setPriceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Per-km rate for an outstation ROUND trip (charged on the distance both
+    // ways). 0 means "not set": the one-way rate above applies to it too.
+    outstation_round_trip_price_per_distance: {
+      type: Number,
+      default: 0,
+    },
     outstation_time_price: {
       type: Number,
       default: 0,
