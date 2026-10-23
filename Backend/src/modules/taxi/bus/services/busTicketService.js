@@ -8,6 +8,7 @@ import { DhabaOrder } from '../models/DhabaOrder.js';
 import { findSchedule, parseIstDateTime, resolveTripWindow } from '../utils/busTime.js';
 import { serializeDhabaOrder } from './dhabaService.js';
 import { getBusSocketServer } from './busSeatSyncService.js';
+import { resolveScheduleRoute } from '../utils/busRoutes.js';
 
 /// Passengers can watch the bus from this long before their boarding time.
 export const LIVE_TRACKING_LEAD_MINUTES = 60;
@@ -113,7 +114,7 @@ export const getPassengerLiveTracking = async (booking) => {
   }
 
   const busService = await BusService.findById(booking.busServiceId)
-    .select('schedules liveTracking registrationNumber driverName driverPhone busName')
+    .select('schedules liveTracking registrationNumber driverName driverPhone busName route returnRoute returnRouteEnabled extraRoutes')
     .lean();
   const schedule = findSchedule(busService, booking.scheduleId);
   if (!schedule) {
@@ -126,10 +127,43 @@ export const getPassengerLiveTracking = async (booking) => {
   const closesAt = arrivalAt ? new Date(arrivalAt.getTime() + LIVE_TRACKING_TAIL_MINUTES * 60_000) : null;
   const now = new Date();
 
+  // The run's stops with times and map points, the passenger's own boarding
+  // and dropping stops flagged, so the tracking map can show where they get on.
+  const boardingStopId = String(booking.boardingPoint?.stopId || '');
+  const droppingStopId = String(booking.droppingPoint?.stopId || '');
+  const stops = (resolveScheduleRoute(busService, schedule)?.stops || []).map((stop) => {
+    const lat = Number(stop?.coords?.lat);
+    const lng = Number(stop?.coords?.lng);
+    return {
+      id: String(stop.id || ''),
+      city: stop.city || '',
+      pointName: stop.pointName || '',
+      stopType: stop.stopType || 'pickup',
+      arrivalTime: stop.arrivalTime || '',
+      departureTime: stop.departureTime || '',
+      location: Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null,
+      isBoarding: Boolean(boardingStopId) && String(stop.id) === boardingStopId,
+      isDropping: Boolean(droppingStopId) && String(stop.id) === droppingStopId,
+    };
+  });
+
   const base = {
     boardingAt,
     opensAt,
     closesAt,
+    boardingPoint: {
+      stopId: boardingStopId,
+      city: booking.boardingPoint?.city || '',
+      pointName: booking.boardingPoint?.pointName || '',
+      time: booking.boardingPoint?.time || '',
+    },
+    droppingPoint: {
+      stopId: droppingStopId,
+      city: booking.droppingPoint?.city || '',
+      pointName: booking.droppingPoint?.pointName || '',
+      time: booking.droppingPoint?.time || '',
+    },
+    stops,
     bus: {
       busName: busService?.busName || '',
       registrationNumber: busService?.registrationNumber || '',
