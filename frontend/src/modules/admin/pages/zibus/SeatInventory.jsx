@@ -3,6 +3,7 @@ import { Loader2, Printer, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getAdminBuses } from '../../services/busService';
 import { zibusAdminService } from '../../services/zibusAdminService';
+import HorizontalSeatMap from '../bus-service/HorizontalSeatMap';
 
 const today = () => new Date().toLocaleDateString('en-CA');
 const inputClass = 'rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900';
@@ -99,6 +100,35 @@ const SeatInventory = () => {
                 </div>
               ))}
             </div>
+
+            {bus?.blueprint ? (
+              <div className="rounded-2xl border border-slate-100 bg-white p-4 print:hidden">
+                <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Seat map · front of the bus on the left</p>
+                <HorizontalSeatMap
+                  blueprint={bus.blueprint}
+                  legend="inventory"
+                  showPrices
+                  getSeat={(cell) => {
+                    const id = String(cell.id);
+                    const status = inventory.bookedSeatIds.includes(id)
+                      ? 'booked'
+                      : inventory.heldSeatIds.includes(id)
+                        ? 'held'
+                        : inventory.blockedSeatIds.includes(id)
+                          ? 'blocked'
+                          : 'available';
+                    const variantPrice = Number(bus.variantPricing?.[cell.variant] || 0);
+                    const price = variantPrice > 0 ? variantPrice : Number(bus.seatPrice || 0);
+                    const passenger = inventory.passengers.find((row) => row.seats.includes(cell.label));
+                    return {
+                      status,
+                      price,
+                      title: `${cell.label} · ${status}${passenger ? ` · ${passenger.name || ''} ${passenger.pnr ? `(${passenger.pnr})` : ''}` : ''}`,
+                    };
+                  }}
+                />
+              </div>
+            ) : null}
 
             <div className="rounded-2xl border border-slate-100 bg-white p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Booked seats by source</p>

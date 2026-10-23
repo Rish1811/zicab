@@ -18,6 +18,7 @@ const STATUS_STYLE = {
   available: 'border-slate-300 bg-white text-slate-700 hover:border-slate-500',
   selected: 'border-blue-600 bg-blue-600 text-white',
   booked: 'border-slate-200 bg-slate-200 text-slate-400',
+  held: 'border-amber-300 bg-amber-50 text-amber-700',
   blocked: 'border-rose-200 bg-rose-50 text-rose-400',
 };
 
@@ -154,7 +155,9 @@ const HorizontalSeatMap = ({ blueprint, getSeat = () => ({}), onSeatClick, showP
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-[11px] font-medium text-slate-500">
         {(legend === 'booking'
           ? [['available', 'Available'], ['selected', 'Selected'], ['booked', 'Booked'], ['blocked', 'Blocked']]
-          : [['available', 'Available'], ['blocked', 'Blocked (not for sale)']]
+          : legend === 'inventory'
+            ? [['available', 'Available'], ['held', 'On hold (paying)'], ['booked', 'Booked'], ['blocked', 'Blocked']]
+            : [['available', 'Available'], ['blocked', 'Blocked (not for sale)']]
         ).map(([status, text]) => (
           <span key={status} className="flex items-center gap-1.5">
             <span className={`h-3.5 w-5 rounded border ${STATUS_STYLE[status]}`} />
