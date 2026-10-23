@@ -1147,8 +1147,16 @@ const BusServiceManager = ({
   const switchBlueprintTemplate = (templateKey) => {
     setDraft((current) => ({
       ...current,
-      blueprint: createBlueprintFromTemplate(templateKey),
+      blueprint: {
+        ...createBlueprintFromTemplate(templateKey),
+        // A template changes the seats, not how the map is drawn.
+        seatLayoutOrientation: current.blueprint?.seatLayoutOrientation || 'horizontal',
+      },
     }));
+  };
+
+  const setSeatLayoutOrientation = (seatLayoutOrientation) => {
+    setDraft((current) => ({ ...current, blueprint: { ...current.blueprint, seatLayoutOrientation } }));
   };
 
   const updateBlueprintLayoutConfig = (deckKey, field, value) => {
@@ -1184,7 +1192,10 @@ const BusServiceManager = ({
 
       return {
         ...current,
-        blueprint: createBusBlueprint(current.blueprint?.templateKey || 'seater_2_2', nextLayoutConfig),
+        blueprint: {
+          ...createBusBlueprint(current.blueprint?.templateKey || 'seater_2_2', nextLayoutConfig),
+          seatLayoutOrientation: current.blueprint?.seatLayoutOrientation || 'horizontal',
+        },
       };
     });
   };
@@ -2572,6 +2583,33 @@ const BusServiceManager = ({
               </div>
             </div>
 
+            {/* Each bus is shown in the apps and website the way this says. */}
+            <div className="mb-5 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+              <p className="text-sm font-bold text-slate-900">Seat layout view</p>
+              <p className="mt-0.5 text-[11px] font-medium text-slate-500">How riders see this bus's seats in the app and on the website.</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {[
+                  { key: 'horizontal', label: 'Horizontal', hint: 'Bus on its side, front at the left (AbhiBus style)' },
+                  { key: 'vertical', label: 'Vertical', hint: 'Bus upright, front at the top (redBus style)' },
+                ].map((option) => {
+                  const active = (draft.blueprint?.seatLayoutOrientation || 'horizontal') === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setSeatLayoutOrientation(option.key)}
+                      className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                        active ? 'border-amber-200 bg-amber-50 text-slate-900 shadow-md shadow-amber-100' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      <p className="text-sm font-bold">{option.label}</p>
+                      <p className={`mt-0.5 text-[10px] font-medium ${active ? 'text-amber-900/70' : 'text-slate-400'}`}>{option.hint}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="mb-5 flex flex-wrap gap-3">
             {BUS_BLUEPRINT_TEMPLATES.map((template) => {
               const active = draft.blueprint.templateKey === template.key;
@@ -2613,7 +2651,7 @@ const BusServiceManager = ({
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="mb-3 text-[11px] font-semibold text-slate-500">
-                Front of the bus is on the left. Tap a seat or berth to block it from sale, tap again to reopen it.
+                Shown the way riders will see it. Tap a seat or berth to block it from sale, tap again to reopen it.
               </p>
               <HorizontalSeatMap
                 blueprint={draft.blueprint}

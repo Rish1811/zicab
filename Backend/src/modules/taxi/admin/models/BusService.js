@@ -453,6 +453,14 @@ const busServiceSchema = new mongoose.Schema(
         default: 'seater_2_2',
         trim: true,
       },
+      // How the seat map is drawn for this bus: 'horizontal' = coach on its
+      // side, front at the left (AbhiBus / redBus style); 'vertical' = upright,
+      // front at the top. Operators lay their coaches out either way.
+      seatLayoutOrientation: {
+        type: String,
+        enum: ['horizontal', 'vertical'],
+        default: 'horizontal',
+      },
       layoutConfig: {
         lower: {
           type: busDeckLayoutConfigSchema,

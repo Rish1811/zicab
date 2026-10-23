@@ -1022,6 +1022,8 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
 
   const blueprint = {
     templateKey: busService.blueprint?.templateKey || "seater_2_2",
+    seatLayoutOrientation:
+      String(busService.blueprint?.seatLayoutOrientation || "").toLowerCase() === "vertical" ? "vertical" : "horizontal",
     lowerDeck: normalizeDeck(busService.blueprint?.lowerDeck || []),
     upperDeck: normalizeDeck(busService.blueprint?.upperDeck || []),
   };

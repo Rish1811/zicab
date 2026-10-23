@@ -764,11 +764,17 @@ const normalizeBusCancellationRule = (rule = {}, index = 0) => ({
   notes: sanitizeBusText(rule.notes),
 });
 
+export const normalizeSeatLayoutOrientation = (value) =>
+  String(value || '').trim().toLowerCase() === 'vertical' ? 'vertical' : 'horizontal';
+
 const normalizeBusServicePayload = (payload = {}, existing = {}) => {
   const blueprint = {
     templateKey: sanitizeBusText(
       payload.blueprint?.templateKey,
       existing.blueprint?.templateKey || 'seater_2_2',
+    ),
+    seatLayoutOrientation: normalizeSeatLayoutOrientation(
+      payload.blueprint?.seatLayoutOrientation ?? existing.blueprint?.seatLayoutOrientation,
     ),
     layoutConfig: normalizeBusLayoutConfig(
       payload.blueprint?.layoutConfig,
@@ -904,6 +910,7 @@ const serializeBusService = (item = {}) => ({
   galleryImages: Array.isArray(item.galleryImages) ? item.galleryImages.filter(Boolean) : [],
   blueprint: {
     templateKey: item.blueprint?.templateKey || 'seater_2_2',
+    seatLayoutOrientation: normalizeSeatLayoutOrientation(item.blueprint?.seatLayoutOrientation),
     layoutConfig: normalizeBusLayoutConfig(item.blueprint?.layoutConfig || {}),
     lowerDeck: normalizeBusDeck(item.blueprint?.lowerDeck || []),
     upperDeck: normalizeBusDeck(item.blueprint?.upperDeck || []),

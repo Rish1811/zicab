@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, LifeBuoy, Radio, X } from 'lucide-react';
+import { AlertTriangle, Radio, X } from 'lucide-react';
 import userBusService, { BUS_SEAT_EVENTS } from '../../services/busService';
 import { socketService } from '../../../../shared/api/socket';
 import { BusScreen, BusTopBar, EmptyState, FooterBar, Skeleton } from '../../components/bus/ZiBusUi';
@@ -25,43 +25,90 @@ const normalizeIsoDate = (value) => {
   return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : toDateKey(new Date(value));
 };
 
-const Deck = ({ title, rows, selectedIds, onToggle, priceOf, showWheel }) => {
-  if (!rows?.length) return null;
+const SteeringWheel = () => (
+  <svg viewBox="0 0 24 24" className="zb-muted h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.2" aria-label="Driver">
+    <circle cx="12" cy="12" r="9.5" />
+    <circle cx="12" cy="12" r="2.2" fill="currentColor" />
+    <path d="M12 14.2V21.5M9.9 11.3L3 9.5M14.1 11.3L21 9.5" />
+  </svg>
+);
+
+/**
+ * One deck drawn like a bus, the way this bus is set up to be shown
+ * (blueprint.seatLayoutOrientation): 'horizontal' = on its side, front at the
+ * left, berths flat; 'vertical' = upright, front at the top, berths tall. The
+ * blueprint lists rows from the front, each across the bus; drawn sideways it
+ * is transposed. An all-aisle position is a thin gap.
+ */
+const Deck = ({ title, rows, selectedIds, onToggle, priceOf, showWheel, vertical }) => {
+  const lengthCount = rows?.length || 0;
+  const widthCount = Math.max(0, ...(rows || []).map((row) => (Array.isArray(row) ? row.length : 0)));
+  if (!lengthCount || !widthCount) return null;
+  const isSeat = (cell) => cell?.kind === 'seat';
+  const aisle = Array.from({ length: widthCount }, (_, across) => rows.every((row) => !isSeat(row?.[across])));
+  const gridRows = vertical ? lengthCount : widthCount;
+  const gridCols = vertical ? widthCount : lengthCount;
+  const cellAt = (r, c) => (vertical ? rows[r]?.[c] : rows[c]?.[r]);
+
+  const grid = (
+    <div
+      className="grid gap-2"
+      style={{
+        gridTemplateColumns: Array.from({ length: gridCols }, (_, c) => (vertical && aisle[c] ? '12px' : 'auto')).join(' '),
+        gridTemplateRows: Array.from({ length: gridRows }, (_, r) => (!vertical && aisle[r] ? '12px' : 'auto')).join(' '),
+      }}
+    >
+      {Array.from({ length: gridRows }, (_, r) =>
+        Array.from({ length: gridCols }, (_, c) => {
+          const seat = cellAt(r, c);
+          const key = `${title}-${r}-${c}`;
+          if (!isSeat(seat)) return <div key={key} />;
+          const booked = seat.status === 'booked';
+          const selected = selectedIds.includes(seat.id);
+          const sleeper = seat.variant === 'sleeper';
+          const size = sleeper
+            ? vertical ? { width: 46, minHeight: 76 } : { width: 76, minHeight: 34 }
+            : { width: 42, minHeight: 42 };
+          return (
+            <button
+              key={key}
+              type="button"
+              disabled={booked}
+              onClick={() => onToggle(seat)}
+              className={`zb-seat ${sleeper ? 'is-sleeper' : ''} ${vertical ? '' : 'is-sideways'} ${booked ? 'is-booked' : ''} ${selected ? 'is-selected' : ''}`}
+              style={{ ...size, justifySelf: 'center', alignSelf: 'center' }}
+              aria-label={booked ? `Seat ${seat.label || seat.id}, booked` : `Seat ${seat.label || seat.id}, ${formatRupees(priceOf(seat))}`}
+              title={booked ? `${seat.label || seat.id} · Booked` : `${seat.label || seat.id} · ${formatRupees(priceOf(seat))}`}
+            >
+              <span className="zb-seat-price" style={vertical ? undefined : { paddingRight: 6 }}>
+                {selected ? seat.label || seat.id : formatRupees(priceOf(seat))}
+              </span>
+            </button>
+          );
+        }),
+      )}
+    </div>
+  );
+
+  if (vertical) {
+    return (
+      <div className="zb-deck">
+        <div className="mb-4 flex items-center justify-between">
+          <span className="zb-label">{title}</span>
+          {showWheel ? <SteeringWheel /> : <span className="h-7" />}
+        </div>
+        <div className="overflow-x-auto">{grid}</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="zb-deck">
-      <div className="mb-4 flex items-center justify-between">
-        <span className="zb-label">{title}</span>
-        {showWheel ? (
-          <span className="zb-soft flex h-9 w-9 items-center justify-center !rounded-full" title="Driver">
-            <LifeBuoy size={18} className="zb-muted" />
-          </span>
-        ) : null}
+    <div className="zb-deck flex items-stretch gap-3">
+      <div className="flex w-8 shrink-0 flex-col items-center justify-between py-1">
+        {showWheel ? <SteeringWheel /> : <span />}
+        <span className="zb-label rotate-180 [writing-mode:vertical-rl]">{title}</span>
       </div>
-      <div className="space-y-2.5">
-        {rows.map((row, rowIndex) => (
-          <div key={`${title}-${rowIndex}`} className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, row.length)}, minmax(0, 1fr))` }}>
-            {row.map((seat, cellIndex) => {
-              if (!seat || seat.kind !== 'seat') return <div key={`${title}-${rowIndex}-${cellIndex}`} />;
-              const booked = seat.status === 'booked';
-              const selected = selectedIds.includes(seat.id);
-              const sleeper = seat.variant === 'sleeper';
-              return (
-                <button
-                  key={seat.id}
-                  type="button"
-                  disabled={booked}
-                  onClick={() => onToggle(seat)}
-                  className={`zb-seat ${sleeper ? 'is-sleeper' : ''} ${booked ? 'is-booked' : ''} ${selected ? 'is-selected' : ''}`}
-                  aria-label={booked ? `Seat ${seat.label || seat.id}, booked` : `Seat ${seat.label || seat.id}, ${formatRupees(priceOf(seat))}`}
-                  title={booked ? 'Booked' : formatRupees(priceOf(seat))}
-                >
-                  <span>{seat.label || seat.id}</span>
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+      <div className="overflow-x-auto">{grid}</div>
     </div>
   );
 };
@@ -77,7 +124,6 @@ const BusSeats = () => {
   const [seatLayout, setSeatLayout] = useState(null);
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [seatNotice, setSeatNotice] = useState('');
-  const [deck, setDeck] = useState('lower');
   const selectedSeatsRef = useRef(selectedSeats);
   useEffect(() => {
     selectedSeatsRef.current = selectedSeats;
@@ -166,6 +212,8 @@ const BusSeats = () => {
   const lowerDeck = seatLayout?.blueprint?.lowerDeck || [];
   const upperDeck = seatLayout?.blueprint?.upperDeck || [];
   const hasUpper = upperDeck.some((row) => (row || []).some((cell) => cell?.kind === 'seat'));
+  // Each bus is shown the way the operator set it up.
+  const vertical = seatLayout?.blueprint?.seatLayoutOrientation === 'vertical';
   const totalFare = selectedSeats.reduce((sum, seat) => sum + Number(seat.price || 0), 0);
   const variantPrices = new Map();
   [...lowerDeck, ...upperDeck].flat().filter((cell) => cell?.kind === 'seat').forEach((cell) => {
@@ -220,20 +268,22 @@ const BusSeats = () => {
               ))}
             </div>
 
-            {hasUpper ? (
-              <div className="zb-card flex p-1">
-                {['lower', 'upper'].map((key) => (
-                  <button key={key} type="button" onClick={() => setDeck(key)} className={`zb-chip flex-1 justify-center !border-0 ${deck === key ? 'is-active' : '!bg-transparent'}`}>
-                    {key === 'lower' ? 'Lower deck' : 'Upper deck'}
-                  </button>
-                ))}
+            {vertical ? (
+              // Upright: lower and upper next to each other.
+              <div className="flex flex-wrap items-start gap-3">
+                <Deck title="Lower deck" rows={lowerDeck} selectedIds={selectedSeats.map((seat) => seat.id)} onToggle={toggleSeat} priceOf={priceOf} showWheel vertical />
+                {hasUpper ? (
+                  <Deck title="Upper deck" rows={upperDeck} selectedIds={selectedSeats.map((seat) => seat.id)} onToggle={toggleSeat} priceOf={priceOf} vertical />
+                ) : null}
               </div>
-            ) : null}
-
-            {deck === 'lower' || !hasUpper ? (
-              <Deck title="Lower deck" rows={lowerDeck} selectedIds={selectedSeats.map((seat) => seat.id)} onToggle={toggleSeat} priceOf={priceOf} showWheel />
             ) : (
-              <Deck title="Upper deck" rows={upperDeck} selectedIds={selectedSeats.map((seat) => seat.id)} onToggle={toggleSeat} priceOf={priceOf} />
+              // On its side: upper above lower, scrolling sideways on a phone.
+              <div className="space-y-3">
+                {hasUpper ? (
+                  <Deck title="Upper" rows={upperDeck} selectedIds={selectedSeats.map((seat) => seat.id)} onToggle={toggleSeat} priceOf={priceOf} />
+                ) : null}
+                <Deck title="Lower" rows={lowerDeck} selectedIds={selectedSeats.map((seat) => seat.id)} onToggle={toggleSeat} priceOf={priceOf} showWheel />
+              </div>
             )}
           </>
         )}

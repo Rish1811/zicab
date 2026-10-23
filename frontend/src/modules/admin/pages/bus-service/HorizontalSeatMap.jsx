@@ -1,10 +1,14 @@
 import React, { useMemo, useState } from 'react';
 
 /**
- * A bus seat map drawn the way booking sites (AbhiBus, redBus) draw it: the
- * coach on its side with the front at the left, upper deck above lower deck,
- * the steering wheel at the front of the lower deck. Berths are wide flat
- * rectangles, seats are squares, the aisle is a thin gap.
+ * A bus seat map drawn the way booking sites draw it, in either orientation
+ * (each bus picks one, blueprint.seatLayoutOrientation):
+ *   horizontal - the coach on its side, front at the left, upper deck above
+ *                lower, berths wide flat rectangles (AbhiBus);
+ *   vertical   - upright, front at the top, decks side by side, berths tall
+ *                (redBus).
+ * Seats are squares, the aisle a thin gap, the steering wheel at the front of
+ * the lower deck.
  *
  * The blueprint is stored row by row from the front, each row listing the
  * positions across the bus; drawn sideways that grid is transposed, so a
@@ -32,21 +36,86 @@ const SteeringWheel = () => (
 
 const money = (value) => `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
 
-const Deck = ({ label, rows, isLower, getSeat, onSeatClick, showPrices, priceFilter }) => {
+const Deck = ({ label, rows, isLower, vertical, getSeat, onSeatClick, showPrices, priceFilter }) => {
   const lengthCount = rows.length;
   const widthCount = Math.max(0, ...rows.map((row) => (Array.isArray(row) ? row.length : 0)));
   if (!lengthCount || !widthCount) return null;
 
-  const cellAt = (along, across) => rows[along]?.[across];
   const isSeat = (cell) => cell?.kind === 'seat';
   // A position across the bus that is never a seat is the aisle.
   const aisle = Array.from({ length: widthCount }, (_, across) =>
     rows.every((row) => !isSeat(row?.[across])),
   );
-  // A column holding any berth is drawn berth-wide.
-  const berthColumn = Array.from({ length: lengthCount }, (_, along) =>
-    (rows[along] || []).some((cell) => isSeat(cell) && cell.variant === 'sleeper'),
+
+  // Sideways: a grid row per position across the bus, a column per blueprint
+  // row. Upright: the blueprint as stored, front row at the top.
+  const gridRows = vertical ? lengthCount : widthCount;
+  const gridCols = vertical ? widthCount : lengthCount;
+  const cellAt = (r, c) => (vertical ? rows[r]?.[c] : rows[c]?.[r]);
+  const berthSize = vertical ? { width: 42, height: 74 } : { width: 74, height: 32 };
+
+  const grid = (
+    <div
+      className="grid gap-1.5"
+      style={{
+        gridTemplateColumns: Array.from({ length: gridCols }, (_, c) => (vertical && aisle[c] ? '14px' : 'auto')).join(' '),
+        gridTemplateRows: Array.from({ length: gridRows }, (_, r) => (!vertical && aisle[r] ? '14px' : 'auto')).join(' '),
+      }}
+    >
+      {Array.from({ length: gridRows }, (_, r) =>
+        Array.from({ length: gridCols }, (_, c) => {
+          const cell = cellAt(r, c);
+          const key = `${label}-${r}-${c}`;
+          if (!isSeat(cell)) return <div key={key} />;
+          const berth = cell.variant === 'sleeper';
+          const seat = getSeat(cell) || {};
+          const status = seat.status || 'available';
+          const price = Number(seat.price || 0);
+          const dimmed = priceFilter != null && status === 'available' && price !== priceFilter;
+          const clickable = Boolean(onSeatClick);
+          const size = berth ? berthSize : { width: 38, height: 38 };
+          // Head of the berth / back of the seat: at the rear, which is the
+          // right side drawn sideways and the bottom drawn upright.
+          const pillow = vertical
+            ? { left: 5, right: 5, bottom: 3, height: berth ? 4 : 3 }
+            : { right: 3, top: berth ? 5 : 6, bottom: berth ? 5 : 6, width: berth ? 4 : 3 };
+          return (
+            <button
+              key={key}
+              type="button"
+              disabled={!clickable}
+              onClick={() => onSeatClick?.(cell)}
+              title={seat.title || `${cell.label || cell.id}${price ? ` · ${money(price)}` : ''} · ${status}`}
+              className={`relative flex items-center justify-center border ${vertical ? 'text-[9px]' : 'text-[10px]'} font-semibold leading-none transition ${
+                STATUS_STYLE[status] || STATUS_STYLE.available
+              } ${dimmed ? 'opacity-30' : ''} ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
+              style={{ ...size, borderRadius: berth ? 6 : 7, justifySelf: 'center', alignSelf: 'center' }}
+            >
+              <span
+                className={`absolute rounded-sm ${status === 'selected' ? 'bg-blue-300' : status === 'booked' ? 'bg-slate-300' : 'bg-slate-200'}`}
+                style={pillow}
+              />
+              <span className={vertical ? 'pb-1 [writing-mode:horizontal-tb]' : 'pr-1.5'}>
+                {showPrices && price && status !== 'booked' ? money(price) : cell.label}
+              </span>
+            </button>
+          );
+        }),
+      )}
+    </div>
   );
+
+  if (vertical) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+        <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+          <span className="text-xs font-bold text-slate-500">{label}</span>
+          {isLower ? <SteeringWheel /> : <span className="h-7" />}
+        </div>
+        <div className="overflow-x-auto">{grid}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-stretch gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
@@ -54,61 +123,14 @@ const Deck = ({ label, rows, isLower, getSeat, onSeatClick, showPrices, priceFil
         {isLower ? <SteeringWheel /> : <span />}
         <span className="rotate-180 text-xs font-bold text-slate-500 [writing-mode:vertical-rl]">{label}</span>
       </div>
-      <div className="overflow-x-auto">
-        <div
-          className="grid gap-1.5"
-          style={{
-            gridTemplateColumns: berthColumn.map((berth) => (berth ? '74px' : '38px')).join(' '),
-            gridTemplateRows: aisle.map((gap) => (gap ? '14px' : 'auto')).join(' '),
-          }}
-        >
-          {Array.from({ length: widthCount }, (_, across) =>
-            Array.from({ length: lengthCount }, (_, along) => {
-              const cell = cellAt(along, across);
-              const key = `${label}-${along}-${across}`;
-              if (!isSeat(cell)) return <div key={key} />;
-              const berth = cell.variant === 'sleeper';
-              const seat = getSeat(cell) || {};
-              const status = seat.status || 'available';
-              const price = Number(seat.price || 0);
-              const dimmed = priceFilter != null && status === 'available' && price !== priceFilter;
-              const clickable = Boolean(onSeatClick);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  disabled={!clickable}
-                  onClick={() => onSeatClick?.(cell)}
-                  title={seat.title || `${cell.label || cell.id}${price ? ` · ${money(price)}` : ''} · ${status}`}
-                  className={`relative flex items-center justify-center border text-[10px] font-semibold leading-none transition ${
-                    STATUS_STYLE[status] || STATUS_STYLE.available
-                  } ${dimmed ? 'opacity-30' : ''} ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
-                  style={{
-                    width: berth ? 74 : 38,
-                    height: berth ? 32 : 38,
-                    borderRadius: berth ? 6 : 7,
-                    justifySelf: 'center',
-                  }}
-                >
-                  {/* Head of the berth / back of the seat, at the rear side. */}
-                  <span
-                    className={`absolute rounded-sm ${status === 'selected' ? 'bg-blue-300' : status === 'booked' ? 'bg-slate-300' : 'bg-slate-200'}`}
-                    style={berth ? { right: 3, top: 5, bottom: 5, width: 4 } : { right: 3, top: 6, bottom: 6, width: 3 }}
-                  />
-                  <span className="pr-1.5">
-                    {status === 'booked' && !showPrices ? cell.label : showPrices && price && status !== 'booked' ? money(price) : cell.label}
-                  </span>
-                </button>
-              );
-            }),
-          )}
-        </div>
-      </div>
+      <div className="overflow-x-auto">{grid}</div>
     </div>
   );
 };
 
-const HorizontalSeatMap = ({ blueprint, getSeat = () => ({}), onSeatClick, showPrices = false, legend = 'booking' }) => {
+/// `orientation` defaults to the bus's own blueprint.seatLayoutOrientation.
+const HorizontalSeatMap = ({ blueprint, getSeat = () => ({}), onSeatClick, showPrices = false, legend = 'booking', orientation }) => {
+  const vertical = (orientation || blueprint?.seatLayoutOrientation) === 'vertical';
   const [priceFilter, setPriceFilter] = useState(null);
   const lower = Array.isArray(blueprint?.lowerDeck) ? blueprint.lowerDeck : [];
   const upper = Array.isArray(blueprint?.upperDeck) ? blueprint.upperDeck : [];
@@ -147,10 +169,22 @@ const HorizontalSeatMap = ({ blueprint, getSeat = () => ({}), onSeatClick, showP
         </div>
       ) : null}
 
-      {hasUpper ? (
-        <Deck label="Upper" rows={upper} isLower={false} getSeat={getSeat} onSeatClick={onSeatClick} showPrices={showPrices} priceFilter={priceFilter} />
-      ) : null}
-      <Deck label="Lower" rows={lower} isLower getSeat={getSeat} onSeatClick={onSeatClick} showPrices={showPrices} priceFilter={priceFilter} />
+      {vertical ? (
+        // Upright: lower and upper side by side, as redBus shows them.
+        <div className="flex flex-wrap items-start gap-4">
+          <Deck label="Lower" rows={lower} isLower vertical getSeat={getSeat} onSeatClick={onSeatClick} showPrices={showPrices} priceFilter={priceFilter} />
+          {hasUpper ? (
+            <Deck label="Upper" rows={upper} isLower={false} vertical getSeat={getSeat} onSeatClick={onSeatClick} showPrices={showPrices} priceFilter={priceFilter} />
+          ) : null}
+        </div>
+      ) : (
+        <>
+          {hasUpper ? (
+            <Deck label="Upper" rows={upper} isLower={false} getSeat={getSeat} onSeatClick={onSeatClick} showPrices={showPrices} priceFilter={priceFilter} />
+          ) : null}
+          <Deck label="Lower" rows={lower} isLower getSeat={getSeat} onSeatClick={onSeatClick} showPrices={showPrices} priceFilter={priceFilter} />
+        </>
+      )}
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-[11px] font-medium text-slate-500">
         {(legend === 'booking'

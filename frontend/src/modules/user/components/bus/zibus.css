@@ -257,6 +257,9 @@
 }
 .zb-seat.is-sleeper { min-height: 4.4rem; border-radius: 12px; }
 .zb-seat.is-sleeper::before { left: 22%; right: 22%; top: 6px; bottom: auto; height: 5px; }
+.zb-seat.is-sideways::before { left: auto; right: 4px; top: 22%; bottom: 22%; width: 3px; height: auto; }
+.zb-seat.is-sideways.is-sleeper::before { right: 4px; top: 18%; bottom: 18%; width: 4px; height: auto; }
+.zb-seat-price { font-size: 9.5px; font-weight: 800; white-space: nowrap; }
 .zb-seat:active:not(:disabled) { transform: scale(0.92); }
 .zb-seat.is-selected {
   background: var(--zb-accent);

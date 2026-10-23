@@ -3351,6 +3351,9 @@ export const getBusSeatLayout = async (req, res) => {
 
   const blueprint = {
     templateKey: busService.blueprint?.templateKey || 'seater_2_2',
+    // How the apps draw this bus's seat map: 'horizontal' or 'vertical'.
+    seatLayoutOrientation:
+      String(busService.blueprint?.seatLayoutOrientation || '').toLowerCase() === 'vertical' ? 'vertical' : 'horizontal',
     lowerDeck: normalizeDeck(busService.blueprint?.lowerDeck || []),
     upperDeck: normalizeDeck(busService.blueprint?.upperDeck || []),
   };

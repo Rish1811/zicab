@@ -345,6 +345,7 @@ export const normalizeBusCatalog = (catalog = []) =>
     if (Array.isArray(blueprintSource?.lowerDeck) && blueprintSource.lowerDeck.length) {
       blueprint.lowerDeck = blueprintSource.lowerDeck;
     }
+    blueprint.seatLayoutOrientation = blueprintSource?.seatLayoutOrientation === 'vertical' ? 'vertical' : 'horizontal';
     if (Array.isArray(blueprintSource?.upperDeck)) {
       blueprint.upperDeck = blueprintSource.upperDeck;
     }
