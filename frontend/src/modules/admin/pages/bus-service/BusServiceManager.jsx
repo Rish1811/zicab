@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
+import HorizontalSeatMap from './HorizontalSeatMap';
 import { computeDrivingRoute } from '../../../../shared/utils/googleRoutes';
 import {
   BUS_BLUEPRINT_TEMPLATES,
@@ -264,111 +265,6 @@ const fileToDataUrl = (file) =>
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-
-const SeatCell = ({ cell, onToggle }) => {
-  if (!cell || cell.kind !== 'seat') {
-    return <div className="h-11 rounded-2xl bg-transparent" />;
-  }
-
-  const isBlocked = cell.status === 'blocked';
-  const isSleeper = cell.variant === 'sleeper';
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={`relative flex items-center justify-center overflow-hidden border text-[10px] font-black tracking-wider transition ${
-        isBlocked
-          ? 'border-rose-200 bg-rose-50 text-rose-500'
-          : isSleeper
-            ? 'border-sky-200 bg-gradient-to-br from-sky-50 to-cyan-50 text-sky-700 hover:border-sky-300 hover:text-sky-800'
-            : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:text-indigo-600'
-      }`}
-      title={isBlocked ? 'Seat blocked for sale' : 'Seat available for sale'}
-      // A berth is a bed - tall and narrow - so a sleeper deck reads as one.
-      style={{
-        width: '100%',
-        maxWidth: isSleeper ? '58px' : '52px',
-        minHeight: isSleeper ? '104px' : '48px',
-        borderRadius: isSleeper ? '14px' : '12px',
-        justifySelf: 'center',
-      }}
-    >
-      {isSleeper ? (
-        <>
-          <span className="absolute inset-x-2.5 top-2 h-2 rounded-full bg-sky-200" />
-          <span>{cell.label}</span>
-        </>
-      ) : (
-        <>
-          <span className="absolute inset-x-2 top-1.5 h-1.5 rounded-full bg-slate-200" />
-          <span className="absolute bottom-1 right-1.5 h-2.5 w-2.5 rounded-full bg-slate-100" />
-          <span>{cell.label}</span>
-        </>
-      )}
-    </button>
-  );
-};
-
-const SeatDeckPreview = ({ title, deckRows, onToggleSeat, isLower = true }) => {
-  if (!deckRows?.length) return null;
-
-  const maxColumns = Math.max(...deckRows.map((row) => row.length), 1);
-  // A column that is an aisle in every row is the gangway: drawn narrow so the
-  // seats keep the width.
-  const columnTemplate = Array.from({ length: maxColumns }, (_, index) =>
-    deckRows.every((row) => !row[index] || row[index].kind !== 'seat') ? '0.45fr' : 'minmax(0, 1fr)',
-  ).join(' ');
-
-  return (
-    <div className="rounded-[32px] border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-inner">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h4 className="text-sm font-black text-slate-900">{title}</h4>
-          <p className="text-[10px] font-medium text-slate-500">Tap any seat or berth to block or reopen it.</p>
-        </div>
-        <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold text-slate-500">
-          Redbus style
-        </div>
-      </div>
-
-      <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
-        {/* The door and the driver are at the front of the lower deck only. */}
-        <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
-          {isLower ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black text-slate-500">
-              Entry
-            </div>
-          ) : (
-            <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">Front</div>
-          )}
-          {isLower ? (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-slate-300" title="Driver">
-              <div className="h-2.5 w-2.5 rounded-full bg-slate-300" />
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mx-auto max-w-[340px] space-y-3">
-        {deckRows.map((row, rowIndex) => (
-          <div
-            key={`${title}-${rowIndex}`}
-            className="grid gap-2"
-            style={{ gridTemplateColumns: columnTemplate }}
-          >
-            {row.map((cell, cellIndex) => (
-              <SeatCell
-                key={`${title}-${rowIndex}-${cellIndex}-${cell?.id || 'aisle'}`}
-                cell={cell}
-                onToggle={() => cell?.kind === 'seat' && onToggleSeat(cell.id)}
-              />
-            ))}
-          </div>
-        ))}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const BlueprintDeckConfigurator = ({ title, config, onChange }) => (
   <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
@@ -2715,9 +2611,16 @@ const BusServiceManager = ({
               />
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-2">
-              <SeatDeckPreview title="Lower Deck" deckRows={draft.blueprint.lowerDeck} onToggleSeat={toggleSeatStatus} />
-              <SeatDeckPreview title="Upper Deck" deckRows={draft.blueprint.upperDeck} onToggleSeat={toggleSeatStatus} isLower={false} />
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="mb-3 text-[11px] font-semibold text-slate-500">
+                Front of the bus is on the left. Tap a seat or berth to block it from sale, tap again to reopen it.
+              </p>
+              <HorizontalSeatMap
+                blueprint={draft.blueprint}
+                legend="editor"
+                getSeat={(cell) => ({ status: cell.status === 'blocked' ? 'blocked' : 'available' })}
+                onSeatClick={(cell) => toggleSeatStatus(cell.id)}
+              />
             </div>
 
             <div className="mt-5 flex flex-wrap gap-4 text-xs font-semibold text-slate-500">

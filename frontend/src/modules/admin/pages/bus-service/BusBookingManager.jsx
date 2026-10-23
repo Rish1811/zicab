@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
+import HorizontalSeatMap from './HorizontalSeatMap';
 import { getAdminBuses, upsertAdminBus } from '../../services/busService';
 
 const statusTone = {
@@ -18,13 +19,6 @@ const statusTone = {
   cancelled: 'bg-rose-50 text-rose-700 border-rose-200',
   failed: 'bg-slate-100 text-slate-600 border-slate-200',
   expired: 'bg-slate-100 text-slate-600 border-slate-200',
-};
-
-const seatTone = {
-  available: 'border-slate-200 bg-white text-slate-600 hover:border-yellow-400 hover:text-yellow-700',
-  selected: 'border-black bg-black text-yellow-400 shadow-lg',
-  blocked: 'border-slate-200 bg-slate-200 text-slate-500 cursor-not-allowed',
-  booked: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300',
 };
 
 const createEmptyForm = () => ({
@@ -249,6 +243,7 @@ const BusBookingManager = () => {
   const seatLayout = bookingData.seatLayout || [];
   const summary = bookingData.summary || {};
   const selectedSeats = seatLayout.filter((seat) => selectedSeatIds.includes(seat.seatId));
+  const seatById = useMemo(() => new Map(seatLayout.map((seat) => [String(seat.seatId), seat])), [seatLayout]);
   const selectedSeatFare = selectedSeats.reduce(
     (sum, seat) => sum + Number(seat.price || selectedBus?.seatPrice || 0),
     0,
@@ -542,6 +537,69 @@ const BusBookingManager = () => {
         </div>
       </section>
 
+      {/* The seat map gets the full width: a coach drawn on its side, like the
+          booking sites, needs the room. */}
+      <section>
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm lg:p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Seat Snapshot</p>
+                <h2 className="mt-2 text-xl font-black text-slate-900">Setwise Occupancy</h2>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  {selectedSchedule
+                    ? `${formatDateLabel(filters.travelDate)} | ${selectedSchedule.label || selectedSchedule.id} | ${formatScheduleTime(selectedSchedule)}`
+                    : `${formatDateLabel(filters.travelDate)} | Pick a schedule to inspect seats`}
+                </p>
+              </div>
+              <div className="rounded-full bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                {seatLayout.length} seats
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="grid grid-cols-6 gap-3 sm:grid-cols-10">
+                {Array.from({ length: 16 }, (_, index) => (
+                  <div key={`seat-loading-${index}`} className="h-16 rounded-2xl bg-slate-100 animate-pulse" />
+                ))}
+              </div>
+            ) : (!filters.busServiceId || !filters.scheduleId) ? (
+              <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
+                <p className="text-sm font-black text-slate-900">Select a bus and schedule to view seats.</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Pick a schedule from the filters above.</p>
+              </div>
+            ) : seatLayout.length === 0 ? (
+              <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
+                <p className="text-sm font-black text-slate-900">No seat map found</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Select a bus to inspect live occupancy.</p>
+              </div>
+            ) : (
+              <>
+                <HorizontalSeatMap
+                  blueprint={selectedBus?.blueprint}
+                  showPrices
+                  getSeat={(cell) => {
+                    const seat = seatById.get(String(cell.id));
+                    if (!seat) return { status: 'available' };
+                    const status =
+                      seat.liveStatus === 'available' && selectedSeatIds.includes(seat.seatId) ? 'selected' : seat.liveStatus;
+                    const who = seat.booking?.passengerName || seat.booking?.bookingCode;
+                    return {
+                      status,
+                      price: Number(seat.price || selectedBus?.seatPrice || 0),
+                      title: `${seat.seatLabel} · ₹${Math.round(Number(seat.price || selectedBus?.seatPrice || 0))} · ${status}${who ? ` · ${who}` : ''}`,
+                    };
+                  }}
+                  onSeatClick={(cell) => {
+                    const seat = seatById.get(String(cell.id));
+                    if (seat && !actionLoading) handleSeatClick(seat);
+                  }}
+                />
+              </>
+            )}
+          </div>
+
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
         <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -648,86 +706,6 @@ const BusBookingManager = () => {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Seat Snapshot</p>
-                <h2 className="mt-2 text-xl font-black text-slate-900">Setwise Occupancy</h2>
-                <p className="mt-1 text-xs font-semibold text-slate-500">
-                  {selectedSchedule
-                    ? `${formatDateLabel(filters.travelDate)} | ${selectedSchedule.label || selectedSchedule.id} | ${formatScheduleTime(selectedSchedule)}`
-                    : `${formatDateLabel(filters.travelDate)} | Pick a schedule to inspect seats`}
-                </p>
-              </div>
-              <div className="rounded-full bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                {seatLayout.length} seats
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="grid grid-cols-4 gap-3">
-                {Array.from({ length: 16 }, (_, index) => (
-                  <div key={`seat-loading-${index}`} className="h-16 rounded-2xl bg-slate-100 animate-pulse" />
-                ))}
-              </div>
-            ) : (!filters.busServiceId || !filters.scheduleId) ? (
-              <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
-                <p className="text-sm font-black text-slate-900">Select a bus and schedule to view seats.</p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">Pick a schedule from the filters above.</p>
-              </div>
-            ) : seatLayout.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
-                <p className="text-sm font-black text-slate-900">No seat map found</p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">Select a bus to inspect live occupancy.</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
-                  {seatLayout.map((seat) => {
-                    const isSelected = selectedSeatIds.includes(seat.seatId);
-                    const toneKey =
-                      seat.liveStatus === 'available' && isSelected ? 'selected' : seat.liveStatus;
-
-                    return (
-                      <button
-                        key={seat.seatId}
-                        type="button"
-                        onClick={() => handleSeatClick(seat)}
-                        disabled={actionLoading}
-                        className={`rounded-2xl border p-3 text-left transition-all ${seatTone[toneKey] || seatTone.available}`}
-                      >
-                        <p className="text-sm font-black">{seat.seatLabel}</p>
-                        <div className="mt-2">
-                          <span className={`inline-flex rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-wide ${
-                            isSelected
-                              ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
-                              : seat.liveStatus === 'booked'
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                : seat.liveStatus === 'blocked'
-                                  ? 'border-slate-300 bg-slate-200 text-slate-600'
-                                  : 'border-slate-200 bg-slate-50 text-slate-600'
-                          }`}>
-                            {isSelected ? 'selected' : seat.liveStatus}
-                          </span>
-                        </div>
-                        <p className="mt-1 truncate text-[10px] font-semibold">
-                          {seat.booking?.passengerName || seat.booking?.bookingCode || '--'}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500">
-                  <span className="rounded-full border border-slate-200 bg-white px-3 py-2">Available</span>
-                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-2 text-indigo-700">Selected</span>
-                  <span className="rounded-full border border-slate-200 bg-slate-200 px-3 py-2">Blocked</span>
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700">Booked</span>
-                </div>
-              </>
-            )}
-          </div>
-
           <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">
               {activeSeat?.liveStatus === 'booked' ? 'Unbook Seat' : activeSeat?.liveStatus === 'blocked' ? 'Unblock Seat' : 'Book Seats'}
