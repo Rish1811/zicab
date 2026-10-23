@@ -768,7 +768,8 @@ const buildDriverPaymentCollection = ({ mode = '', status = '', paymentQr = null
     if (normalizedMode === 'online') {
         return {
             method: 'online',
-            source: 'driver_qr',
+            // Paid into the driver's own UPI (see /drivers/payments/qr).
+            source: paymentQr?.providerMode === 'driver_upi' ? 'driver_upi' : 'driver_qr',
             qrId: paymentQr?.id || '',
             status: status === 'success' ? 'paid' : 'pending',
             paidAt: status === 'success' ? new Date().toISOString() : null,
@@ -1575,6 +1576,10 @@ const ActiveTrip = () => {
                 {
                     status: 'completed',
                     paymentMethod: paymentMode || undefined,
+                    // Money went to the driver's own UPI, not to ZI CAB: settle
+                    // it like cash (commission from the driver's wallet).
+                    collectedVia:
+                        paymentMode === 'online' && paymentQr?.providerMode === 'driver_upi' ? 'upi' : undefined,
                     driverPaymentCollection: buildDriverPaymentCollection({
                         mode: paymentMode,
                         status: driverPaymentStatus,
@@ -2849,6 +2854,12 @@ const ActiveTrip = () => {
                                             />
                                         </div>
                                         <p className="text-white font-semibold text-sm uppercase tracking-wide">Scan to pay {displayFare}</p>
+                                        {paymentQr?.providerMode === 'driver_upi' ? (
+                                            <p className="text-white/80 text-[11px] font-semibold mt-1">
+                                                To {paymentQr.payeeName || 'you'} · {paymentQr.upiId}
+                                                <span className="block text-white/50 text-[10px] mt-0.5">Rider enters the amount in their UPI app</span>
+                                            </p>
+                                        ) : null}
                                         <p
                                             className={`text-white/45 text-[10px] font-semibold mt-1 mb-4 uppercase tracking-wide transition-colors ${
                                                 !isInlineQrImage ? 'cursor-pointer hover:text-white/70 select-none' : ''
@@ -2856,9 +2867,9 @@ const ActiveTrip = () => {
                                             onClick={() => !isInlineQrImage && setQrZoomed(!qrZoomed)}
                                         >
                                             {isInlineQrImage
-                                                ? 'Razorpay collection QR for this ride'
+                                                ? 'Your UPI QR for this ride'
                                                 : qrZoomed
-                                                    ? 'Tap QR to see full Razorpay receipt'
+                                                    ? 'Tap QR to see it whole'
                                                     : 'Tap QR to zoom scan area'}
                                         </p>
                                         {paymentQr?.linkUrl && (

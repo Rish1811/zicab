@@ -1143,18 +1143,6 @@ const getIstMonthKey = (value = new Date()) => {
   return `${year}-${month}`;
 };
 
-const getConfiguredAppName = async () => {
-  try {
-    const settings = await AdminBusinessSetting.findOne({ scope: "default" })
-      .select("general.app_name")
-      .lean();
-
-    return String(settings?.general?.app_name || "").trim() || "App";
-  } catch {
-    return "App";
-  }
-};
-
 const pruneDailyActivity = (items = []) =>
   (Array.isArray(items) ? items : [])
     .filter((item) => item?.date)
@@ -1488,16 +1476,6 @@ const razorpayRequest = async ({ method, path, body }) => {
   return payload;
 };
 
-const shouldFallbackToPaymentLinkQr = (error) => {
-  const message = String(error?.message || "").toLowerCase();
-
-  return (
-    error?.statusCode === 404 ||
-    message.includes("requested url was not found") ||
-    message.includes("qr") && message.includes("not") && message.includes("enabled")
-  );
-};
-
 const shouldFallbackToStandardPaymentLink = (error) => {
   const message = String(error?.message || "").toLowerCase();
 
@@ -1524,74 +1502,6 @@ const buildPaymentLinkBody = ({ amountInPaise, rideId, driverId, serviceType, ex
     fallback: upiLink ? "upi_payment_link_qr" : "standard_payment_link_qr",
   },
 });
-
-const createPaymentLinkQr = async ({ amountInPaise, rideId, driverId, serviceType }) => {
-  const referenceId = `ride_${String(rideId).slice(-18)}_${Date.now().toString(36)}`.slice(0, 40);
-  const expireBy = Math.floor(Date.now() / 1000) + 30 * 60;
-  let providerMode = "upi_payment_link_qr";
-  let paymentLink;
-
-  try {
-    paymentLink = await razorpayRequest({
-      method: "POST",
-      path: "/payment_links",
-      body: buildPaymentLinkBody({
-        amountInPaise,
-        rideId,
-        driverId,
-        serviceType,
-        expireBy,
-        referenceId,
-        upiLink: true,
-      }),
-    });
-  } catch (error) {
-    if (!shouldFallbackToStandardPaymentLink(error)) {
-      throw error;
-    }
-
-    providerMode = "standard_payment_link_qr";
-    paymentLink = await razorpayRequest({
-      method: "POST",
-      path: "/payment_links",
-      body: buildPaymentLinkBody({
-        amountInPaise,
-        rideId,
-        driverId,
-        serviceType,
-        expireBy,
-        referenceId: `${referenceId}_std`.slice(0, 40),
-        upiLink: false,
-      }),
-    });
-  }
-
-  const paymentUrl = paymentLink.short_url || paymentLink.shortUrl || paymentLink.url;
-
-  if (!paymentUrl) {
-    throw new ApiError(502, "Razorpay payment link was created without a payment URL");
-  }
-
-  const imageUrl = await QRCode.toDataURL(paymentUrl, {
-    errorCorrectionLevel: "M",
-    margin: 1,
-    scale: 8,
-  });
-
-  return {
-    id: paymentLink.id,
-    entity: paymentLink.entity || "payment_link",
-    status: paymentLink.status || "created",
-    imageUrl,
-    linkUrl: paymentUrl,
-    amount: amountInPaise / 100,
-    currency: "INR",
-    description: paymentLink.description,
-    closeBy: paymentLink.expire_by || expireBy,
-    rawStatus: paymentLink.status || "created",
-    providerMode,
-  };
-};
 
 const PAYMENT_PAID_STATUSES = new Set(["paid", "captured", "completed"]);
 const PAYMENT_OPEN_STATUSES = new Set(["created", "active", "issued", "partially_paid"]);
@@ -1651,7 +1561,9 @@ const refreshDriverPaymentCollection = async (ride) => {
   const collection = ride?.driverPaymentCollection || {};
   const providerId = String(collection.providerId || "").trim();
 
-  if (!providerId) {
+  // Paid into the driver's own UPI: there is no gateway to ask, the driver
+  // confirms receipt themselves.
+  if (!providerId || collection.providerMode === "driver_upi") {
     return serializeDriverPaymentCollection(collection);
   }
 
@@ -6426,73 +6338,51 @@ export const createDriverPaymentQr = async (req, res) => {
     throw new ApiError(404, "Ride not found for this driver");
   }
 
-  let payload;
-
-  try {
-    const appName = await getConfiguredAppName();
-    const qr = await razorpayRequest({
-      method: "POST",
-      path: "/payments/qr_codes",
-      body: {
-        type: "upi_qr",
-        name: `${appName} Taxi Fare`,
-        usage: "single_use",
-        fixed_amount: true,
-        payment_amount: amountInPaise,
-        description: `Taxi fare for ride ${rideId}`,
-        close_by: Math.floor(Date.now() / 1000) + 30 * 60,
-        notes: {
-          rideId,
-          driverId: String(req.auth.sub),
-          serviceType: ride.serviceType || "ride",
-          source: "driver_collect_amount",
-        },
-      },
-    });
-
-    payload = {
-      id: qr.id,
-      entity: qr.entity,
-      status: qr.status,
-      imageUrl: qr.image_url,
-      linkUrl: qr.image_url,
-      amount: amountInPaise / 100,
-      currency: "INR",
-      description: qr.description,
-      closeBy: qr.close_by || null,
-      rawStatus: qr.status,
-      providerMode: "razorpay_qr",
-    };
-  } catch (error) {
-    if (!shouldFallbackToPaymentLinkQr(error)) {
-      throw error;
-    }
-
-    payload = await createPaymentLinkQr({
-      amountInPaise,
-      rideId,
-      driverId: req.auth.sub,
-      serviceType: ride.serviceType,
-    });
+  // "Online" at ride end is paid to the driver's OWN verified UPI - their
+  // uploaded scanner, or a QR made from their UPI ID - never a ZI CAB
+  // collection QR (riders were being shown the company's scanner). The ride
+  // is then closed as collected via UPI, which settles like cash.
+  const driver = await Driver.findById(req.auth.sub)
+    .select("name bankDetails.upiId bankDetails.qrCodeImage bankDetails.upiVerificationStatus bankDetails.upiVerifiedName")
+    .lean();
+  const bank = driver?.bankDetails || {};
+  const upiId = String(bank.upiId || "").trim();
+  if (!upiId || String(bank.upiVerificationStatus || "").toLowerCase() !== "verified") {
+    throw new ApiError(
+      400,
+      "Your UPI ID is not set up or not verified yet. Collect cash for this ride, and add your UPI in Profile > Payment.",
+    );
   }
-
+  const payeeName = String(bank.upiVerifiedName || driver?.name || "").trim();
+  // No amount in the QR: PhonePe and Google Pay decline amount-filled QRs to
+  // a personal UPI ID.
+  const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}${payeeName ? `&pn=${encodeURIComponent(payeeName)}` : ""}&cu=INR`;
+  const amount = amountInPaise / 100;
+  const driverQr = {
+    id: `driver-upi-${rideId}`,
+    status: "created",
+    imageUrl: String(bank.qrCodeImage || "").trim() || (await QRCode.toDataURL(upiUri, { margin: 1, width: 480 })),
+    linkUrl: "",
+    upiId,
+    payeeName,
+    amount,
+    currency: "INR",
+    description: `Pay ${payeeName || "your driver"} directly`,
+    providerMode: "driver_upi",
+  };
   ride.driverPaymentCollection = {
-    provider: "razorpay",
-    providerId: payload.id,
-    providerMode: payload.providerMode,
-    status: normalizeCollectionStatus(payload.rawStatus || payload.status),
-    amount: payload.amount,
-    currency: payload.currency || "INR",
-    linkUrl: payload.linkUrl || "",
+    provider: "driver_upi",
+    providerId: driverQr.id,
+    providerMode: "driver_upi",
+    status: "pending",
+    amount,
+    currency: "INR",
+    linkUrl: "",
     paidAt: null,
     updatedAt: new Date(),
   };
   await ride.save();
-
-  res.json({
-    success: true,
-    data: payload,
-  });
+  res.json({ success: true, data: driverQr });
 };
 
 const resolveRazorpayCredentials = async () => {
