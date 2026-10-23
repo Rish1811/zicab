@@ -64,6 +64,12 @@ export default function useReveal(scope, deps = []) {
     // target, so this is a liveness probe for the backstop below.
     let observerFired = false;
 
+    // Stagger groups already shown. Their children are replaced when data
+    // arrives (the CMS copy, the live service list), and a child added after
+    // its group was revealed must be shown straight away - otherwise it sits
+    // at opacity 0 and the section looks empty.
+    const revealedGroups = new WeakSet();
+
     const revealIO = new IntersectionObserver(
       (entries) => {
         observerFired = true;
@@ -72,6 +78,7 @@ export default function useReveal(scope, deps = []) {
           const el = entry.target;
           if (el.hasAttribute('data-reveal-stagger')) {
             Array.from(el.children).forEach((c) => c.classList.add('is-visible'));
+            revealedGroups.add(el);
           } else {
             el.classList.add('is-visible');
           }
@@ -85,6 +92,36 @@ export default function useReveal(scope, deps = []) {
     Array.from(root.querySelectorAll('[data-reveal], [data-reveal-mask]'))
       .concat(groups)
       .forEach((el) => revealIO.observe(el));
+
+    // Content rendered after this hook ran (async data, a re-keyed list) gets
+    // the same treatment as content that was there at first paint.
+    const mutationObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType !== Node.ELEMENT_NODE) return;
+          const parent = node.parentElement;
+          if (parent?.hasAttribute('data-reveal-stagger')) {
+            if (revealedGroups.has(parent)) {
+              node.classList.add('is-visible');
+            } else {
+              const index = Array.from(parent.children).indexOf(node);
+              node.style.transitionDelay = `${Math.max(0, index) * STAGGER_MS}ms`;
+            }
+          }
+          const fresh = [node, ...node.querySelectorAll('[data-reveal], [data-reveal-mask], [data-reveal-stagger]')]
+            .filter((el) => el.matches('[data-reveal], [data-reveal-mask], [data-reveal-stagger]'));
+          fresh.forEach((el) => {
+            if (el.hasAttribute('data-reveal-stagger')) {
+              Array.from(el.children).forEach((child, i) => {
+                child.style.transitionDelay = `${i * STAGGER_MS}ms`;
+              });
+            }
+            revealIO.observe(el);
+          });
+        });
+      });
+    });
+    mutationObserver.observe(root, { childList: true, subtree: true });
 
     const countIO = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
@@ -118,6 +155,7 @@ export default function useReveal(scope, deps = []) {
 
     return () => {
       clearTimeout(safety);
+      mutationObserver.disconnect();
       revealIO.disconnect();
       countIO.disconnect();
       root.removeAttribute(ROOT_ATTR);
