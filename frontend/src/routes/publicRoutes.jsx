@@ -12,6 +12,7 @@ import {
   BusConfirm,
   BusDetails,
   BusHome,
+  BusPreview,
   BusList,
   BusSeats,
   CabHome,
@@ -148,7 +149,10 @@ const publicRoutes = (
       <Route path="/cab/spiritual-confirm" element={<SpiritualTripConfirm />} />
       <Route path="/bus/list" element={<BusList />} />
       <Route path="/bus/seats" element={<BusSeats />} />
-      <Route path="/bus/details" element={<BusDetails />} />
+      {/* Same steps as the signed-in /taxi/user/bus routes: details is the bus
+          preview, then seats, then checkout (review and pay). */}
+      <Route path="/bus/details" element={<BusPreview />} />
+      <Route path="/bus/checkout" element={<BusDetails />} />
       <Route path="/bus/confirm" element={<BusConfirm />} />
       <Route path="/tours" element={<ComingSoon />} />
 
