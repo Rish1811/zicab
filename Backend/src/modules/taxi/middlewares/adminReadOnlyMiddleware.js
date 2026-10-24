@@ -14,5 +14,9 @@ export const enforceAdminReadOnly = (allow = []) => (req, _res, next) => {
   if (allow.some(([method, pattern]) => method === req.method && pattern.test(path))) {
     return next();
   }
-  return next(new ApiError(403, 'This is a view-only admin account. Changes are not allowed.'));
+  const action = req.method === 'POST' ? 'create' : req.method === 'DELETE' ? 'delete' : 'edit';
+  const error = new ApiError(403, `You don't have permission to ${action} - this is a view-only account.`);
+  // Lets the panel recognise the refusal whatever the message says.
+  error.details = { code: 'ADMIN_READ_ONLY', action };
+  return next(error);
 };

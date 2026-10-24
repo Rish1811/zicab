@@ -1,4 +1,5 @@
 import axios from 'axios';
+import toast from 'react-hot-toast';
 import { API_BASE_URL } from './runtimeConfig';
 
 const api = axios.create({
@@ -408,6 +409,14 @@ api.interceptors.response.use(
         isStaleMessage ||
         (is403 && isDeactivatedOrDeleted)) &&
         Boolean(token);
+
+      // A view-only admin tried to change something. Say so plainly, whatever
+      // the page itself does with the error (many show a generic message).
+      if (is403 && error.response.data?.details?.code === 'ADMIN_READ_ONLY') {
+        toast.error(serverMessage || "You don't have permission to change anything - this is a view-only account.", {
+          id: 'admin-read-only',
+        });
+      }
 
       if (shouldClearAuth) {
         clearStaleAuthState(tokenRole, token);
