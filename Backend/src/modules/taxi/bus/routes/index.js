@@ -48,11 +48,14 @@ import {
 } from '../controllers/busOperatorController.js';
 import {
   boardBusTicket,
+  createMyFoodOrder,
   getBusCrewManifest,
   getMyBusLiveTracking,
   getMyBusTicket,
+  listMyBookingDhabas,
   listTripDhabas,
   verifyBusTicket,
+  verifyMyFoodOrder,
 } from '../controllers/busPassengerController.js';
 import {
   adminAddDhabaMenuItem,
@@ -83,6 +86,11 @@ const asUser = authenticate(['user']);
 busModuleRouter.get('/users/buses/:id/dhabas', asUser, asyncHandler(listTripDhabas));
 busModuleRouter.get('/users/bus-bookings/:id/ticket', asUser, asyncHandler(getMyBusTicket));
 busModuleRouter.get('/users/bus-bookings/:id/live', asUser, asyncHandler(getMyBusLiveTracking));
+// "Book Your Meal" after the booking is confirmed: food ordered from the
+// route's dhabas, paid in its own Razorpay order.
+busModuleRouter.get('/users/bus-bookings/:id/dhabas', asUser, asyncHandler(listMyBookingDhabas));
+busModuleRouter.post('/users/bus-bookings/:id/food/order', asUser, asyncHandler(createMyFoodOrder));
+busModuleRouter.post('/users/bus-bookings/:id/food/verify', asUser, asyncHandler(verifyMyFoodOrder));
 
 // Conductor / operator / admin ticket check
 busModuleRouter.get(

@@ -273,13 +273,14 @@ export const priceFoodSelection = async ({ busServiceId, schedule, travelDate, f
   return { lines, total: roundMoney(lines.reduce((sum, line) => sum + line.amount, 0)) };
 };
 
-export const createPendingDhabaOrders = async ({ booking, busService, lines }) => {
+export const createPendingDhabaOrders = async ({ booking, busService, lines, payment = null }) => {
   if (!lines?.length) {
     return [];
   }
 
   return DhabaOrder.insertMany(
     lines.map((line) => ({
+      ...(payment ? { payment } : {}),
       orderCode: createOrderCode(),
       dhabaId: line.dhabaId,
       busBookingId: booking._id,
@@ -325,6 +326,32 @@ export const confirmDhabaOrdersForBooking = async (booking) => {
   );
 
   const orders = await DhabaOrder.find({ busBookingId: booking._id, status: 'placed' }).lean();
+  orders.forEach((order) => {
+    emitToDhaba(order.dhabaId, DHABA_SOCKET_EVENTS.ORDER_NEW, serializeDhabaOrder(order, { forDhaba: true }));
+  });
+  return orders;
+};
+
+/// A standalone food order (placed after the seat booking from the ticket) was
+/// paid in its own Razorpay order: flip just that payment's food orders to
+/// 'placed', record the payment, and let each dhaba see them.
+export const confirmDhabaOrdersForFoodPayment = async ({ orderId, paymentId, signature, pnr = '' }) => {
+  if (!orderId) return [];
+  await DhabaOrder.updateMany(
+    { 'payment.orderId': orderId, status: 'awaiting_payment' },
+    {
+      $set: {
+        status: 'placed',
+        pnr: pnr || '',
+        'payment.paymentId': paymentId || '',
+        'payment.signature': signature || '',
+        'payment.status': 'paid',
+      },
+      $push: { statusHistory: { status: 'placed', by: 'system', at: new Date() } },
+    },
+  );
+
+  const orders = await DhabaOrder.find({ 'payment.orderId': orderId, status: 'placed' }).lean();
   orders.forEach((order) => {
     emitToDhaba(order.dhabaId, DHABA_SOCKET_EVENTS.ORDER_NEW, serializeDhabaOrder(order, { forDhaba: true }));
   });

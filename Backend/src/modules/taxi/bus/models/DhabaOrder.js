@@ -112,6 +112,16 @@ const dhabaOrderSchema = new mongoose.Schema(
       status: { type: String, default: '' },
     },
     cancelReason: { type: String, default: '' },
+    // Set only for food ordered AFTER the seat booking ("Book Your Meal" on the
+    // ticket), which the rider pays for in its own Razorpay order. Food added at
+    // booking time is paid with the seat payment and leaves this empty.
+    payment: {
+      provider: { type: String, default: '' },
+      orderId: { type: String, default: '', index: true },
+      paymentId: { type: String, default: '' },
+      signature: { type: String, default: '' },
+      status: { type: String, default: '' }, // '' | pending | paid
+    },
   },
   { timestamps: true },
 );
