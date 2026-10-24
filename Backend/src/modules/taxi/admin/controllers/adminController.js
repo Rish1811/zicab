@@ -10,8 +10,11 @@ import ExcelJS from 'exceljs';
 import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusService } from '../models/BusService.js';
 import { BusSeatHold } from '../../user/models/BusSeatHold.js';
-import { publishBusSeatChange } from '../../bus/services/busSeatSyncService.js';
+import { clearExpiredHoldsForSeats, publishBusSeatChange } from '../../bus/services/busSeatSyncService.js';
 import { cancelAndRefundFoodForBooking } from '../../bus/services/dhabaService.js';
+import { refundRazorpayPayment } from '../../bus/services/busRefundService.js';
+import { withBusCancellationClaim } from '../../bus/services/busPaymentService.js';
+import { priceBusSeats } from '../../bus/utils/busTime.js';
 import { getPublicActivePaymentGateway } from '../../services/paymentGatewayService.js';
 import { getOrLoadCachedValue, invalidateCachedPrefix, invalidateCachedValue } from '../../../../utils/cache.js';
 import { getMailConfigStatus, sendEmail } from '../../services/mailService.js';
@@ -148,7 +151,8 @@ const buildAdminBusSeatLayout = async ({ busService, scheduleId, travelDate }) =
     busServiceId: busService._id,
     scheduleId,
     travelDate,
-    status: { $in: ['held', 'booked'] },
+    // Expired holds don't count, even before the sweeper removes them.
+    $or: [{ status: 'booked' }, { status: 'held', expiresAt: { $gt: new Date() } }],
   }).lean();
 
   const holdMap = new Map();
@@ -1191,9 +1195,9 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     throw new ApiError(409, `Seat ${invalidSeat} is not available`);
   }
 
-  const amount = Math.round(
-    seatIds.reduce((sum, seatId) => sum + resolveBusSeatPrice(busService, availableSeatMap.get(seatId)), 0) * 100,
-  ) / 100;
+  // Seat-type fares plus the bus's tax, as in the rider app.
+  const pricing = priceBusSeats(busService, seatIds.map((seatId) => availableSeatMap.get(seatId)));
+  const amount = pricing.amount;
   const booking = await BusBooking.create({
     userId: user._id,
     busServiceId: busService._id,
@@ -1202,6 +1206,7 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     travelDate,
     seatIds,
     seatLabels: seatIds.map((seatId) => availableSeatMap.get(seatId)?.label || seatId),
+    seatPrices: pricing.seatPrices,
     passenger,
     amount,
     bookingSource: 'admin',
@@ -1218,6 +1223,10 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
       operatorName: busService.operatorName || '',
       coachType: busService.coachType || '',
       busCategory: busService.busCategory || '',
+      serviceTaxPercentage: pricing.serviceTaxPercentage,
+      baseAmount: pricing.baseAmount,
+      serviceTaxAmount: pricing.serviceTaxAmount,
+      totalAmount: pricing.amount,
     },
     payment: {
       provider: 'manual',
@@ -1230,6 +1239,7 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
     notes,
   });
 
+  await clearExpiredHoldsForSeats({ busServiceId: busService._id, scheduleId, travelDate, seatIds });
   try {
     await BusSeatHold.insertMany(
       seatIds.map((seatId) => ({
@@ -1276,6 +1286,19 @@ export const createAdminBusBooking = asyncHandler(async (req, res) => {
 });
 
 export const cancelAdminBusBookingSeats = asyncHandler(async (req, res) => {
+  const claimId = toCleanString(req.params?.id);
+  if (!mongoose.Types.ObjectId.isValid(claimId)) {
+    return cancelAdminBusBookingSeatsClaimed(req, res);
+  }
+  try {
+    return await withBusCancellationClaim({ _id: claimId }, () => cancelAdminBusBookingSeatsClaimed(req, res));
+  } catch (error) {
+    if (error?.statusCode === 409 && !(error instanceof ApiError)) throw new ApiError(409, error.message);
+    throw error;
+  }
+});
+
+const cancelAdminBusBookingSeatsClaimed = async (req, res) => {
   const bookingId = toCleanString(req.params?.id);
   const selectedSeatIds = Array.isArray(req.body?.seatIds)
     ? [...new Set(req.body.seatIds.map((item) => toCleanString(item)).filter(Boolean))]
@@ -1321,16 +1344,42 @@ export const cancelAdminBusBookingSeats = asyncHandler(async (req, res) => {
   }
 
   const cancelledAt = new Date();
+
+  // The operator released seats a rider paid for online: the rider gets those
+  // seats' money back in full (their own seat prices, else the average).
+  const paidOnline = String(booking.payment?.provider || 'razorpay') === 'razorpay'
+    && Boolean(toCleanString(booking.payment?.paymentId));
+  const seatPriceMap = new Map(
+    (Array.isArray(booking.seatPrices) ? booking.seatPrices : []).map((item) => [toCleanString(item?.seatId), Number(item?.amount || 0)]),
+  );
+  const averageSeatAmount = originalSeatIds.length ? Number(booking.amount || 0) / originalSeatIds.length : 0;
+  const seatRefunds = seatsToCancel.map((item) =>
+    paidOnline ? Math.round((seatPriceMap.has(item.seatId) ? seatPriceMap.get(item.seatId) : averageSeatAmount) * 100) / 100 : 0,
+  );
+  const refundTotal = Math.round(seatRefunds.reduce((sum, value) => sum + value, 0) * 100) / 100;
+  let refund = null;
+  if (refundTotal > 0) {
+    refund = await refundRazorpayPayment({
+      paymentId: toCleanString(booking.payment.paymentId),
+      amount: refundTotal,
+      notes: {
+        bookingCode: booking.bookingCode || '',
+        reason: 'released_by_admin',
+        seats: seatsToCancel.map((item) => item.seatLabel || item.seatId).join(', '),
+      },
+    });
+  }
+
   booking.cancelledSeats = [
     ...cancelledSeats,
-    ...seatsToCancel.map((item) => ({
+    ...seatsToCancel.map((item, index) => ({
       seatId: item.seatId,
       seatLabel: item.seatLabel,
       cancelledAt,
-      refundAmount: 0,
+      refundAmount: seatRefunds[index],
       chargeAmount: 0,
-      refundStatus: 'admin_cancelled',
-      refundId: '',
+      refundStatus: refund ? (refund.status || 'processed') : 'admin_cancelled',
+      refundId: refund?.id || '',
       refundProcessedAt: cancelledAt,
       notes: adminNote,
     })),
@@ -1343,13 +1392,16 @@ export const cancelAdminBusBookingSeats = asyncHandler(async (req, res) => {
     allowed: remainingActiveSeatCount > 0,
     appliedRuleId: '',
     appliedRuleLabel: 'Admin seat release',
-    refundType: 'none',
-    refundValue: 0,
+    refundType: refundTotal > 0 ? 'full' : 'none',
+    refundValue: refundTotal > 0 ? 100 : 0,
     hoursBeforeDeparture: 0,
-    refundAmount: 0,
+    refundAmount: refundTotal,
     chargeAmount: 0,
     notes: adminNote,
   };
+  if (refund) {
+    booking.payment.status = remainingActiveSeatCount <= 0 ? 'refunded' : 'partially_refunded';
+  }
   if (!booking.notes?.includes(adminNote)) {
     booking.notes = [booking.notes, adminNote].filter(Boolean).join(' | ');
   }
@@ -1385,7 +1437,7 @@ export const cancelAdminBusBookingSeats = asyncHandler(async (req, res) => {
         ? 'Booking cancelled and seats released successfully'
         : 'Selected seats unbooked successfully',
   });
-});
+};
 
 export const getRentalVehicleTypes = asyncHandler(async (_req, res) =>
   ok(res, { results: await adminService.listRentalVehicleTypes() }),

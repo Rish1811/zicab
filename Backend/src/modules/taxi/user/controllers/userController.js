@@ -24,16 +24,15 @@ import {
 import { assignPushTokenToEntity } from '../../services/pushTokenService.js';
 import { BusSeatHold } from '../models/BusSeatHold.js';
 import { BusBooking } from '../models/BusBooking.js';
-import { publishBusSeatChange, releaseExpiredBusHolds } from '../../bus/services/busSeatSyncService.js';
+import { clearExpiredHoldsForSeats, publishBusSeatChange, releaseExpiredBusHolds } from '../../bus/services/busSeatSyncService.js';
+import { busTripBookingProblem, MAX_SEATS_PER_BUS_BOOKING } from '../../bus/utils/busTime.js';
 import {
   cancelAndRefundFoodForBooking,
-  cancelDhabaOrdersForBooking,
-  confirmDhabaOrdersForBooking,
   createPendingDhabaOrders,
   getFoodStopCounter,
   priceFoodSelection,
 } from '../../bus/services/dhabaService.js';
-import { refundRazorpayPayment } from '../../bus/services/busRefundService.js';
+import { finalizeBusBookingPayment, withBusCancellationClaim } from '../../bus/services/busPaymentService.js';
 import { RentalBookingRequest } from '../../admin/models/RentalBookingRequest.js';
 import { RentalQuoteRequest } from '../../admin/models/RentalQuoteRequest.js';
 import { RentalVehicleType } from '../../admin/models/RentalVehicleType.js';
@@ -695,13 +694,13 @@ const normalizeBusCancellationRules = (rules = []) =>
     }))
     .sort((a, b) => b.hoursBeforeDeparture - a.hoursBeforeDeparture);
 
-const computeBusCancellationQuote = ({ booking, busService, now = new Date(), travelDateOverride = '' }) => {
+// The refund window is always measured from the booking's own travel date -
+// never a date sent by the client, which could make a departed bus look days
+// away and earn a full refund.
+const computeBusCancellationQuote = ({ booking, busService, now = new Date() }) => {
   const schedule = findBusSchedule(busService, booking?.scheduleId);
   const departureTime = schedule?.departureTime || booking?.routeSnapshot?.departureTime || '';
-  const resolvedTravelDate = tryNormalizeBusTravelDate(
-    travelDateOverride,
-    booking?.travelDate,
-  );
+  const resolvedTravelDate = tryNormalizeBusTravelDate(booking?.travelDate);
   const departureDateTime = parseBusDateTime(resolvedTravelDate, departureTime);
   const rules = normalizeBusCancellationRules(busService?.cancellationRules);
   const amount = Math.max(0, Number(booking?.amount || 0));
@@ -772,7 +771,6 @@ const buildBusPartialCancellationQuote = ({
   busService,
   seatIds = [],
   now = new Date(),
-  travelDateOverride = '',
 }) => {
   const bookingSnapshot =
     booking && typeof booking.toObject === 'function'
@@ -801,8 +799,16 @@ const buildBusPartialCancellationQuote = ({
     };
   }
 
+  // Each seat's own price when the booking recorded them (a sleeper and a
+  // seater cost differently); the average for older bookings.
+  const seatPriceMap = new Map(
+    (Array.isArray(bookingSnapshot?.seatPrices) ? bookingSnapshot.seatPrices : [])
+      .map((item) => [toCleanString(item?.seatId), Number(item?.amount || 0)]),
+  );
   const perSeatAmount = Math.round((Number(bookingSnapshot?.amount || 0) / seatCount) * 100) / 100;
-  const partialAmount = Math.round(perSeatAmount * selectedCount * 100) / 100;
+  const partialAmount = Math.round(
+    selectedSeatIds.reduce((sum, seatId) => sum + (seatPriceMap.has(seatId) ? seatPriceMap.get(seatId) : perSeatAmount), 0) * 100,
+  ) / 100;
 
   return computeBusCancellationQuote({
     booking: {
@@ -811,7 +817,6 @@ const buildBusPartialCancellationQuote = ({
     },
     busService,
     now,
-    travelDateOverride,
   });
 };
 
@@ -3321,11 +3326,13 @@ export const getBusSeatLayout = async (req, res) => {
     throw new ApiError(404, 'Bus schedule not found for the selected date');
   }
 
+  // A hold whose payment window ran out frees the seat at once, even before
+  // the sweeper deletes it.
   const holds = await BusSeatHold.find({
     busServiceId,
     scheduleId,
     travelDate,
-    status: { $in: ['held', 'booked'] },
+    $or: [{ status: 'booked' }, { status: 'held', expiresAt: { $gt: new Date() } }],
   })
     .select('seatId')
     .lean();
@@ -3402,6 +3409,9 @@ export const createBusBookingOrder = async (req, res) => {
   if (!busServiceId || !scheduleId || seatIds.length === 0) {
     throw new ApiError(400, 'busServiceId, scheduleId and seatIds are required');
   }
+  if (seatIds.length > MAX_SEATS_PER_BUS_BOOKING) {
+    throw new ApiError(400, `You can book up to ${MAX_SEATS_PER_BUS_BOOKING} seats at a time`);
+  }
 
   validateName(passenger.name);
   validatePhone(passenger.phone);
@@ -3456,6 +3466,17 @@ export const createBusBookingOrder = async (req, res) => {
     throw new ApiError(400, 'Boarding and dropping points must be different');
   }
 
+  // No past dates or buses that have already left: the rider would pay and
+  // then not be allowed to cancel.
+  const tripProblem = busTripBookingProblem({
+    travelDate,
+    departureTime: schedule.departureTime,
+    boardingTime: boardingPoint?.time || '',
+  });
+  if (tripProblem) {
+    throw new ApiError(400, tripProblem);
+  }
+
   const baseAmount = Math.round(
     seatIds.reduce((sum, seatId) => sum + resolveBusSeatPrice(busService, seatCellMap.get(seatId)), 0) * 100,
   ) / 100;
@@ -3466,6 +3487,16 @@ export const createBusBookingOrder = async (req, res) => {
   const serviceTaxPercentage = Math.max(0, Number(busService.serviceTaxPercentage || 0));
   const serviceTaxAmount = Math.round(((baseAmount * serviceTaxPercentage) / 100) * 100) / 100;
   const amount = Math.round((baseAmount + serviceTaxAmount) * 100) / 100;
+  // Each seat's own price with its share of tax, the last seat taking the
+  // rounding, so they add up to `amount` exactly.
+  const seatPrices = seatIds.map((seatId) => ({
+    seatId,
+    amount: Math.round(resolveBusSeatPrice(busService, seatCellMap.get(seatId)) * (1 + serviceTaxPercentage / 100) * 100) / 100,
+  }));
+  if (seatPrices.length) {
+    const others = seatPrices.slice(0, -1).reduce((sum, item) => sum + item.amount, 0);
+    seatPrices[seatPrices.length - 1].amount = Math.round((amount - others) * 100) / 100;
+  }
 
   // Optional dhaba pre-order, charged in the same payment as the seats.
   const food = await priceFoodSelection({
@@ -3508,6 +3539,7 @@ export const createBusBookingOrder = async (req, res) => {
     travelDate,
     seatIds,
     seatLabels: seatIds.map((seatId) => seatCellMap.get(seatId)?.label || seatId),
+    seatPrices,
     passenger,
     amount,
     foodAmount: food.total,
@@ -3541,6 +3573,7 @@ export const createBusBookingOrder = async (req, res) => {
     },
   });
 
+  await clearExpiredHoldsForSeats({ busServiceId, scheduleId, travelDate, seatIds });
   try {
     await BusSeatHold.insertMany(
       seatIds.map((seatId) => ({
@@ -3615,10 +3648,25 @@ export const verifyBusBookingPayment = async (req, res) => {
   const booking = await BusBooking.findOne({
     userId: req.auth?.sub,
     'payment.orderId': orderId,
-  });
+  })
+    .select('_id busServiceId')
+    .lean();
 
   if (!booking) {
     throw new ApiError(404, 'Bus booking not found');
+  }
+
+  // Claim-based: a double tap, a retry and the reconciliation job can't both
+  // confirm and refund the same payment (see busPaymentService).
+  let result = await finalizeBusBookingPayment({ bookingId: booking._id, paymentId, signature });
+  // Another request is finishing this same payment: wait for it briefly.
+  for (let attempt = 0; result.outcome === 'in_progress' && attempt < 12; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const current = await BusBooking.findById(booking._id);
+    if (current?.status === 'confirmed') result = { outcome: 'already_confirmed', booking: current };
+    else if (current && !current.payment?.claimedAt && current.status !== 'pending') {
+      result = { outcome: 'refunded', booking: current, message: 'Seat hold expired before the payment was confirmed.' };
+    }
   }
 
   const busService = booking.busServiceId
@@ -3627,94 +3675,19 @@ export const verifyBusBookingPayment = async (req, res) => {
         .lean()
     : null;
 
-  if (String(booking.status) === 'confirmed') {
-    return res.status(200).json({
+  if (result.outcome === 'confirmed' || result.outcome === 'already_confirmed') {
+    return res.status(result.outcome === 'confirmed' ? 201 : 200).json({
       success: true,
-      data: serializeBusBooking(booking, busService),
+      data: serializeBusBooking(result.booking, busService),
     });
   }
-
-  // The rider has paid but can't have the seats: release them and give the
-  // whole payment (seats + food) back instead of keeping it.
-  const failPaidBooking = async (status, paymentStatus, message) => {
-    booking.status = status;
-    booking.payment.paymentId = paymentId;
-    booking.payment.status = paymentStatus;
-    await booking.save();
-    await BusSeatHold.deleteMany({ bookingId: booking._id, status: { $in: ['held', 'booked'] } });
-    await cancelDhabaOrdersForBooking(booking._id, { reason: 'Seat payment could not be completed' });
-    publishBusSeatChange({
-      busServiceId: booking.busServiceId,
-      scheduleId: booking.scheduleId,
-      travelDate: booking.travelDate,
-      change: 'released',
-      seatIds: booking.seatIds,
-      bookingId: booking._id,
-    });
-
-    try {
-      const refund = await refundRazorpayPayment({
-        paymentId,
-        amount: Number(booking.amount || 0) + Number(booking.foodAmount || 0),
-        notes: { bookingCode: booking.bookingCode, reason: paymentStatus },
-      });
-      if (refund?.id) {
-        booking.payment.status = `${paymentStatus}_refunded`;
-        await booking.save();
-      }
-    } catch (refundError) {
-      console.error('[bus] auto-refund failed', booking.bookingCode, refundError.message);
-    }
-
-    throw new ApiError(409, `${message} Your payment will be refunded.`);
-  };
-
-  if (String(booking.status) !== 'pending') {
-    // The sweeper expired it while the rider was still paying.
-    if (String(booking.status) === 'expired' && !String(booking.payment?.status || '').endsWith('_refunded')) {
-      await failPaidBooking('expired', 'expired', 'Seat hold expired before payment verification.');
-    }
-    throw new ApiError(409, 'Bus booking is no longer payable');
+  if (result.outcome === 'refunded') {
+    throw new ApiError(409, `${result.message || 'Your seats could not be confirmed.'} Your payment will be refunded.`);
   }
-
-  if (booking.expiresAt && booking.expiresAt <= new Date()) {
-    await failPaidBooking('expired', 'expired', 'Seat hold expired before payment verification.');
+  if (result.outcome === 'in_progress') {
+    throw new ApiError(409, 'Your payment is still being confirmed. Please check My Bookings in a minute.');
   }
-
-  // Lock in the seats atomically, and only while the hold is still live, so
-  // the expiry sweeper can't release a seat in the gap between a check and
-  // the update.
-  const lockResult = await BusSeatHold.updateMany(
-    { bookingId: booking._id, status: 'held', expiresAt: { $gt: new Date() } },
-    { $set: { status: 'booked', expiresAt: null } },
-  );
-
-  if (lockResult.modifiedCount !== booking.seatIds.length) {
-    await failPaidBooking('failed', 'seat_conflict', 'Some selected seats are no longer reserved for this payment.');
-  }
-
-  booking.status = 'confirmed';
-  booking.expiresAt = null;
-  booking.payment.paymentId = paymentId;
-  booking.payment.signature = signature;
-  booking.payment.status = 'paid';
-  booking.payment.paidAt = new Date();
-  await booking.save();
-
-  await confirmDhabaOrdersForBooking(booking);
-  publishBusSeatChange({
-    busServiceId: booking.busServiceId,
-    scheduleId: booking.scheduleId,
-    travelDate: booking.travelDate,
-    change: 'booked',
-    seatIds: booking.seatIds,
-    bookingId: booking._id,
-  });
-
-  res.status(201).json({
-    success: true,
-    data: serializeBusBooking(booking, busService),
-  });
+  throw new ApiError(409, 'Bus booking is no longer payable');
 };
 
 export const getMyBusBookingById = async (req, res) => {
@@ -3832,6 +3805,19 @@ export const submitMyBusBookingReview = async (req, res) => {
 };
 
 export const cancelMyBusBooking = async (req, res) => {
+  const bookingId = String(req.params?.id || '').trim();
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw new ApiError(400, 'Valid bus booking id is required');
+  }
+  try {
+    return await withBusCancellationClaim({ _id: bookingId, userId: req.auth?.sub }, () => cancelClaimedBusBooking(req, res));
+  } catch (error) {
+    if (error?.statusCode === 409 && !(error instanceof ApiError)) throw new ApiError(409, error.message);
+    throw error;
+  }
+};
+
+const cancelClaimedBusBooking = async (req, res) => {
   await ensureBusServiceEnabled();
   await cleanupExpiredBusSeatHolds();
 
@@ -3897,7 +3883,6 @@ export const cancelMyBusBooking = async (req, res) => {
     booking,
     busService,
     seatIds: seatsToCancel.map((item) => item.seatId),
-    travelDateOverride: req.body?.travelDate || req.body?.date,
   });
   if (!cancellationQuote.allowed) {
     throw new ApiError(409, cancellationQuote.reason || 'This booking can no longer be cancelled');
@@ -3972,7 +3957,14 @@ export const cancelMyBusBooking = async (req, res) => {
   booking.payment.status = refundPayload
     ? (remainingActiveSeatCount <= 0 ? 'refunded' : 'partially_refunded')
     : (remainingActiveSeatCount <= 0 ? 'cancelled' : booking.payment.status || 'paid');
-  await booking.save();
+  // The refund has already gone out: recording it must not be lost to one
+  // failed write.
+  try {
+    await booking.save();
+  } catch (saveError) {
+    console.error('[bus] cancel save failed after refund, retrying', booking.bookingCode, refundPayload?.id, saveError.message);
+    await booking.save();
+  }
 
   await BusSeatHold.deleteMany({
     bookingId: booking._id,

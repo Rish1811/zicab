@@ -335,22 +335,30 @@ export const confirmDhabaOrdersForBooking = async (booking) => {
 /// started are cancelled and their amount is returned so the caller can
 /// refund it; anything already being cooked is kept and not refunded.
 export const cancelDhabaOrdersForBooking = async (bookingId, { reason = 'Bus booking cancelled', by = 'system' } = {}) => {
-  const orders = await DhabaOrder.find({
+  const cancellable = ['awaiting_payment', 'placed', 'notified', 'accepted'];
+  const candidates = await DhabaOrder.find({
     busBookingId: bookingId,
-    status: { $in: ['awaiting_payment', 'placed', 'notified', 'accepted'] },
+    status: { $in: cancellable },
   }).lean();
+
+  // One conditional update per order, so an order the kitchen moved on (to
+  // preparing, or cancelled itself) a moment ago is left alone and not
+  // refunded twice.
+  const orders = [];
+  for (const order of candidates) {
+    const result = await DhabaOrder.updateOne(
+      { _id: order._id, status: { $in: cancellable } },
+      {
+        $set: { status: 'cancelled', cancelReason: reason },
+        $push: { statusHistory: { status: 'cancelled', by, at: new Date() } },
+      },
+    );
+    if (result.modifiedCount === 1) orders.push(order);
+  }
 
   if (!orders.length) {
     return { refundableAmount: 0, orders: [] };
   }
-
-  await DhabaOrder.updateMany(
-    { _id: { $in: orders.map((order) => order._id) } },
-    {
-      $set: { status: 'cancelled', cancelReason: reason },
-      $push: { statusHistory: { status: 'cancelled', by, at: new Date() } },
-    },
-  );
 
   const refundableAmount = roundMoney(
     orders.filter((order) => order.status !== 'awaiting_payment').reduce((sum, order) => sum + Number(order.amount || 0), 0),

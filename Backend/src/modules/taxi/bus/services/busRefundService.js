@@ -29,3 +29,26 @@ export const refundRazorpayPayment = async ({ paymentId, amount, notes = {} }) =
 
   return payload;
 };
+
+/// Any Razorpay API call with the configured keys; throws with Razorpay's own
+/// message on a non-2xx.
+export const razorpayApi = async ({ method = 'GET', path, body }) => {
+  const { keyId, keySecret } = await resolveConfiguredGatewayCredentials('razor_pay');
+  const credentials = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+  const response = await fetch(`https://api.razorpay.com/v1${path}`, {
+    method,
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      response.status || 502,
+      payload?.error?.description || payload?.error?.message || 'Razorpay request failed',
+    );
+  }
+  return payload;
+};

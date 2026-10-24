@@ -158,17 +158,32 @@ export const onBusBookingsExpired = (hook) => {
 /// an idempotent update.
 export const releaseExpiredBusHolds = async () => {
   const now = new Date();
+  const claimStale = new Date(now.getTime() - 3 * 60 * 1000);
 
-  const expiredBookings = await BusBooking.find({ status: 'pending', expiresAt: { $lte: now } })
+  const candidates = await BusBooking.find({ status: 'pending', expiresAt: { $lte: now } })
     .select('_id')
+    .limit(200)
     .lean();
-  const bookingIds = expiredBookings.map((item) => item._id);
 
-  if (bookingIds.length > 0) {
-    await BusBooking.updateMany(
-      { _id: { $in: bookingIds }, status: 'pending' },
+  // One conditional update per booking, skipping any whose payment is being
+  // confirmed right now (claimed), so a rider who paid in the last second
+  // isn't expired under the confirmation. Only bookings this process actually
+  // expired go to the hooks, so four processes don't each cancel the food.
+  const bookingIds = [];
+  for (const candidate of candidates) {
+    const result = await BusBooking.updateOne(
+      {
+        _id: candidate._id,
+        status: 'pending',
+        expiresAt: { $lte: now },
+        $or: [{ 'payment.claimedAt': null }, { 'payment.claimedAt': { $lt: claimStale } }],
+      },
       { $set: { status: 'expired', 'payment.status': 'expired' } },
     );
+    if (result.modifiedCount === 1) bookingIds.push(candidate._id);
+  }
+
+  if (bookingIds.length > 0) {
     for (const hook of expiryHooks) {
       try {
         await hook(bookingIds);
@@ -180,17 +195,38 @@ export const releaseExpiredBusHolds = async () => {
 
   const expiredHolds = await BusSeatHold.find({ status: 'held', expiresAt: { $lte: now } })
     .select('_id busServiceId scheduleId travelDate seatId')
+    .limit(1000)
     .lean();
 
-  if (expiredHolds.length > 0) {
-    await BusSeatHold.deleteMany({
-      _id: { $in: expiredHolds.map((hold) => hold._id) },
-      status: 'held',
-    });
-    publishForHolds(expiredHolds, 'released');
+  // Delete one by one and announce only what this process removed: with four
+  // processes sweeping, channels would otherwise get every release four times.
+  const released = [];
+  for (const hold of expiredHolds) {
+    const result = await BusSeatHold.deleteOne({ _id: hold._id, status: 'held', expiresAt: { $lte: now } });
+    if (result.deletedCount === 1) released.push(hold);
+  }
+  if (released.length > 0) {
+    publishForHolds(released, 'released');
   }
 
-  return { expiredBookings: bookingIds.length, releasedSeats: expiredHolds.length };
+  return { expiredBookings: bookingIds.length, releasedSeats: released.length };
+};
+
+/// Before locking seats: drops holds on exactly these seats whose payment
+/// window has already run out, so a rider isn't told "just booked by someone
+/// else" during the up-to-30s before the sweeper gets to them. Safe - a hold
+/// past expiresAt can no longer be confirmed.
+export const clearExpiredHoldsForSeats = async ({ busServiceId, scheduleId, travelDate, seatIds = [] }) => {
+  if (!seatIds.length) return 0;
+  const result = await BusSeatHold.deleteMany({
+    busServiceId,
+    scheduleId,
+    travelDate,
+    seatId: { $in: seatIds.map(String) },
+    status: 'held',
+    expiresAt: { $lte: new Date() },
+  });
+  return result.deletedCount || 0;
 };
 
 let sweeperTimer = null;

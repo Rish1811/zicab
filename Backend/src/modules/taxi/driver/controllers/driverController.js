@@ -13,7 +13,9 @@ import { WithdrawalRequest } from "../../admin/models/WithdrawalRequest.js";
 import { Ride } from "../../user/models/Ride.js";
 import { BusBooking } from "../../user/models/BusBooking.js";
 import { BusSeatHold } from "../../user/models/BusSeatHold.js";
-import { publishBusSeatChange } from "../../bus/services/busSeatSyncService.js";
+import { clearExpiredHoldsForSeats, publishBusSeatChange } from "../../bus/services/busSeatSyncService.js";
+import { priceBusSeats } from "../../bus/utils/busTime.js";
+import { withBusCancellationClaim } from "../../bus/services/busPaymentService.js";
 import { publishBusLiveLocation } from "../../bus/services/busTicketService.js";
 import { resolveScheduleRoute } from "../../bus/utils/busRoutes.js";
 import { cancelAndRefundFoodForBooking } from "../../bus/services/dhabaService.js";
@@ -831,7 +833,6 @@ const buildOwnerBusPartialCancellationQuote = ({
   booking,
   busService,
   seatIds = [],
-  travelDateOverride = "",
   now = new Date(),
 }) => {
   const bookingSnapshot =
@@ -859,11 +860,19 @@ const buildOwnerBusPartialCancellationQuote = ({
     };
   }
 
+  // Each seat's own price when recorded (sleeper vs seater), else the average.
+  const seatPriceMap = new Map(
+    (Array.isArray(bookingSnapshot?.seatPrices) ? bookingSnapshot.seatPrices : [])
+      .map((item) => [toCleanString(item?.seatId), Number(item?.amount || 0)]),
+  );
   const perSeatAmount = Math.round((Number(bookingSnapshot?.amount || 0) / seatCount) * 100) / 100;
-  const partialAmount = Math.round(perSeatAmount * selectedCount * 100) / 100;
+  const partialAmount = Math.round(
+    selectedSeatIds.reduce((sum, seatId) => sum + (seatPriceMap.has(seatId) ? seatPriceMap.get(seatId) : perSeatAmount), 0) * 100,
+  ) / 100;
   const schedule = findBusSchedule(busService, booking?.scheduleId);
   const departureTime = schedule?.departureTime || booking?.routeSnapshot?.departureTime || "";
-  const resolvedTravelDate = toCleanString(travelDateOverride || booking?.travelDate);
+  // Always the booking's own date - never one sent with the request.
+  const resolvedTravelDate = toCleanString(booking?.travelDate);
   const departureDateTime = parseOwnerBusDateTime(resolvedTravelDate, departureTime);
   const rules = normalizeOwnerBusCancellationRules(busService?.cancellationRules);
   const amount = Math.max(0, partialAmount);
@@ -989,7 +998,8 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
     busServiceId: busService._id,
     scheduleId,
     travelDate,
-    status: { $in: ["held", "booked"] },
+    // Expired holds don't count, even before the sweeper removes them.
+    $or: [{ status: "booked" }, { status: "held", expiresAt: { $gt: new Date() } }],
   })
     .select("seatId")
     .lean();
@@ -5822,7 +5832,9 @@ export const createBusDriverReservation = async (req, res) => {
     throw new ApiError(409, `Seat ${invalidSeat} is not available`);
   }
 
-  const amount = Math.round(Number(busService.seatPrice || 0) * seatIds.length * 100) / 100;
+  // Same pricing as the rider app: each seat type's fare plus the bus's tax.
+  const pricing = priceBusSeats(busService, seatIds.map((seatId) => availableSeatMap.get(seatId)));
+  const amount = pricing.amount;
   const booking = await BusBooking.create({
     userId: busDriver._id,
     busServiceId: busService._id,
@@ -5831,6 +5843,7 @@ export const createBusDriverReservation = async (req, res) => {
     travelDate,
     seatIds,
     seatLabels: seatIds.map((seatId) => availableSeatMap.get(seatId)?.label || seatId),
+    seatPrices: pricing.seatPrices,
     passenger,
     amount,
     bookingSource: "bus_driver",
@@ -5848,6 +5861,10 @@ export const createBusDriverReservation = async (req, res) => {
       operatorName: busService.operatorName || "",
       coachType: busService.coachType || "",
       busCategory: busService.busCategory || "",
+      serviceTaxPercentage: pricing.serviceTaxPercentage,
+      baseAmount: pricing.baseAmount,
+      serviceTaxAmount: pricing.serviceTaxAmount,
+      totalAmount: pricing.amount,
     },
     payment: {
       provider: "manual",
@@ -5860,6 +5877,7 @@ export const createBusDriverReservation = async (req, res) => {
     notes,
   });
 
+  await clearExpiredHoldsForSeats({ busServiceId: busService._id, scheduleId, travelDate, seatIds });
   try {
     await BusSeatHold.insertMany(
       seatIds.map((seatId) => ({
@@ -9306,6 +9324,19 @@ export const getOwnerBusBookingCalendar = async (req, res) => {
 };
 
 export const cancelOwnerBusBookingSeats = async (req, res) => {
+  const claimId = String(req.params?.bookingId || req.params?.id || "").trim();
+  if (!mongoose.Types.ObjectId.isValid(claimId)) {
+    return cancelOwnerBusBookingSeatsClaimed(req, res);
+  }
+  try {
+    return await withBusCancellationClaim({ _id: claimId }, () => cancelOwnerBusBookingSeatsClaimed(req, res));
+  } catch (error) {
+    if (error?.statusCode === 409 && !(error instanceof ApiError)) throw new ApiError(409, error.message);
+    throw error;
+  }
+};
+
+const cancelOwnerBusBookingSeatsClaimed = async (req, res) => {
   const owner = await Owner.findById(req.auth.sub).lean();
 
   if (!owner) {
@@ -9366,7 +9397,6 @@ export const cancelOwnerBusBookingSeats = async (req, res) => {
     booking,
     busService,
     seatIds: seatsToCancel.map((item) => item.seatId),
-    travelDateOverride: req.body?.travelDate || req.body?.date,
   });
   if (!cancellationQuote.allowed) {
     throw new ApiError(409, cancellationQuote.reason || "This booking can no longer be cancelled");
@@ -9374,8 +9404,11 @@ export const cancelOwnerBusBookingSeats = async (req, res) => {
 
   const cancelledAt = new Date();
   let refundPayload = null;
-  if (cancellationQuote.refundAmount > 0) {
-    const paymentId = toCleanString(booking.payment?.paymentId);
+  const paymentId = toCleanString(booking.payment?.paymentId);
+  // Counter (cash) and channel bookings were not paid through Razorpay: the
+  // refund, if any, is settled directly, so there is nothing to call.
+  const paidOnline = String(booking.payment?.provider || "razorpay") === "razorpay";
+  if (cancellationQuote.refundAmount > 0 && paidOnline) {
     if (!paymentId) {
       throw new ApiError(409, "This booking cannot be refunded because the payment reference is missing");
     }
@@ -9416,7 +9449,9 @@ export const cancelOwnerBusBookingSeats = async (req, res) => {
       chargeAmount: index === seatsToCancel.length - 1
         ? Math.max(0, Math.round((cancellationQuote.chargeAmount - (perSeatChargeAmount * (seatsToCancel.length - 1))) * 100) / 100)
         : perSeatChargeAmount,
-      refundStatus: refundPayload ? (refundPayload.status || "processed") : "not_applicable",
+      refundStatus: refundPayload
+        ? (refundPayload.status || "processed")
+        : (!paidOnline && cancellationQuote.refundAmount > 0 ? "settle_offline" : "not_applicable"),
       refundId: refundPayload?.id || "",
       refundProcessedAt: refundPayload?.created_at ? new Date(Number(refundPayload.created_at) * 1000) : cancelledAt,
       notes: ownerNote || cancellationQuote.notes || "",

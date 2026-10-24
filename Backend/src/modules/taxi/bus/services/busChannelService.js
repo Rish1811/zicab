@@ -6,8 +6,8 @@ import { BusBooking } from '../../user/models/BusBooking.js';
 import { BusSeatHold } from '../../user/models/BusSeatHold.js';
 import { BusChannel } from '../models/BusChannel.js';
 import { BusChannelEvent } from '../models/BusChannelEvent.js';
-import { findSchedule, flattenBlueprintSeats } from '../utils/busTime.js';
-import { getTripSeatSnapshot, onBusSeatChange, publishBusSeatChange } from './busSeatSyncService.js';
+import { busTripBookingProblem, findSchedule, flattenBlueprintSeats } from '../utils/busTime.js';
+import { clearExpiredHoldsForSeats, getTripSeatSnapshot, onBusSeatChange, publishBusSeatChange } from './busSeatSyncService.js';
 import { resolveScheduleRoute } from '../utils/busRoutes.js';
 
 // Multi-platform seat synchronisation.
@@ -130,7 +130,22 @@ const loadSellableTrip = async (channel, { busServiceId, scheduleId, travelDate 
     throw new ApiError(404, 'Schedule not found');
   }
 
-  return { busService, schedule, travelDate: normalizeDate(travelDate) };
+  const date = normalizeDate(travelDate);
+  // Same rules as our own apps: a day this schedule runs, a real date, and a
+  // bus that has not already left.
+  const activeDays = Array.isArray(schedule.activeDays) ? schedule.activeDays : [];
+  if (activeDays.length) {
+    const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(`${date}T00:00:00Z`).getUTCDay()];
+    if (!activeDays.includes(weekday)) {
+      throw new ApiError(404, 'This schedule does not run on that date');
+    }
+  }
+  const problem = busTripBookingProblem({ travelDate: date, departureTime: schedule.departureTime });
+  if (problem) {
+    throw new ApiError(400, problem);
+  }
+
+  return { busService, schedule, travelDate: date };
 };
 
 const logInbound = (channel, event, data = {}) =>
@@ -319,8 +334,19 @@ export const createChannelBooking = async (channel, body = {}) => {
       paidAt: hold ? null : new Date(),
     },
   });
-  await booking.save();
+  try {
+    await booking.save();
+  } catch (error) {
+    // The same externalRef sent twice at once: the unique index let one in;
+    // answer the other with that booking, as a replay.
+    if (error?.code === 11000) {
+      const winner = await BusBooking.findOne({ 'channel.channelId': channel._id, 'channel.externalRef': externalRef });
+      if (winner) return { booking: winner, replayed: true };
+    }
+    throw error;
+  }
 
+  await clearExpiredHoldsForSeats({ busServiceId: busService._id, scheduleId: schedule.id, travelDate, seatIds });
   try {
     await BusSeatHold.insertMany(
       seatIds.map((seatId) => ({
@@ -411,12 +437,19 @@ export const confirmChannelBooking = async (channel, externalRef, body = {}) => 
 
   // Flip the holds first, conditionally on them still being live. If the
   // sweeper got there first, fewer rows match and the confirm is refused.
-  const result = await BusSeatHold.updateMany(
+  await BusSeatHold.updateMany(
     { bookingId: booking._id, status: 'held', expiresAt: { $gt: new Date() } },
     { $set: { status: 'booked', expiresAt: null } },
   );
-  if (result.modifiedCount !== booking.seatIds.length) {
-    await BusSeatHold.deleteMany({ bookingId: booking._id, status: 'held' });
+  // Compare with the seats still on the booking: a seat the channel
+  // cancelled while holding has no hold any more and must not fail the rest.
+  const cancelledIds = new Set((booking.cancelledSeats || []).map((item) => String(item.seatId)));
+  const activeSeatCount = booking.seatIds.filter((id) => !cancelledIds.has(String(id))).length;
+  const bookedCount = await BusSeatHold.countDocuments({ bookingId: booking._id, status: 'booked' });
+  if (activeSeatCount === 0 || bookedCount !== activeSeatCount) {
+    // Release everything this booking held, booked included, or a seat
+    // flipped a moment ago would stay blocked forever (no expiry).
+    await BusSeatHold.deleteMany({ bookingId: booking._id, status: { $in: ['held', 'booked'] } });
     booking.status = 'expired';
     await booking.save();
     throw new ApiError(409, 'Hold has expired; book the seats again');

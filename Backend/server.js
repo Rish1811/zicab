@@ -9,6 +9,7 @@ import { restoreScheduledDispatches, startDispatchRecoveryLoop } from './src/mod
 import { startDriverSubscriptionExpiryLoop } from './src/modules/taxi/driver/services/driverSubscriptionExpiryService.js';
 import { startSurgeEngineLoop } from './src/modules/taxi/services/surgeService.js';
 import { startBusHoldSweeper } from './src/modules/taxi/bus/services/busSeatSyncService.js';
+import { startBusPaymentReconciler } from './src/modules/taxi/bus/services/busPaymentService.js';
 import { startDhabaAlertLoop } from './src/modules/taxi/bus/services/dhabaService.js';
 import { startChannelWebhookRetryLoop } from './src/modules/taxi/bus/services/busChannelService.js';
 import { startChannelPullLoop } from './src/modules/taxi/bus/services/busChannelSyncService.js';
@@ -33,6 +34,7 @@ const bootstrap = async () => {
   startDriverSubscriptionExpiryLoop();
   startSurgeEngineLoop();
   startBusHoldSweeper();
+  startBusPaymentReconciler();
   startDhabaAlertLoop();
   startChannelWebhookRetryLoop();
   startChannelPullLoop();

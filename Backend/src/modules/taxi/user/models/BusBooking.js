@@ -214,6 +214,22 @@ const busBookingSchema = new mongoose.Schema(
       registrationNumber: { type: String, default: '' },
       driverName: { type: String, default: '' },
       driverPhone: { type: String, default: '' },
+      // Fare breakdown at booking time (were dropped before: not in the schema).
+      serviceTaxPercentage: { type: Number, default: 0 },
+      baseAmount: { type: Number, default: 0 },
+      serviceTaxAmount: { type: Number, default: 0 },
+      totalAmount: { type: Number, default: 0 },
+    },
+    // What each seat cost, tax included, so cancelling one seat of a mixed
+    // booking (sleeper + seater) refunds that seat's own price.
+    seatPrices: {
+      type: [
+        new mongoose.Schema(
+          { seatId: { type: String, default: '' }, amount: { type: Number, default: 0 } },
+          { _id: false },
+        ),
+      ],
+      default: [],
     },
     payment: {
       provider: { type: String, default: 'razorpay' },
@@ -222,6 +238,23 @@ const busBookingSchema = new mongoose.Schema(
       signature: { type: String, default: '' },
       status: { type: String, default: 'pending' },
       paidAt: { type: Date, default: null },
+      // Set by whoever is confirming or refunding this payment right now, so
+      // two requests (double tap, verify + reconciliation job, 4 servers)
+      // can't both act on it. A claim older than a few minutes is stale.
+      claimedAt: { type: Date, default: null },
+      refundId: { type: String, default: '' },
+      refundedAt: { type: Date, default: null },
+      refundAttempts: { type: Number, default: 0 },
+      refundError: { type: String, default: '' },
+      // Last time the reconciliation job asked Razorpay whether this order
+      // was paid (for riders whose app closed before confirming).
+      lastCheckedAt: { type: Date, default: null },
+    },
+    // Same idea for cancellations: one at a time per booking, so two cancel
+    // requests can't each refund.
+    cancelClaimedAt: {
+      type: Date,
+      default: null,
     },
     cancelledAt: {
       type: Date,
