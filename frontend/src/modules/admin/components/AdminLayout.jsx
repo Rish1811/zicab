@@ -1822,6 +1822,14 @@ const AdminLayout = () => {
         )}
 
         <main className="no-scrollbar flex-1 overflow-y-auto p-4 scroll-smooth lg:p-8">
+          {adminProfile?.read_only ? (
+            // The server refuses every change from this account; the banner
+            // says so before someone tries.
+            <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-800">
+              <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">View only</span>
+              You can look at everything here but cannot create, edit, approve or delete anything.
+            </div>
+          ) : null}
           <Outlet />
         </main>
       </div>

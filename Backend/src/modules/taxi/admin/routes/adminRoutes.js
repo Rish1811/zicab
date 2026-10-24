@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middlewares/authMiddleware.js';
+import { enforceAdminReadOnly } from '../../middlewares/adminReadOnlyMiddleware.js';
 import {
   loginRateLimit,
   otpSendRateLimit,
@@ -287,7 +288,9 @@ adminRouter.post('/admin/reset-password', otpVerifyRateLimit, resetPassword);
 // Public route for app branding/settings
 adminRouter.get('/admin/general-settings/:category', getGeneralSettingsCategory);
 
-adminRouter.use('/admin', authenticate(['admin']));
+// View-only admins are stopped here for every /admin write - including the
+// bus, support, career and promotions routers mounted after this one.
+adminRouter.use('/admin', authenticate(['admin']), enforceAdminReadOnly());
 
 adminRouter.get('/admin/permissions', getAdminPermissions);
 adminRouter.get('/admin/admin-management/admins', getAdmins);
@@ -565,9 +568,11 @@ adminRouter.patch('/admin/cancellation-reasons/:id', updateCancellationReason);
 adminRouter.delete('/admin/cancellation-reasons/:id', deleteCancellationReason);
 
 adminRouter.get('/on-boarding', getUserOnboarding);
-adminRouter.post('/on-boarding', createOnboardingScreen);
-adminRouter.patch('/on-boarding/:id', updateOnboardingScreen);
-adminRouter.delete('/on-boarding/:id', deleteOnboardingScreen);
+// The apps read onboarding screens without signing in; changing them is admin
+// only (these were open to anyone).
+adminRouter.post('/on-boarding', authenticate(['admin']), enforceAdminReadOnly(), createOnboardingScreen);
+adminRouter.patch('/on-boarding/:id', authenticate(['admin']), enforceAdminReadOnly(), updateOnboardingScreen);
+adminRouter.delete('/on-boarding/:id', authenticate(['admin']), enforceAdminReadOnly(), deleteOnboardingScreen);
 adminRouter.get('/on-boarding-driver', getDriverOnboarding);
 adminRouter.get('/on-boarding-owner', getOwnerOnboarding);
 

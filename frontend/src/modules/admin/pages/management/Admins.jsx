@@ -102,6 +102,7 @@ const Admins = () => {
     role: 'Operations Subadmin',
     admin_type: 'subadmin',
     permissions: [],
+    read_only: false,
     service_location_ids: [],
     zone_ids: [],
     password: '',
@@ -511,6 +512,7 @@ const Admins = () => {
         admin_type: form.admin_type,
         // Menu keys plus the API permission each menu's page needs.
         permissions: form.admin_type === 'superadmin' ? ['*'] : expandMenuPermissions(form.permissions),
+        read_only: form.admin_type !== 'superadmin' && Boolean(form.read_only),
         service_location_ids: form.service_location_ids,
         zone_ids: form.zone_ids,
         password: form.password,
@@ -548,6 +550,7 @@ const Admins = () => {
       role: admin.role || 'Operations Subadmin',
       admin_type: admin.admin_type || 'subadmin',
       permissions: admin.admin_type === 'superadmin' ? [] : menuKeysForAdmin(admin.permissions || []),
+      read_only: admin.read_only === true,
       service_location_ids: (admin.service_location_ids || []).map(String),
       zone_ids: (admin.zone_ids || []).map(String),
       password: '',
@@ -583,6 +586,7 @@ const Admins = () => {
         role: form.admin_type === 'superadmin' ? 'superadmin' : form.role,
         admin_type: form.admin_type,
         permissions: form.admin_type === 'superadmin' ? ['*'] : expandMenuPermissions(form.permissions),
+        read_only: form.admin_type !== 'superadmin' && Boolean(form.read_only),
         service_location_ids: form.service_location_ids,
         zone_ids: form.zone_ids,
         active: form.active,
@@ -1319,6 +1323,9 @@ const Admins = () => {
                             <span className={`text-[10px] font-bold uppercase tracking-wider ${isSuper ? 'text-[#FFC400]' : 'text-slate-600'}`}>
                               {isSuper ? 'Super Admin' : (admin.role || 'Personnel')}
                             </span>
+                            {admin.read_only ? (
+                              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700">View only</span>
+                            ) : null}
                           </div>
                         </td>
 

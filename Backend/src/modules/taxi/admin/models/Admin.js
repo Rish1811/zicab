@@ -38,6 +38,12 @@ const adminSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // View-only: can open what `permissions` allow but change nothing - every
+    // write request is refused by enforceAdminReadOnly.
+    read_only: {
+      type: Boolean,
+      default: false,
+    },
     service_location_ids: {
       type: [
         {

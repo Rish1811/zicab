@@ -134,6 +134,23 @@ const AdminAccountForm = ({
       </div>
 
       {isSub && (
+        <label className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${form.read_only ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'}`}>
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4"
+            checked={Boolean(form.read_only)}
+            onChange={(e) => setField('read_only', e.target.checked)}
+          />
+          <span>
+            <span className="block text-xs font-semibold text-[#0B1220]">View only</span>
+            <span className="block text-[11px] text-slate-500">
+              Can open every menu ticked below but cannot create, edit, approve or delete anything. Enforced on the server.
+            </span>
+          </span>
+        </label>
+      )}
+
+      {isSub && (
         <div className="space-y-3">
           <div>
             <label className={labelClass}>Service locations <span className="text-rose-500">*</span></label>

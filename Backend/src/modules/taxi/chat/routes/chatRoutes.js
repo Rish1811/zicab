@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { authenticate } from '../../middlewares/authMiddleware.js';
+import { enforceAdminReadOnly } from '../../middlewares/adminReadOnlyMiddleware.js';
 import {
   deleteSupportConversation,
   getSupportConversationList,
@@ -12,6 +13,8 @@ import {
 export const chatRouter = Router();
 
 chatRouter.use(authenticate(['admin', 'user', 'driver'], { allowPending: true }));
+// A view-only admin can read support chats and mark them read, not reply or delete.
+chatRouter.use(enforceAdminReadOnly([['PATCH', /\/messages\/[^/]+\/read$/]]));
 
 chatRouter.get('/conversations', asyncHandler(getSupportConversationList));
 chatRouter.get('/messages/:conversationKey', asyncHandler(getSupportConversationMessages));

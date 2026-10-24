@@ -398,6 +398,7 @@ const serializeAdminSummary = (admin, serviceLocationMap = new Map(), zoneMap = 
     role: admin.role || '',
     admin_type: normalizeAdminType(admin.admin_type || admin.role),
     permissions: normalizeAdminPermissions(admin.permissions || []),
+    read_only: admin.read_only === true,
     service_location_ids: serviceLocationIds,
     zone_ids: zoneIds,
     service_locations: serviceLocationIds
@@ -3477,8 +3478,14 @@ export const listAdmins = async (currentAdmin) => {
   return enrichAdminSummaries(admins);
 };
 
-const validateSubadminPayload = async (payload = {}, existingAdminId = null) => {
+const validateSubadminPayload = async (payload = {}, existingAdminId = null, currentAdmin = null) => {
   const adminType = normalizeAdminType(payload.admin_type || payload.role);
+  // Only a superadmin can make (or keep making) a superadmin - a sub-admin
+  // with subadmins.manage must not be able to promote anyone, itself included.
+  if (adminType === 'superadmin' && currentAdmin && normalizeAdminType(currentAdmin.admin_type || currentAdmin.role) !== 'superadmin') {
+    throw new ApiError(403, 'Only a superadmin can create or edit a superadmin');
+  }
+  const readOnly = adminType !== 'superadmin' && normalizeBoolean(payload.read_only ?? payload.readOnly ?? false);
   const name = String(payload.name || '').trim();
   const email = String(payload.email || '').trim().toLowerCase();
   const phone = String(payload.phone || '').trim();
@@ -3508,6 +3515,10 @@ const validateSubadminPayload = async (payload = {}, existingAdminId = null) => 
 
   if (duplicate) {
     throw new ApiError(409, 'Admin email already exists');
+  }
+
+  if (readOnly && permissions.includes('subadmins.manage')) {
+    throw new ApiError(400, 'A view-only admin cannot manage sub-admins');
   }
 
   if (adminType === 'subadmin' && permissions.length === 0) {
@@ -3546,6 +3557,7 @@ const validateSubadminPayload = async (payload = {}, existingAdminId = null) => 
     phone,
     role,
     permissions,
+    read_only: readOnly,
     service_location_ids: adminType === 'superadmin' ? [] : serviceLocationIds,
     zone_ids: adminType === 'superadmin' ? [] : zoneIds,
     active,
@@ -3567,7 +3579,7 @@ export const createAdminAccount = async (currentAdmin, payload = {}) => {
     throw new ApiError(400, 'Passwords do not match');
   }
 
-  const validated = await validateSubadminPayload(payload);
+  const validated = await validateSubadminPayload(payload, null, currentAdmin);
   const created = await Admin.create({
     ...validated,
     password: await hashPassword(password),
@@ -3597,7 +3609,12 @@ export const updateAdminAccount = async (currentAdmin, id, payload = {}) => {
     throw new ApiError(400, 'Use your profile flow to update your own admin account');
   }
 
-  const validated = await validateSubadminPayload(payload, admin._id);
+  // Editing an existing superadmin is a superadmin's job too.
+  if (normalizeAdminType(admin.admin_type || admin.role) === 'superadmin'
+    && normalizeAdminType(currentAdmin?.admin_type || currentAdmin?.role) !== 'superadmin') {
+    throw new ApiError(403, 'Only a superadmin can create or edit a superadmin');
+  }
+  const validated = await validateSubadminPayload(payload, admin._id, currentAdmin);
 
   const before = {
     permissions: [...(admin.permissions || [])].map(String).sort().join(','),

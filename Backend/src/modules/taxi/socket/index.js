@@ -1,3 +1,4 @@
+import { Admin } from '../admin/models/Admin.js';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { Server } from 'socket.io';
 import { env } from '../../../config/env.js';
@@ -211,6 +212,14 @@ export const configureTaxiSocketServer = async (httpServer) => {
       onAsync(socket, async ({ message, receiverRole, receiverId, conversationKey }) => {
         let nextReceiverRole = receiverRole;
         let nextReceiverId = receiverId;
+
+        // View-only admins read support chats but don't reply.
+        if (identity.role === 'admin') {
+          const sender = await Admin.findById(identity.sub).select('read_only').lean();
+          if (sender?.read_only) {
+            throw new Error('This is a view-only admin account. Changes are not allowed.');
+          }
+        }
 
         if (identity.role === 'admin' && (!nextReceiverRole || !nextReceiverId) && conversationKey) {
           const parsed = parseSupportConversationKey(conversationKey);

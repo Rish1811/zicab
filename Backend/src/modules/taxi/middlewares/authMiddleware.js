@@ -160,6 +160,7 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
         role: entity.role || '',
         admin_type: normalizeAdminType(entity.admin_type || entity.role),
         permissions: normalizeAdminPermissions(entity.permissions || []),
+        read_only: entity.read_only === true,
         service_location_ids: Array.isArray(entity.service_location_ids)
           ? entity.service_location_ids.map((item) => String(item))
           : [],
