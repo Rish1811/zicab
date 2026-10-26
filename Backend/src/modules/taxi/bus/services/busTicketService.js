@@ -240,22 +240,36 @@ const assertCrewAccess = async (busService, role, actorId) => {
   throw new ApiError(403, 'This ticket is for a bus you do not operate');
 };
 
-const serializeCheckedTicket = (booking, busService) => ({
-  valid: booking.status === 'confirmed',
-  boardedAt: booking.boarding?.boardedAt || null,
-  pnr: booking.pnr,
-  status: booking.status,
-  travelDate: booking.travelDate,
-  scheduleId: booking.scheduleId,
-  busName: busService?.busName || booking.routeSnapshot?.busName || '',
-  seats: activeSeatLabels(booking),
-  passengerName: booking.passenger?.name || '',
-  passengerPhone: booking.passenger?.phone || '',
-  boardingPoint: booking.boardingPoint?.pointName || booking.boardingPoint?.city || '',
-  droppingPoint: booking.droppingPoint?.pointName || booking.droppingPoint?.city || '',
-  source: booking.bookingSource,
-  channel: booking.channel?.name || '',
-});
+const serializeCheckedTicket = (booking, busService) => {
+  const route = booking.routeSnapshot || {};
+  return {
+    valid: booking.status === 'confirmed',
+    boardedAt: booking.boarding?.boardedAt || null,
+    pnr: booking.pnr,
+    bookingCode: booking.bookingCode || '',
+    status: booking.status,
+    travelDate: booking.travelDate,
+    scheduleId: booking.scheduleId,
+    bookedAt: booking.createdAt || null,
+    busName: busService?.busName || route.busName || '',
+    coachType: route.coachType || route.busCategory || '',
+    // Where the passenger is going — full A-Z of the trip for the crew.
+    fromCity: booking.boardingPoint?.city || route.originCity || '',
+    toCity: booking.droppingPoint?.city || route.destinationCity || '',
+    departureTime: route.departureTime || '',
+    arrivalTime: route.arrivalTime || '',
+    seats: activeSeatLabels(booking),
+    passengerName: booking.passenger?.name || '',
+    passengerPhone: booking.passenger?.phone || '',
+    boardingPoint: booking.boardingPoint?.pointName || booking.boardingPoint?.city || '',
+    boardingTime: booking.boardingPoint?.time || '',
+    droppingPoint: booking.droppingPoint?.pointName || booking.droppingPoint?.city || '',
+    droppingTime: booking.droppingPoint?.time || '',
+    fare: Number(booking.amount || 0) + Number(booking.foodAmount || 0),
+    source: booking.bookingSource,
+    channel: booking.channel?.name || '',
+  };
+};
 
 /// Conductor checks a passenger in. Refuses tickets for another run or day,
 /// so a ticket can't be reused on a later trip; checking in twice is harmless.
