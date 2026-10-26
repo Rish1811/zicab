@@ -213,7 +213,7 @@ export const BUS_BLUEPRINT_TEMPLATES = [
     key: 'sleeper_2_1',
     label: 'Sleeper 2+1',
     category: 'Sleeper Coach',
-    description: 'Popular RedBus-style sleeper stack',
+    description: 'Two berths, aisle, one berth - the common sleeper layout',
     layoutConfig: {
       lower: { enabled: true, rows: 6, leftSeats: 2, rightSeats: 1, seatType: 'sleeper' },
       upper: { enabled: true, rows: 6, leftSeats: 2, rightSeats: 1, seatType: 'sleeper' },

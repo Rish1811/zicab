@@ -2576,7 +2576,7 @@ const BusServiceManager = ({
             <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-slate-900">Seat Blueprint</h2>
-                <p className="mt-1 text-xs font-medium text-slate-500">Build a RedBus-style coach map, customize seat counts, and block inventory visually.</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Lay out the coach, set seat counts per deck, and block seats from sale.</p>
               </div>
               <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900">
                 {totalSeats} Seats
@@ -2589,8 +2589,8 @@ const BusServiceManager = ({
               <p className="mt-0.5 text-[11px] font-medium text-slate-500">How riders see this bus's seats in the app and on the website.</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 {[
-                  { key: 'horizontal', label: 'Horizontal', hint: 'Bus on its side, front at the left (AbhiBus style)' },
-                  { key: 'vertical', label: 'Vertical', hint: 'Bus upright, front at the top (redBus style)' },
+                  { key: 'horizontal', label: 'Horizontal', hint: 'Bus on its side, front at the left' },
+                  { key: 'vertical', label: 'Vertical', hint: 'Bus upright, front at the top' },
                 ].map((option) => {
                   const active = (draft.blueprint?.seatLayoutOrientation || 'horizontal') === option.key;
                   return (
