@@ -1168,9 +1168,8 @@ export const saveDriverVehicle = async ({
 
     requireField('serviceCategories', normalizedServiceCategories, 'Service category');
     requireField('vehicleTypeId', normalizedVehicleTypeIds, 'Vehicle type');
-    if (!normalizedRcNumber) {
-      throw new ApiError(400, 'RC number is required');
-    }
+    // RC number was removed from driver onboarding; it is no longer collected
+    // or required. Any value still sent is stored, but its absence is fine.
     requireField('make', make, 'Brand / Make');
     requireField('model', model, 'Model');
     requireField('year', normalizedYear, 'Year');

@@ -63,14 +63,14 @@ const ReferralSettings = () => {
   const [userSettings, setUserSettings] = useState({});
   const [driverSettings, setDriverSettings] = useState({});
 
-  const token = localStorage.getItem('adminToken') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5YzdiZTZhYmJlOTJlYjYwMGYwMmQxNiIsImVtYWlsIjoiYWRtaW5AYWRtaW4uY29tIiwibW9iaWxlIjoiOTk5OTk5OTk5OSIsInJvbGUiOiJzdXBlci1hZG1pbiIsImlhdCI6MTc3NTA0OTExNywiZXhwIjoxODA2NTg1MTE3fQ.5KJmXJwaVefWhnc97EqtArkA1z7ZOhsJwA9fbyRVPdQ';
+  const token = localStorage.getItem('adminToken') || '';
 
   useEffect(() => {
     const fetchAllSettings = async () => {
       try {
         const [uRes, dRes] = await Promise.all([
-          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/referral/settings/user', { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/referral/settings/driver', { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/referrals/settings/user', { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin/referrals/settings/driver', { headers: { 'Authorization': `Bearer ${token}` } }),
         ]);
 
         const uData = await uRes.json();
@@ -89,14 +89,17 @@ const ReferralSettings = () => {
 
   const handleUpdate = async (type) => {
     setSaving(true);
-    let url = '';
-    let body = {};
-    
-    if (type === 'user') { url = 'user'; body = userSettings; }
-    if (type === 'driver') { url = 'driver'; body = driverSettings; }
+    const src = type === 'driver' ? driverSettings : userSettings;
+    // The backend credit logic reads exactly these keys.
+    const body = {
+      enabled: Boolean(src.enabled),
+      type: src.type || 'instant_referrer',
+      amount: Number(src.amount) || 0,
+    };
+    const url = type === 'driver' ? 'driver' : 'user';
 
     try {
-      const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/referral/settings/${url}`, {
+      const res = await fetch(`${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/referrals/settings/${url}`, {
         method: 'PATCH',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -170,30 +173,30 @@ const ReferralSettings = () => {
           <FormSection title="Rider Referral Policy" subTitle="Manage viral growth for standard users" icon={User}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <InputWrapper label="Enable Earning" description="Allow users to earn rewards for successful invites.">
-                <ToggleSwitch 
-                  enabled={userSettings.enable_user_referral_earnings} 
-                  onChange={(val) => setUserSettings({...userSettings, enable_user_referral_earnings: val})} 
+                <ToggleSwitch
+                  enabled={Boolean(userSettings.enabled)}
+                  onChange={(val) => setUserSettings({...userSettings, enabled: val})}
                 />
               </InputWrapper>
-              <InputWrapper label="Referral Amount (Flat ₹)" description="Base reward per successful activation." required>
+              <InputWrapper label="Referral Amount (Flat ₹)" description="Reward credited to the wallet on a successful referred signup." required>
                 <div className="relative group">
                   <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-600 transition-colors font-black">₹</span>
-                  <input 
-                    type="number" 
-                    value={userSettings.referral_commission_amount_for_user}
-                    onChange={(e) => setUserSettings({...userSettings, referral_commission_amount_for_user: e.target.value})}
+                  <input
+                    type="number"
+                    value={userSettings.amount ?? ''}
+                    onChange={(e) => setUserSettings({...userSettings, amount: e.target.value})}
                     className="w-full pl-12 pr-6 py-5 bg-gray-50 border-none rounded-3xl text-[15px] font-black text-gray-950 focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all shadow-inner"
                   />
                 </div>
               </InputWrapper>
-              <InputWrapper label="Referral Type" description="Instant reward vs milestone based.">
-                <select 
-                  value={userSettings.referral_type}
-                  onChange={(e) => setUserSettings({...userSettings, referral_type: e.target.value})}
+              <InputWrapper label="Who gets the reward" description="Referrer only, or both the referrer and the new user.">
+                <select
+                  value={userSettings.type || 'instant_referrer'}
+                  onChange={(e) => setUserSettings({...userSettings, type: e.target.value})}
                   className="w-full px-6 py-5 bg-gray-50 border-none rounded-3xl text-[13px] font-black text-gray-950 focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all shadow-inner appearance-none uppercase"
                 >
-                  <option value="instant">Instant Activation</option>
-                  <option value="milestone">Milestone Based</option>
+                  <option value="instant_referrer">Referrer only</option>
+                  <option value="instant_referrer_new">Referrer + New user</option>
                 </select>
               </InputWrapper>
               <div className="p-8 bg-indigo-50/50 rounded-[32px] border border-indigo-50 space-y-4">
@@ -222,18 +225,28 @@ const ReferralSettings = () => {
           <FormSection title="Driver Fleet Referral" subTitle="Manage recruitment incentives for fleet" icon={Truck}>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <InputWrapper label="Enable Driver Earning" description="Toggle reward systems for driver recruits.">
-                  <ToggleSwitch 
-                    enabled={driverSettings.enable_user_referral_earnings} 
-                    onChange={(val) => setDriverSettings({...driverSettings, enable_user_referral_earnings: val})} 
+                  <ToggleSwitch
+                    enabled={Boolean(driverSettings.enabled)}
+                    onChange={(val) => setDriverSettings({...driverSettings, enabled: val})}
                   />
                 </InputWrapper>
-                <InputWrapper label="Commission Rate (₹)">
-                   <input 
-                    type="number" 
-                    value={driverSettings.referral_commission_amount_for_user}
-                    onChange={(e) => setDriverSettings({...driverSettings, referral_commission_amount_for_user: e.target.value})}
+                <InputWrapper label="Referral Amount (Flat ₹)" description="Reward credited to the wallet on a successful referred driver signup." required>
+                   <input
+                    type="number"
+                    value={driverSettings.amount ?? ''}
+                    onChange={(e) => setDriverSettings({...driverSettings, amount: e.target.value})}
                     className="w-full px-6 py-5 bg-gray-50 border-none rounded-3xl text-[15px] font-black text-gray-950 focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all shadow-inner"
                   />
+                </InputWrapper>
+                <InputWrapper label="Who gets the reward" description="Referrer only, or both the referrer and the new driver.">
+                  <select
+                    value={driverSettings.type || 'instant_referrer'}
+                    onChange={(e) => setDriverSettings({...driverSettings, type: e.target.value})}
+                    className="w-full px-6 py-5 bg-gray-50 border-none rounded-3xl text-[13px] font-black text-gray-950 focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all shadow-inner appearance-none uppercase"
+                  >
+                    <option value="instant_referrer">Referrer only</option>
+                    <option value="instant_referrer_new">Referrer + New driver</option>
+                  </select>
                 </InputWrapper>
              </div>
              <button 
