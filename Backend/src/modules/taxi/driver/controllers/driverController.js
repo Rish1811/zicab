@@ -14,7 +14,7 @@ import { Ride } from "../../user/models/Ride.js";
 import { BusBooking } from "../../user/models/BusBooking.js";
 import { BusSeatHold } from "../../user/models/BusSeatHold.js";
 import { clearExpiredHoldsForSeats, publishBusSeatChange } from "../../bus/services/busSeatSyncService.js";
-import { priceBusSeats } from "../../bus/utils/busTime.js";
+import { busTripBookingProblem, priceBusSeats } from "../../bus/utils/busTime.js";
 import { withBusCancellationClaim } from "../../bus/services/busPaymentService.js";
 import { publishBusLiveLocation } from "../../bus/services/busTicketService.js";
 import { resolveScheduleRoute } from "../../bus/utils/busRoutes.js";
@@ -5789,19 +5789,40 @@ export const createBusDriverReservation = async (req, res) => {
     throw new ApiError(404, "Assigned bus service not found");
   }
 
-  const scheduleId = toCleanString(req.body?.scheduleId);
-  const travelDate = normalizeBusTravelDate(req.body?.travelDate || req.body?.date);
-  const seatIds = Array.isArray(req.body?.seatIds)
-    ? [...new Set(req.body.seatIds.map((item) => toCleanString(item)).filter(Boolean))]
+  const booking = await createManualBusReservation({
+    busService,
+    body: req.body,
+    bookedBy: {
+      userId: busDriver._id,
+      reservedByDriverId: busDriver._id,
+      bookingSource: "bus_driver",
+      codePrefix: "BDR",
+    },
+  });
+
+  res.status(201).json({
+    success: true,
+    data: serializeBusDriverBooking(booking),
+  });
+};
+
+/// A confirmed seat booking taken at the counter (cash, settled outside the
+/// app), by a conductor or the bus's owner. The seat locks are the same ones the
+/// rider app takes, so nobody can book a seat that was just sold.
+const createManualBusReservation = async ({ busService, body, bookedBy, rejectDepartedTrips = false }) => {
+  const scheduleId = toCleanString(body?.scheduleId);
+  const travelDate = normalizeBusTravelDate(body?.travelDate || body?.date);
+  const seatIds = Array.isArray(body?.seatIds)
+    ? [...new Set(body.seatIds.map((item) => toCleanString(item)).filter(Boolean))]
     : [];
   const passenger = {
-    name: toCleanString(req.body?.passenger?.name),
-    age: Number(req.body?.passenger?.age || 0),
-    gender: toCleanString(req.body?.passenger?.gender),
-    phone: normalizeBusPassengerPhone(req.body?.passenger?.phone),
-    email: normalizeEmail(req.body?.passenger?.email),
+    name: toCleanString(body?.passenger?.name),
+    age: Number(body?.passenger?.age || 0),
+    gender: toCleanString(body?.passenger?.gender),
+    phone: normalizeBusPassengerPhone(body?.passenger?.phone),
+    email: normalizeEmail(body?.passenger?.email),
   };
-  const notes = toCleanString(req.body?.notes);
+  const notes = toCleanString(body?.notes);
 
   if (!scheduleId || seatIds.length === 0) {
     throw new ApiError(400, "scheduleId and seatIds are required");
@@ -5820,6 +5841,17 @@ export const createBusDriverReservation = async (req, res) => {
     throw new ApiError(404, "Bus schedule not found for the selected date");
   }
 
+  if (rejectDepartedTrips) {
+    const tripProblem = busTripBookingProblem({
+      travelDate,
+      departureTime: schedule?.departureTime,
+      leadMinutes: 0,
+    });
+    if (tripProblem) {
+      throw new ApiError(409, tripProblem);
+    }
+  }
+
   const seatLayout = await buildBusDriverSeatLayout({ busService, scheduleId, travelDate });
   const availableSeatMap = new Map(
     flattenBusBlueprintSeats(seatLayout.blueprint)
@@ -5836,9 +5868,9 @@ export const createBusDriverReservation = async (req, res) => {
   const pricing = priceBusSeats(busService, seatIds.map((seatId) => availableSeatMap.get(seatId)));
   const amount = pricing.amount;
   const booking = await BusBooking.create({
-    userId: busDriver._id,
+    userId: bookedBy.userId || null,
     busServiceId: busService._id,
-    bookingCode: `BDR${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
+    bookingCode: `${bookedBy.codePrefix}${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
     scheduleId,
     travelDate,
     seatIds,
@@ -5846,8 +5878,8 @@ export const createBusDriverReservation = async (req, res) => {
     seatPrices: pricing.seatPrices,
     passenger,
     amount,
-    bookingSource: "bus_driver",
-    reservedByDriverId: busDriver._id,
+    bookingSource: bookedBy.bookingSource,
+    reservedByDriverId: bookedBy.reservedByDriverId || null,
     currency: busService.fareCurrency || "INR",
     status: "confirmed",
     expiresAt: null,
@@ -5883,7 +5915,7 @@ export const createBusDriverReservation = async (req, res) => {
       seatIds.map((seatId) => ({
         busServiceId: busService._id,
         bookingId: booking._id,
-        userId: busDriver._id,
+        userId: bookedBy.userId || null,
         scheduleId,
         travelDate,
         seatId,
@@ -5911,10 +5943,7 @@ export const createBusDriverReservation = async (req, res) => {
     bookingId: booking._id,
   });
 
-  res.status(201).json({
-    success: true,
-    data: serializeBusDriverBooking(booking),
-  });
+  return booking;
 };
 
 export const updateBusDriverSchedules = async (req, res) => {
@@ -9066,6 +9095,85 @@ export const deleteOwnerBusService = async (req, res) => {
   res.json({
     success: true,
     message: "Bus service deleted",
+  });
+};
+
+/// One of this owner's own buses, or a 404: never another owner's.
+const findOwnerBus = async (req) => {
+  const owner = await Owner.findById(req.auth.sub).lean();
+  if (!owner) {
+    throw new ApiError(404, "Owner not found");
+  }
+
+  const busServiceId = toCleanString(req.params?.id);
+  const busService = mongoose.Types.ObjectId.isValid(busServiceId)
+    ? await BusService.findOne({ _id: busServiceId, ownerId: owner._id }).lean()
+    : null;
+  if (!busService) {
+    throw new ApiError(404, "Bus service not found");
+  }
+
+  return { owner, busService };
+};
+
+export const getOwnerBusSeatLayout = async (req, res) => {
+  const { busService } = await findOwnerBus(req);
+  const scheduleId = toCleanString(req.query?.scheduleId);
+  const travelDate = normalizeBusTravelDate(req.query?.date || req.query?.travelDate || new Date());
+  const schedule = findBusSchedule(busService, scheduleId);
+
+  if (!isScheduleAvailableOnDate(schedule, travelDate)) {
+    throw new ApiError(404, "This bus does not run on the selected date");
+  }
+
+  const layout = await buildBusDriverSeatLayout({ busService, scheduleId, travelDate });
+  const route = resolveScheduleRoute(busService, schedule);
+
+  res.json({
+    success: true,
+    data: {
+      ...layout,
+      // Base fare per seat type, so the page can show what the server will charge.
+      seatFares: Object.fromEntries(
+        flattenBusBlueprintSeats(layout.blueprint).map((seat) => [
+          String(seat.id || ""),
+          priceBusSeats(busService, [seat]).baseAmount,
+        ]),
+      ),
+      serviceTaxPercentage: Math.max(0, Number(busService.serviceTaxPercentage || 0)),
+      fareCurrency: busService.fareCurrency || "INR",
+      bus: {
+        operatorName: busService.operatorName || "",
+        busName: busService.busName || "",
+        routeName: route.routeName || "",
+        fromCity: route.originCity || "",
+        toCity: route.destinationCity || "",
+        departureTime: schedule?.departureTime || "",
+        arrivalTime: schedule?.arrivalTime || "",
+      },
+    },
+  });
+};
+
+export const createOwnerBusReservation = async (req, res) => {
+  const { owner, busService } = await findOwnerBus(req);
+  if (String(busService.status || "") !== "active") {
+    throw new ApiError(409, "This bus is not active, so its seats can't be booked");
+  }
+
+  const booking = await createManualBusReservation({
+    busService,
+    body: req.body,
+    rejectDepartedTrips: true,
+    bookedBy: {
+      bookingSource: "owner",
+      codePrefix: "OWN",
+    },
+  });
+
+  res.status(201).json({
+    success: true,
+    data: { ...serializeOwnerBusBooking(booking.toObject()), pnr: booking.pnr || "", bookedByOwnerId: String(owner._id) },
   });
 };
 

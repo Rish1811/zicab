@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Briefcase,
   Bus,
+  Ticket,
   Car,
   CreditCard,
   IndianRupee,
@@ -228,14 +229,24 @@ const OwnerDashboard = () => {
                   <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Bus Business</p>
                   <h2 className="mt-1 text-[20px] font-black text-slate-950">Owner bus snapshot</h2>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/taxi/owner/bus-service')}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-[11px] font-black text-white"
-                >
-                  <Bus size={14} />
-                  Open Bus
-                </button>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/taxi/owner/bus-dashboard')}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-amber-400 px-3 py-2 text-[11px] font-black text-slate-950"
+                  >
+                    <Ticket size={14} />
+                    Book seats
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/taxi/owner/bus-service')}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-[11px] font-black text-white"
+                  >
+                    <Bus size={14} />
+                    Open Bus
+                  </button>
+                </div>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3">

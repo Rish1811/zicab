@@ -18,6 +18,7 @@ import {
   Notifications,
   OTPVerification,
   OwnerBusBookingsPage,
+  OwnerBusDashboard,
   OwnerBusServicePage,
   OwnerDashboard,
   OwnerPoolingVehicleForm,
@@ -63,6 +64,7 @@ const ownerRoutes = (
     <Route path="bus-service/edit/:id" element={<OwnerBusServicePage />} />
     <Route path="bus-service/:id" element={<OwnerBusServicePage />} />
     <Route path="bus-bookings" element={<OwnerBusBookingsPage />} />
+    <Route path="bus-dashboard" element={<OwnerBusDashboard />} />
     <Route path="pooling-vehicles" element={<OwnerPoolingVehicleForm />} />
     <Route path="pooling-vehicles/create" element={<OwnerPoolingVehicleForm />} />
     <Route path="profile" element={<DriverProfile />} />

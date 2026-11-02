@@ -139,7 +139,7 @@ const busBookingSchema = new mongoose.Schema(
     },
     bookingSource: {
       type: String,
-      enum: ['user', 'bus_driver', 'admin', 'channel'],
+      enum: ['user', 'bus_driver', 'owner', 'admin', 'channel'],
       default: 'user',
       index: true,
     },

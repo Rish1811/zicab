@@ -16,6 +16,7 @@ import {
 import {
   addDriverEmergencyContact,
   completeOnboarding,
+  createOwnerBusReservation,
   createOwnerBusService,
   cancelOwnerBusBookingSeats,
   createDriverPaymentQr,
@@ -75,6 +76,7 @@ import {
   getOwnerFleetZones,
   getOwnerBusBookingCalendar,
   getOwnerBusBookings,
+  getOwnerBusSeatLayout,
   getMyWallet,
   getOnboardingSession,
   getOnboardingSignupOptions,
@@ -427,6 +429,16 @@ driverRouter.get(
   "/fleet/bus-bookings/calendar",
   authenticate(["owner"]),
   asyncHandler(getOwnerBusBookingCalendar),
+);
+driverRouter.get(
+  "/fleet/bus-services/:id/seats",
+  authenticate(["owner"]),
+  asyncHandler(getOwnerBusSeatLayout),
+);
+driverRouter.post(
+  "/fleet/bus-services/:id/reservations",
+  authenticate(["owner"]),
+  asyncHandler(createOwnerBusReservation),
 );
 driverRouter.post(
   "/fleet/bus-services",

@@ -560,6 +560,12 @@ export const getOwnerFleetZones = () =>
 export const getOwnerBusServices = () =>
   api.get("/drivers/fleet/bus-services", withDriverAuth());
 
+export const getOwnerBusSeatLayout = (busId, params = {}) =>
+  api.get(`/drivers/fleet/bus-services/${busId}/seats`, withDriverAuth({ params }));
+
+export const createOwnerBusReservation = (busId, payload) =>
+  api.post(`/drivers/fleet/bus-services/${busId}/reservations`, payload, withDriverAuth());
+
 export const getOwnerBusBookings = (params = {}) =>
   api.get("/drivers/fleet/bus-bookings", withDriverAuth({ params }));
 
