@@ -74,6 +74,7 @@ const DEFAULT_MAP_CENTER = {
 };
 
 const DEFAULT_MAP_COORDS = [75.8577, 22.7196];
+const CANCEL_PERIOD_WORDS = { day: 'today', week: 'this week', month: 'this month' };
 const ONLINE_LOCATION_EMIT_MIN_DISTANCE_METERS = 25;
 const ONLINE_LOCATION_EMIT_MIN_INTERVAL_MS = 12000;
 
@@ -651,6 +652,8 @@ const DriverHome = () => {
     const [selectedScheduledRide, setSelectedScheduledRide] = useState(null);
     const [scheduleNow, setScheduleNow] = useState(() => Date.now());
     const [cancellingScheduledRideId, setCancellingScheduledRideId] = useState('');
+    const [cancellationLimit, setCancellationLimit] = useState(null);
+    const cancellationsUsedUp = Boolean(cancellationLimit?.enabled && cancellationLimit.remaining <= 0);
     const [acceptingRideId, setAcceptingRideId] = useState('');
     const [isHydratingDriver, setIsHydratingDriver] = useState(true);
     const [isTogglingDuty, setIsTogglingDuty] = useState(false);
@@ -769,6 +772,7 @@ const DriverHome = () => {
         try {
             const response = await getDriverScheduledRides({ limit: 20 });
             const results = response?.data?.results || [];
+            setCancellationLimit(response?.data?.cancellationLimit || null);
             const nextScheduledRides = results
                 .filter((ride) => ride?.scheduledAt)
                 .sort((firstRide, secondRide) => new Date(firstRide.scheduledAt).getTime() - new Date(secondRide.scheduledAt).getTime());
@@ -807,6 +811,7 @@ const DriverHome = () => {
             await loadScheduledRides();
         } catch (error) {
             toast.error(error?.response?.data?.message || error?.message || 'Failed to cancel scheduled ride');
+            loadScheduledRides();
         } finally {
             setCancellingScheduledRideId('');
         }
@@ -2086,11 +2091,15 @@ const DriverHome = () => {
                 mode="preview"
                 onPreviewCancel={handleCancelScheduledRide}
                 isPreviewCancelling={cancellingScheduledRideId === selectedScheduledRide?.rideId}
-                canPreviewCancel={Boolean(selectedScheduledRide?.isAssignedToCurrentDriver)}
-                previewCancelDisabledLabel="Not assigned yet"
+                canPreviewCancel={Boolean(selectedScheduledRide?.isAssignedToCurrentDriver) && !cancellationsUsedUp}
+                previewCancelDisabledLabel={selectedScheduledRide?.isAssignedToCurrentDriver ? 'No cancellations left' : 'Not assigned yet'}
                 previewCancelHelpText={
                     selectedScheduledRide?.isAssignedToCurrentDriver
-                        ? 'Cancelling here will also notify the user immediately.'
+                        ? cancellationsUsedUp
+                            ? `You've used all your cancellations ${CANCEL_PERIOD_WORDS[cancellationLimit?.period] || ''}. Contact support to cancel this ride.`
+                            : cancellationLimit?.enabled
+                                ? `Cancelling here will also notify the user immediately. ${cancellationLimit.remaining} cancellation${cancellationLimit.remaining === 1 ? '' : 's'} left ${CANCEL_PERIOD_WORDS[cancellationLimit.period] || ''}.`
+                                : 'Cancelling here will also notify the user immediately.'
                         : 'This scheduled request is visible to you, but only a ride already assigned to you can be cancelled from here.'
                 }
                 onClose={() => setSelectedScheduledRide(null)}

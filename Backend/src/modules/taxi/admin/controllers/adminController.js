@@ -1,5 +1,6 @@
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import * as adminService from "../services/adminService.js";
+import { getDriverCancelStatus, resetDriverCancelCount } from "../../services/driverCancelLimitService.js";
 import { getPayment, listPayments } from '../../services/paymentLedgerService.js';
 import { getSubscriberReport, getSubscriptionAnalytics } from '../../services/subscriberReportService.js';
 import { buildPaymentInvoicePdf } from '../../services/invoiceService.js';
@@ -586,6 +587,12 @@ export const createDriver = asyncHandler(async (req, res) =>
 );
 export const getDriver = asyncHandler(async (req, res) =>
   ok(res, await adminService.getDriverById(req.params.id, req.auth?.admin)),
+);
+export const getDriverCancellationLimit = asyncHandler(async (req, res) =>
+  ok(res, await getDriverCancelStatus(req.params.id)),
+);
+export const resetDriverCancellationLimit = asyncHandler(async (req, res) =>
+  ok(res, await resetDriverCancelCount(req.params.id)),
 );
 export const getDriverProfile = asyncHandler(async (req, res) =>
   ok(res, await adminService.getDriverProfile(req.params.id)),

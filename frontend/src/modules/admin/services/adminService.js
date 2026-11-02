@@ -91,6 +91,8 @@ export const adminService = {
 
   adjustDriverWallet: (id, data) => api.post(`/admin/wallet/drivers/${id}/adjust`, data),
   getDriverWalletHistory: (id) => api.get(`/admin/wallet/drivers/${id}/history`),
+  getDriverCancellationLimit: (id) => api.get(`/admin/drivers/${id}/cancellation-limit`),
+  resetDriverCancellationLimit: (id) => api.post(`/admin/drivers/${id}/cancellation-limit/reset`),
   getDriverWithdrawalSummaries: (params = {}) => api.get('/admin/wallet/drivers/withdrawals', { params }),
   getDriverWithdrawals: (driverId, params = {}) => api.get(`/admin/wallet/drivers/${driverId}/withdrawals`, { params }),
   getDriverWithdrawalContextByRequestId: (requestId, params = {}) =>

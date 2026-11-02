@@ -211,6 +211,50 @@ const TransportRideSettings = () => {
                 </div>
              </div>
 
+             <div className="mt-10 pt-8 border-t border-gray-100">
+                <h4 className="text-[13px] font-bold text-gray-700 uppercase tracking-tight mb-1">Driver Cancellation Limit</h4>
+                <p className="text-sm text-gray-500 mb-6">
+                   The most scheduled rides a driver can cancel. At the limit, the driver can't cancel
+                   any more until the period resets, and has to complete the ride or contact support.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-10 gap-y-6">
+                   <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700 block ml-0.5">Limit</label>
+                      <select
+                       value={settings.enable_driver_cancellation_limit || '0'}
+                       onChange={(e) => handleChange('enable_driver_cancellation_limit', e.target.value)}
+                       className="w-full bg-white border border-gray-200 rounded-lg py-2.5 px-4 text-sm text-gray-900 focus:border-gray-300 outline-none"
+                      >
+                         <option value="0">Off (no limit)</option>
+                         <option value="1">On</option>
+                      </select>
+                   </div>
+
+                   <InputField
+                      label="Maximum Cancellations"
+                      name="driver_max_cancellations"
+                      value={settings.driver_max_cancellations ?? '3'}
+                      onChange={handleChange}
+                      type="number"
+                      placeholder="3"
+                   />
+
+                   <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700 block ml-0.5">Per</label>
+                      <select
+                       value={settings.driver_cancellation_limit_period || 'day'}
+                       onChange={(e) => handleChange('driver_cancellation_limit_period', e.target.value)}
+                       className="w-full bg-white border border-gray-200 rounded-lg py-2.5 px-4 text-sm text-gray-900 focus:border-gray-300 outline-none"
+                      >
+                         <option value="day">Day</option>
+                         <option value="week">Week (from Monday)</option>
+                         <option value="month">Month</option>
+                      </select>
+                   </div>
+                </div>
+             </div>
+
              <div className="mt-10 flex justify-end pt-6 border-t border-gray-100">
                 <button 
                   onClick={handleUpdate}

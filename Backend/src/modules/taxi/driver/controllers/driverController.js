@@ -40,6 +40,7 @@ import {
   hashPassword,
   signAccessToken,
 } from "../services/authService.js";
+import { getDriverCancelStatus } from "../../services/driverCancelLimitService.js";
 import { cancelScheduledRideByDriver, emitToDriver } from "../../services/dispatchService.js";
 import { notifyLateAvailableDriver } from "../../services/dispatchService.js";
 import { findZoneByPickup } from "../services/locationService.js";
@@ -3143,6 +3144,7 @@ export const getDriverScheduledRides = async (req, res) => {
     success: true,
     data: {
       results: rides.map((ride) => serializeDriverScheduledRide(ride, req.auth.sub)),
+      cancellationLimit: await getDriverCancelStatus(req.auth.sub),
       totalCount,
       pagination: {
         page: safePage,

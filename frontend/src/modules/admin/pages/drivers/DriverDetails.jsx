@@ -14,6 +14,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
 import { uploadService } from '../../../../shared/services/uploadService';
 import { DELHI_CENTER, HAS_VALID_GOOGLE_MAPS_KEY, useBaseGoogleMapsLoader } from '../../utils/googleMaps';
@@ -30,6 +31,7 @@ import PremiumIcon from '@/assets/icons/Premium.png';
 import SuvIcon from '@/assets/icons/SUV.png';
 
 const mapContainerStyle = { width: '100%', height: '100%' };
+const CANCEL_PERIOD_WORDS = { day: 'today', week: 'this week', month: 'this month' };
 
 const getMapIconForVehicle = (iconType = '') => {
   const raw = String(iconType || '').trim();
@@ -455,6 +457,8 @@ const DriverDetails = () => {
   const location = useLocation();
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('Driver Profile');
+  const [cancelLimit, setCancelLimit] = useState(null);
+  const [resettingCancelLimit, setResettingCancelLimit] = useState(false);
   const [profile, setProfile] = useState(null);
   const [upiActionBusy, setUpiActionBusy] = useState(false);
   const [upiEditing, setUpiEditing] = useState(false);
@@ -566,6 +570,34 @@ const DriverDetails = () => {
     'Documents',
     'Subscription',
   ];
+
+  useEffect(() => {
+    let active = true;
+    adminService.getDriverCancellationLimit(id)
+      .then((response) => {
+        if (active) setCancelLimit(response?.data?.data || response?.data || response || null);
+      })
+      .catch(() => {
+        if (active) setCancelLimit(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  const handleResetCancelLimit = async () => {
+    if (!window.confirm("Give this driver back all of this period's ride cancellations?")) return;
+    setResettingCancelLimit(true);
+    try {
+      const response = await adminService.resetDriverCancellationLimit(id);
+      setCancelLimit(response?.data?.data || response?.data || response || null);
+      toast.success('Cancellations reset');
+    } catch (error) {
+      toast.error(error?.message || 'Could not reset');
+    } finally {
+      setResettingCancelLimit(false);
+    }
+  };
 
   const fetchProfile = async () => {
     setIsLoading(true);
@@ -874,6 +906,23 @@ const DriverDetails = () => {
           ) : null}
         </div>
       </div>
+
+      {cancelLimit?.enabled ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <p className="text-sm text-gray-700">
+            <span className="font-semibold">Ride cancellations:</span>{' '}
+            {cancelLimit.used} of {cancelLimit.limit} used {CANCEL_PERIOD_WORDS[cancelLimit.period] || ''}
+          </p>
+          <button
+            type="button"
+            disabled={resettingCancelLimit || !cancelLimit.used}
+            onClick={handleResetCancelLimit}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {resettingCancelLimit ? 'Resetting...' : 'Reset'}
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2 mb-4">
         {tabs.map((tab) => (

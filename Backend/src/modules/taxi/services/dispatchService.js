@@ -18,6 +18,7 @@ import { getRideRoom, resolveSetPriceForRide, serializeTollCharges } from './rid
 import { SOCKET_EVENTS } from '../socket/events.js';
 import { resolveTransportDispatchConfig } from './transportSettingsService.js';
 import { sendPushNotificationToEntities } from './pushNotificationService.js';
+import { releaseDriverCancellation, reserveDriverCancellation } from './driverCancelLimitService.js';
 
 const activeDispatches = new Map();
 let ioInstance = null;
@@ -1168,7 +1169,37 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
   return ride;
 };
 
+const isCancellableScheduledRide = (ride) => {
+  const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
+  return (
+    Boolean(scheduledAt) &&
+    Number.isFinite(scheduledAt.getTime()) &&
+    scheduledAt.getTime() > Date.now() &&
+    ![RIDE_STATUS.CANCELLED, RIDE_STATUS.COMPLETED].includes(ride.status) &&
+    ![RIDE_LIVE_STATUS.CANCELLED, RIDE_LIVE_STATUS.COMPLETED].includes(ride.liveStatus)
+  );
+};
+
 export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
+  // Before anything else: a refused cancel must leave the ride exactly as it was,
+  // dispatch included. Only a ride this will really cancel uses up the limit, so
+  // a repeat tap on a cancelled ride costs nothing.
+  const candidate = await Ride.findOne({ _id: rideId, driverId }).select('scheduledAt status liveStatus').lean();
+  const reservation = isCancellableScheduledRide(candidate)
+    ? await reserveDriverCancellation(driverId)
+    : null;
+
+  const outcome = { cancelled: false };
+  try {
+    return await runScheduledRideCancellation({ rideId, driverId, outcome });
+  } finally {
+    if (!outcome.cancelled) {
+      await releaseDriverCancellation(reservation);
+    }
+  }
+};
+
+const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
   const dispatchState = getDispatchState(rideId);
   stopDispatchFlow(rideId, { releaseLease: false });
 
@@ -1211,6 +1242,8 @@ export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
   const cancelUpdate = {
     status: RIDE_STATUS.CANCELLED,
     liveStatus: RIDE_LIVE_STATUS.CANCELLED,
+    cancelledBy: 'driver',
+    cancelledAt: new Date(),
   };
   if (existing.bookingMode === 'bidding') {
     cancelUpdate.biddingStatus = 'cancelled';
@@ -1231,6 +1264,8 @@ export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
     stopDispatchFlow(rideId);
     return Ride.findOne({ _id: rideId, driverId });
   }
+
+  outcome.cancelled = true;
 
   let cancellationSettlement = null;
   try {

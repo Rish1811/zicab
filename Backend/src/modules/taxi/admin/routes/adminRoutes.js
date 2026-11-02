@@ -105,7 +105,9 @@ import {
   getDriver,
   getDriverNeededDocument,
   getDriverNeededDocuments,
+  getDriverCancellationLimit,
   getDriverProfile,
+  resetDriverCancellationLimit,
   getDriverOnboarding,
   getDrivers,
   getDriverRatings,
@@ -329,6 +331,8 @@ adminRouter.patch('/admin/drivers/deleted/:id/restore', authenticate(['admin']),
 adminRouter.delete('/admin/drivers/deleted/:id', authenticate(['admin']), permanentlyDeleteDeletedDriver);
 adminRouter.post('/admin/drivers', createDriver);
 adminRouter.get('/admin/drivers/:id/profile', getDriverProfile);
+adminRouter.get('/admin/drivers/:id/cancellation-limit', getDriverCancellationLimit);
+adminRouter.post('/admin/drivers/:id/cancellation-limit/reset', resetDriverCancellationLimit);
 adminRouter.get('/admin/drivers/:id', getDriver);
 adminRouter.patch('/admin/drivers/:id', updateDriver);
 adminRouter.patch('/admin/drivers/update-password/:id', updateDriverPassword);

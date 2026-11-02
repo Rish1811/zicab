@@ -90,6 +90,10 @@ export const createDefaultBusinessSettings = () => ({
     max_dist_secondary_ride: '2',
     enable_my_route_booking_feature: '0',
     how_many_times_a_driver_can_enable_the_my_route_booking_per_day: '1',
+    // The most rides a driver may cancel per day, week or month.
+    enable_driver_cancellation_limit: '0',
+    driver_max_cancellations: '3',
+    driver_cancellation_limit_period: 'day',
   },
   bid_ride: {
     // The master switch, and which services may be bid on at all. Both are
