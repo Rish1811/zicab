@@ -229,7 +229,12 @@ const BusDriverHome = () => {
   }, [navigate]);
 
   const busService = profile?.busService || null;
-  const schedules = Array.isArray(busService?.schedules) ? busService.schedules : [];
+  // Memoized: effects below depend on it, and a new [] on every render (a bus
+  // driver with no bus assigned) re-renders forever and freezes navigation.
+  const schedules = useMemo(
+    () => (Array.isArray(busService?.schedules) ? busService.schedules : []),
+    [busService],
+  );
   const routeStops = Array.isArray(busService?.route?.stops) ? busService.route.stops : [];
   const pickupStops = routeStops.filter((stop) => stop?.stopType === 'pickup' || stop?.stopType === 'both');
   const dropStops = routeStops.filter((stop) => stop?.stopType === 'drop' || stop?.stopType === 'both');

@@ -333,7 +333,7 @@ const clearStaleAuthState = (role = '', staleToken = '') => {
     localStorage.removeItem('userInfo');
   }
 
-  if (!normalizedRole || normalizedRole === 'driver' || normalizedRole === 'owner') {
+  if (!normalizedRole || DRIVER_PORTAL_ROLES.has(normalizedRole)) {
     if (!staleToken || localStorage.getItem('driverToken') === staleToken) {
       localStorage.removeItem('driverToken');
     }

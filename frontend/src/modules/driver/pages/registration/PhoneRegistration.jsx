@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Briefcase, CheckCircle2, ChevronRight, Smartphone, UtensilsCrossed } from 'lucide-react';
+import { CheckCircle2, ChevronRight, UtensilsCrossed } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   buildDriverOnboardingSessionSnapshot,
   clearDriverRegistrationSession,
@@ -11,8 +10,7 @@ import {
   saveDriverRegistrationSession,
   sendDriverOtp,
 } from '../../services/registrationService';
-import { useSettings } from '../../../../shared/context/SettingsContext';
-import taxiBg from '../../../../assets/images/light-taxi-bg.png';
+import DriverAuthShell from '../../components/DriverAuthShell';
 
 const getErrorMessage = (err) => String(
   err?.message ||
@@ -24,9 +22,6 @@ const getErrorMessage = (err) => String(
 const PhoneRegistration = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { settings } = useSettings();
-  const appName = settings.general?.app_name || 'Appzeto 24 Trawler';
-  const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
   const storedSession = getStoredDriverRegistrationSession();
   const isOwnerPortal = location.pathname.startsWith('/taxi/owner');
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
@@ -67,8 +62,6 @@ const PhoneRegistration = () => {
   const routePrefix = isOwnerPortal ? '/taxi/owner' : '/taxi/driver';
   const isLoginPage = location.pathname === `${routePrefix}/login` || location.pathname === `${routePrefix}/login/`;
   const entryPath = `${routePrefix}/login`;
-  const HeaderIcon = isOwnerPortal ? Briefcase : Smartphone;
-  const portalLabel = isOwnerPortal ? 'Owner' : 'Driver';
 
   useEffect(() => {
     let active = true;
@@ -167,9 +160,6 @@ const PhoneRegistration = () => {
       const existingAccount = Boolean(payload?.existingAccount || sessionData?.existingAccount);
       const detectedRole = String(payload?.detectedRole || sessionData?.role || '').trim().toLowerCase();
       const availableRoles = payload?.availableRoles || sessionData?.availableRoles || [];
-      console.log('[PhoneRegistration] payload:', payload);
-      console.log('[PhoneRegistration] availableRoles:', availableRoles);
-      console.log('[PhoneRegistration] loginMode:', loginMode);
       const nextState = saveDriverRegistrationSession({
         phone,
         role: sessionData.role || (isOwnerPortal ? 'owner' : ''),
@@ -196,187 +186,123 @@ const PhoneRegistration = () => {
     }
   };
 
+  const canContinue = agreed && phone.length === 10 && !loading;
+
   return (
-    <div className="min-h-screen relative bg-[#F8FAFC] select-none overflow-x-hidden font-['Outfit']">
-      <div className="fixed inset-0 z-0">
-        <motion.img
-          initial={{ scale: 1.05, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 1.2, ease: 'easeOut' }}
-          src={taxiBg}
-          alt=""
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-white" />
-      </div>
+    <DriverAuthShell isOwnerPortal={isOwnerPortal}>
+      <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+        {isOwnerPortal ? 'Owner login' : 'Log in or sign up'}
+      </h1>
+      <p className="mt-2 text-base text-slate-500">
+        {isOwnerPortal
+          ? "Enter your mobile number and we'll send you a 4-digit code."
+          : "Enter your mobile number and we'll send you a 4-digit code. New numbers can register next."}
+      </p>
 
-      <main className="relative z-10 mx-auto max-w-sm px-6 flex flex-col min-h-screen pt-10 pb-32">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex-1 space-y-8"
+      <form
+        className="mt-8"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canContinue) handleSendOTP();
+        }}
+      >
+        <label htmlFor="driver-login-phone" className="text-sm font-semibold text-slate-700">
+          Mobile number
+        </label>
+        <div className={`mt-2 flex h-14 items-center gap-3 rounded-xl border bg-white px-4 transition-colors focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-200 ${error ? 'border-rose-300' : 'border-slate-300'}`}>
+          <span className="border-r border-slate-200 pr-3 text-base font-semibold text-slate-500">+91</span>
+          <input
+            id="driver-login-phone"
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel-national"
+            value={phone}
+            onChange={(e) => {
+              setPhone(e.target.value.replace(/\D/g, '').slice(-10));
+              if (error) setError('');
+            }}
+            placeholder="10-digit number"
+            className="min-w-0 flex-1 border-none bg-transparent p-0 text-lg font-semibold tracking-wide text-slate-900 outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400 focus:ring-0"
+          />
+          {phone.length === 10 ? <CheckCircle2 size={20} className="shrink-0 text-emerald-500" /> : null}
+        </div>
+
+        <div className="mt-4 flex items-start gap-3">
+          <input
+            type="checkbox"
+            id="terms"
+            checked={agreed}
+            onChange={() => setAgreed(!agreed)}
+            className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-slate-300 accent-amber-500"
+          />
+          <label htmlFor="terms" className="cursor-pointer text-sm leading-6 text-slate-600">
+            I accept the{' '}
+            <button type="button" onClick={() => navigate(`${routePrefix}/terms`)} className="font-semibold text-amber-700 hover:underline">Terms</button>
+            {' '}and{' '}
+            <button type="button" onClick={() => navigate(`${routePrefix}/privacy`)} className="font-semibold text-amber-700 hover:underline">Privacy Policy</button>
+          </label>
+        </div>
+
+        {error ? (
+          <p role="alert" className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+            {error}
+          </p>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={!canContinue}
+          className={`mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-xl text-base font-bold transition-colors ${
+            canContinue ? 'bg-amber-400 text-slate-950 hover:bg-amber-500' : 'cursor-not-allowed bg-slate-100 text-slate-400'
+          }`}
         >
-          <header className="text-center space-y-4">
-            <div className="flex flex-col items-center gap-3">
-              {appLogo ? (
-                <img
-                  src={appLogo}
-                  alt={`${appName} logo`}
-                  className="h-14 w-14 rounded-2xl object-cover bg-white p-1.5 shadow-xl shadow-slate-200/70 border border-white"
-                />
-              ) : (
-                <div className="rounded-2xl bg-slate-900 px-4 py-2 text-base font-black tracking-tight text-white shadow-xl shadow-slate-900/10">
-                  {appName}
-                </div>
-              )}
-              <div className="space-y-1">
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">
-                  {appName}
-                </p>
-              </div>
-            </div>
-
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-              {isLoginPage ? 'Hello!' : 'Welcome'}
-            </h1>
-
-            {!isOwnerPortal && (
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
-                Driver, owner, pooling, bus, and service center logins all start here
-              </p>
-            )}
-          </header>
-
-          <motion.div
-            layout
-            className="bg-white rounded-[40px] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.06)] border border-slate-50 space-y-8"
-          >
-            <div className="space-y-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">
-                {portalLabel} Mobile Number
-              </p>
-              <div className={`flex items-center gap-4 p-5 rounded-2xl transition-all border-2 ${error ? 'border-rose-100 bg-rose-50/30' : 'border-slate-50 bg-slate-50 focus-within:border-amber-400 focus-within:bg-white focus-within:shadow-xl focus-within:shadow-amber-100/50'}`}>
-                <div className="flex items-center gap-2 pr-4 border-r border-slate-200">
-                  <span className="text-slate-400 text-sm font-black">+91</span>
-                </div>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value.replace(/\D/g, ''));
-                    if (error) setError('');
-                  }}
-                  placeholder="Phone Number"
-                  className="flex-1 bg-transparent border-none p-0 text-xl font-bold text-slate-900 outline-none focus:ring-0 placeholder:text-slate-300"
-                />
-                {phone.length === 10 && (
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                    <CheckCircle2 size={20} className="text-emerald-500" />
-                  </motion.div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-4 items-start px-1">
-              <input
-                type="checkbox"
-                id="terms"
-                checked={agreed}
-                onChange={() => setAgreed(!agreed)}
-                className="h-6 w-6 rounded-lg border-2 border-slate-100 bg-slate-50 text-amber-500 focus:ring-amber-500 transition-all cursor-pointer"
-              />
-              <label htmlFor="terms" className="text-sm font-medium text-slate-400 leading-snug cursor-pointer select-none">
-                I accept the <button type="button" onClick={() => navigate(`${routePrefix}/terms`)} className="text-amber-500 font-bold hover:underline">Terms</button> & <button type="button" onClick={() => navigate(`${routePrefix}/privacy`)} className="text-amber-500 font-bold hover:underline">Privacy</button>
-              </label>
-            </div>
-
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="text-rose-500 text-xs font-bold text-center bg-rose-50 p-3 rounded-xl"
-                >
-                  {error}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <p className="text-center text-xs font-medium leading-5 text-slate-400">
-              Existing numbers continue through login OTP. New numbers start a fresh registration automatically.
-            </p>
-          </motion.div>
-
-          {!isOwnerPortal && (
-            <div className="rounded-[28px] border border-orange-100 bg-white/90 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-500">
-                  <UtensilsCrossed size={20} strokeWidth={2.5} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-black text-slate-900">Dhaba owner?</p>
-                  <p className="text-xs font-medium text-slate-500">Take food pre-orders from ZI Bus passengers.</p>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => navigate(`/dhaba/login${phone.length === 10 ? `?phone=${phone}` : ''}`)}
-                  className="rounded-2xl bg-slate-900 py-3 text-xs font-black uppercase tracking-wider text-white"
-                >
-                  Dhaba login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/dhaba/register${phone.length === 10 ? `?phone=${phone}` : ''}`)}
-                  className="rounded-2xl border border-orange-200 bg-orange-50 py-3 text-xs font-black uppercase tracking-wider text-orange-700"
-                >
-                  Register dhaba
-                </button>
-              </div>
-            </div>
+          {loading ? (
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950/20 border-t-slate-950" />
+          ) : (
+            <>
+              Continue
+              <ChevronRight size={20} strokeWidth={2.5} />
+            </>
           )}
+        </button>
+      </form>
 
-          <div className="text-center">
+      <button
+        type="button"
+        onClick={() => navigate(`${routePrefix}/support`)}
+        className="mt-5 w-full text-center text-sm font-medium text-slate-500 hover:text-slate-800"
+      >
+        Need help? <span className="font-semibold text-amber-700">Contact support</span>
+      </button>
+
+      {!isOwnerPortal ? (
+        <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-slate-200 pt-6">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+            <UtensilsCrossed size={18} />
+          </span>
+          <div className="min-w-[10rem] flex-1">
+            <p className="text-sm font-semibold text-slate-900">Run a dhaba?</p>
+            <p className="text-xs text-slate-500">Take food pre-orders from bus passengers.</p>
+          </div>
+          <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => navigate(`${routePrefix}/support`)}
-              className="text-slate-400 text-sm font-bold hover:text-slate-600 transition-colors"
+              onClick={() => navigate(`/dhaba/login${phone.length === 10 ? `?phone=${phone}` : ''}`)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
             >
-              Need help? <span className="text-amber-500">Contact Support</span>
+              Log in
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/dhaba/register${phone.length === 10 ? `?phone=${phone}` : ''}`)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+            >
+              Register
             </button>
           </div>
-        </motion.div>
-
-        <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-white via-white/80 to-transparent">
-          <div className="mx-auto max-w-sm">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleSendOTP}
-              disabled={loading || !agreed || phone.length !== 10}
-              className={`group flex h-18 w-full items-center justify-center gap-3 rounded-[24px] text-lg font-black transition-all ${agreed && phone.length === 10
-                  ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/20'
-                  : 'bg-slate-100 text-slate-300 pointer-events-none'
-                }`}
-            >
-              {loading ? (
-                <div className="h-6 w-6 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  <span className="uppercase tracking-widest">Continue</span>
-                  <ChevronRight size={24} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </motion.button>
-          </div>
         </div>
-      </main>
-    </div>
+      ) : null}
+    </DriverAuthShell>
   );
 };
 

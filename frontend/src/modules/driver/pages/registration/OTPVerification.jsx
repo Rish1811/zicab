@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, CheckCircle2, ShieldCheck, ChevronRight, MessageSquare, Car, Briefcase, Wrench, Bus, Users } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
     buildDriverOnboardingSessionSnapshot,
     getDriverOnboardingResumeStep,
@@ -18,7 +17,7 @@ import {
     verifyDriverOtp,
     verifyPoolingDriverOnboardingOtp,
 } from '../../services/registrationService';
-import taxiBg from '../../../../assets/images/light-taxi-bg.png';
+import DriverAuthShell from '../../components/DriverAuthShell';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
 const normalizeDriverRole = (role) => {
@@ -117,6 +116,10 @@ const OTPVerification = () => {
     const location = useLocation();
     const [otp, setOtp] = useState(['', '', '', '']);
     const inputs = useRef([]);
+    // The digits as of the last keystroke: fast typing and SMS autofill arrive
+    // quicker than React re-renders.
+    const latestOtp = useRef(otp);
+    latestOtp.current = otp;
     const [timer, setTimer] = useState(60);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -138,8 +141,6 @@ const OTPVerification = () => {
     const existingAccount = Boolean(session.existingAccount);
     const detectedRole = formatRoleLabel(session.detectedRole || role);
     const entryPath = String(session.entryPath || (isLoginFlow ? `${routePrefix}/login` : `${routePrefix}/reg-phone`));
-    console.log('[OTPVerification] render session:', session);
-    console.log('[OTPVerification] isLoginFlow:', isLoginFlow, 'phone:', phone, 'availableRoles:', session.availableRoles);
     const sessionResumeKey = JSON.stringify({
         registrationId,
         phone,
@@ -260,14 +261,34 @@ const OTPVerification = () => {
 
     const handleChange = (index, value) => {
         if (!/^\d*$/.test(value)) return;
-        const newOtp = [...otp];
-        newOtp[index] = value.slice(-1);
+        const newOtp = [...latestOtp.current];
+        // More than one digit in an empty box is a whole code from SMS autofill.
+        const incoming = value.length > 1 && !newOtp[index] ? value.slice(0, 4 - index) : value.slice(-1);
+        if (incoming) {
+            incoming.split('').forEach((digit, offset) => {
+                newOtp[index + offset] = digit;
+            });
+        } else {
+            newOtp[index] = '';
+        }
+        latestOtp.current = newOtp;
         setOtp(newOtp);
-        if (value && index < 3) {
-            inputs.current[index + 1].focus();
+        if (incoming && index < 3) {
+            inputs.current[Math.min(index + incoming.length, 3)].focus();
         }
         if (newOtp.join('').length === 4) {
             handleVerify(newOtp.join(''));
+        }
+    };
+
+    const handlePaste = (e) => {
+        const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
+        if (!digits) return;
+        e.preventDefault();
+        setOtp(['', '', '', ''].map((_, index) => digits[index] || ''));
+        inputs.current[Math.min(digits.length, 3)]?.focus();
+        if (digits.length === 4) {
+            handleVerify(digits);
         }
     };
 
@@ -305,11 +326,14 @@ const OTPVerification = () => {
 
                 const loggedInRole = payload?.role || targetRole;
                 const token = payload?.token;
-                if (token) {
-                    const normalizedRole = normalizeDriverRole(loggedInRole);
-                    persistDriverAuthSession({ token, role: normalizedRole });
-                    await syncPushTokens();
+                if (!token) {
+                    setError('Could not log you in. Please try again.');
+                    setOtp(['', '', '', '']);
+                    inputs.current[0]?.focus();
+                    return;
                 }
+                persistDriverAuthSession({ token, role: normalizeDriverRole(loggedInRole) });
+                await syncPushTokens();
                 clearDriverRegistrationSession();
                 const normalizedRole = normalizeDriverRole(loggedInRole);
                 const nextPath = getPostLoginRoute(normalizedRole, payload?.driver, routePrefix);
@@ -351,6 +375,8 @@ const OTPVerification = () => {
             navigate(`${routePrefix}/step-personal`);
         } catch (err) {
             setError(err?.message || 'Invalid code');
+            setOtp(['', '', '', '']);
+            inputs.current[0]?.focus();
         } finally {
             setLoading(false);
         }
@@ -366,11 +392,13 @@ const OTPVerification = () => {
             const response = await verifyDriverLoginOtp({ phone, otp: otp.join(''), role: chosenRole });
             const payload = unwrap(response);
             const token = payload?.token;
-            if (token) {
-                const normalizedRole = normalizeDriverRole(chosenRole);
-                persistDriverAuthSession({ token, role: normalizedRole });
-                await syncPushTokens();
+            if (!token) {
+                setError('Could not log you in. Please try again.');
+                setSelectedRole(null);
+                return;
             }
+            persistDriverAuthSession({ token, role: normalizeDriverRole(chosenRole) });
+            await syncPushTokens();
             clearDriverRegistrationSession();
             const normalizedRole = normalizeDriverRole(chosenRole);
             const nextPath = getPostLoginRoute(normalizedRole, payload?.driver, routePrefix);
@@ -435,213 +463,137 @@ const OTPVerification = () => {
         }
     };
 
+    const canVerify = otp.join('').length === 4 && !loading && !resolvingSession;
+
     return (
-        <div className="min-h-screen relative bg-white select-none overflow-x-hidden font-['Outfit']">
-            {/* Background */}
-            <div className="fixed inset-0 z-0">
-                <motion.img 
-                    initial={{ scale: 1.05, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ duration: 1.2 }}
-                    src={taxiBg} 
-                    alt="" 
-                    className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px]" />
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-white" />
-            </div>
+        <DriverAuthShell isOwnerPortal={routePrefix === '/taxi/owner'}>
+            <button
+                type="button"
+                onClick={showRoleSelector ? () => setShowRoleSelector(false) : () => navigate(entryPath)}
+                className="-ml-2 mb-5 inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+            >
+                <ArrowLeft size={18} />
+                Back
+            </button>
 
-            <main className="relative z-10 mx-auto max-w-sm px-6 flex flex-col min-h-screen pt-12 pb-32">
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex-1 space-y-10"
-                >
-                    <header className="space-y-6">
-                        <motion.button
-                            whileTap={{ scale: 0.9 }}
-                            onClick={showRoleSelector ? () => setShowRoleSelector(false) : () => navigate(entryPath)}
-                            className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-900 shadow-xl shadow-slate-100"
-                        >
-                            <ArrowLeft size={20} strokeWidth={3} />
-                        </motion.button>
-                        
-                        <div className="space-y-2">
-                            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-                                {showRoleSelector ? 'Select Profile' : 'Verify'}
-                            </h1>
-                            <p className="text-slate-500 font-medium text-lg">
-                                {showRoleSelector ? (
-                                    'Choose a dashboard to proceed'
-                                ) : (
-                                    <>Code sent to <span className="text-slate-900 font-bold">+91 {phone}</span></>
-                                )}
-                            </p>
-                        </div>
-                    </header>
-
-                    <section className="bg-white rounded-[40px] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.06)] border border-slate-50 space-y-10">
-                        <AnimatePresence mode="wait">
-                            {!showRoleSelector ? (
-                                <motion.div
-                                    key="otp-inputs-view"
-                                    initial={{ opacity: 0, x: -15 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: 15 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="space-y-10"
-                                >
-                                    {isLoginFlow && existingAccount && (
-                                        <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-center">
-                                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-600">
-                                                Existing {detectedRole} account found
-                                            </p>
-                                            <p className="mt-1 text-sm font-medium text-amber-900">
-                                                This number is already registered, so we are continuing with login instead of a new signup.
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    <div className="flex justify-between gap-3">
-                                        {otp.map((digit, index) => (
-                                            <input
-                                                key={index}
-                                                ref={el => inputs.current[index] = el}
-                                                type="tel"
-                                                inputMode="numeric"
-                                                maxLength={1}
-                                                value={digit}
-                                                onChange={e => handleChange(index, e.target.value)}
-                                                onKeyDown={e => handleKeyDown(index, e)}
-                                                className={`h-16 w-full rounded-2xl border-2 text-center text-3xl font-black transition-all outline-none ${
-                                                    digit 
-                                                        ? 'border-amber-400 bg-amber-50/20 text-slate-900' 
-                                                        : 'border-slate-50 bg-slate-50 text-slate-900 focus:border-amber-200 focus:bg-white'
-                                                }`}
-                                            />
-                                        ))}
-                                    </div>
-
-                                    <div className="space-y-6">
-                                        <AnimatePresence>
-                                            {error && (
-                                                <motion.div 
-                                                    initial={{ opacity: 0, y: -10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    exit={{ opacity: 0, y: -10 }}
-                                                    className={`rounded-2xl border p-4 text-center ${
-                                                        error.includes('successfully') 
-                                                            ? 'border-emerald-100 bg-emerald-50 text-emerald-600'
-                                                            : 'border-rose-100 bg-rose-50 text-rose-600'
-                                                    }`}
-                                                >
-                                                    <p className="text-xs font-bold uppercase tracking-widest">{error}</p>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-
-                                        <div className="flex flex-col items-center gap-4">
-                                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                                                Didn't get it?
-                                            </p>
-                                            <button
-                                                onClick={handleResend}
-                                                disabled={timer > 0 || loading}
-                                                className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest transition-all ${
-                                                    timer > 0 
-                                                        ? 'text-slate-200' 
-                                                        : 'text-amber-500 hover:opacity-70'
-                                                }`}
-                                            >
-                                                <MessageSquare size={14} />
-                                                {timer > 0 ? `Retry in ${timer}s` : 'Resend Code'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ) : (
-                                <motion.div
-                                    key="role-selection-view"
-                                    initial={{ opacity: 0, x: 15 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -15 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="space-y-6"
-                                >
-                                    <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
-                                        {(session.availableRoles || []).map((roleKey) => {
-                                            const roleConfig = ROLE_DETAILS[normalizeDriverRole(roleKey)] || {
-                                                title: formatRoleLabel(roleKey),
-                                                description: 'Access your account dashboard.',
-                                                icon: Car,
-                                                color: 'from-amber-400 to-orange-500'
-                                            };
-                                            const IconComponent = roleConfig.icon;
-                                            
-                                            return (
-                                                <motion.button
-                                                    key={roleKey}
-                                                    whileHover={{ scale: 1.02, y: -2 }}
-                                                    whileTap={{ scale: 0.98 }}
-                                                    onClick={() => handleRoleSelect(roleKey)}
-                                                    className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-50 bg-slate-50 hover:bg-white hover:border-amber-400 hover:shadow-xl hover:shadow-amber-100/30 transition-all text-left group animate-none"
-                                                >
-                                                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${roleConfig.color} text-white shadow-md shadow-slate-200/50`}>
-                                                        <IconComponent size={20} strokeWidth={2.5} />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <h3 className="font-bold text-slate-900 text-sm group-hover:text-amber-600 transition-colors">
-                                                            {roleConfig.title}
-                                                        </h3>
-                                                        <p className="text-[11px] text-slate-400 leading-normal mt-0.5 line-clamp-2">
-                                                            {roleConfig.description}
-                                                        </p>
-                                                    </div>
-                                                    <ChevronRight size={18} className="text-slate-300 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all shrink-0" />
-                                                </motion.button>
-                                            );
-                                        })}
-                                    </div>
-                                    <button
-                                        onClick={() => setShowRoleSelector(false)}
-                                        className="w-full py-3 rounded-xl border border-slate-200 text-slate-500 font-bold text-xs uppercase tracking-wider hover:bg-slate-50 transition-colors"
-                                    >
-                                        Back to OTP Verification
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </section>
-                </motion.div>
-
-                {!showRoleSelector && (
-                    <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-white via-white/80 to-transparent">
-                        <div className="mx-auto max-w-sm">
-                            <motion.button
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={handleVerify}
-                                disabled={loading || resolvingSession || otp.join('').length !== 4}
-                                className={`group flex h-18 w-full items-center justify-center gap-4 rounded-[24px] text-lg font-black transition-all ${
-                                    otp.join('').length === 4
-                                        ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/20'
-                                        : 'bg-slate-100 text-slate-300 pointer-events-none'
-                                }`}
-                            >
-                                {loading ? (
-                                    <div className="h-6 w-6 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <>
-                                        <span className="uppercase tracking-widest">Verify Code</span>
-                                        <ChevronRight size={24} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
-                                    </>
-                                )}
-                            </motion.button>
-                        </div>
-                    </div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+                {showRoleSelector ? 'Choose an account' : 'Enter the code'}
+            </h1>
+            <p className="mt-2 text-base text-slate-500">
+                {showRoleSelector ? (
+                    'This number has more than one account.'
+                ) : (
+                    <>Sent to <span className="font-semibold text-slate-900">+91 {phone}</span></>
                 )}
-            </main>
-        </div>
+            </p>
+
+            {showRoleSelector ? (
+                <div className="mt-8 space-y-3">
+                    {(session.availableRoles || []).map((roleKey) => {
+                        const roleConfig = ROLE_DETAILS[normalizeDriverRole(roleKey)] || {
+                            title: formatRoleLabel(roleKey),
+                            description: 'Access your account dashboard.',
+                            icon: Car,
+                            color: 'from-amber-400 to-orange-500',
+                        };
+                        const IconComponent = roleConfig.icon;
+
+                        return (
+                            <button
+                                key={roleKey}
+                                type="button"
+                                onClick={() => handleRoleSelect(roleKey)}
+                                disabled={loading}
+                                className="group flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 text-left transition-colors hover:border-amber-400 hover:bg-amber-50/40"
+                            >
+                                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${roleConfig.color} text-white`}>
+                                    <IconComponent size={20} />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-semibold text-slate-900">{roleConfig.title}</span>
+                                    <span className="mt-0.5 block text-xs leading-5 text-slate-500">{roleConfig.description}</span>
+                                </span>
+                                <ChevronRight size={18} className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
+                            </button>
+                        );
+                    })}
+                    {error ? (
+                        <p role="alert" className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</p>
+                    ) : null}
+                </div>
+            ) : (
+                <form
+                    className="mt-8"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        if (canVerify) handleVerify();
+                    }}
+                >
+                    {isLoginFlow && existingAccount ? (
+                        <p className="mb-5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                            This number already has a {detectedRole} account, so you'll log in to it.
+                        </p>
+                    ) : null}
+
+                    <div className="grid grid-cols-4 gap-3">
+                        {otp.map((digit, index) => (
+                            <input
+                                key={index}
+                                ref={(el) => { inputs.current[index] = el; }}
+                                type="tel"
+                                inputMode="numeric"
+                                autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                                aria-label={`Digit ${index + 1} of 4`}
+                                value={digit}
+                                onChange={(e) => handleChange(index, e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(index, e)}
+                                onPaste={handlePaste}
+                                className={`h-16 w-full rounded-xl border bg-white text-center text-2xl font-bold text-slate-900 outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-200 ${digit ? 'border-amber-400' : 'border-slate-300'}`}
+                            />
+                        ))}
+                    </div>
+
+                    {error ? (
+                        <p
+                            role="alert"
+                            className={`mt-4 rounded-xl px-4 py-3 text-sm font-medium ${error.includes('successfully') ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}
+                        >
+                            {error}
+                        </p>
+                    ) : null}
+
+                    <button
+                        type="submit"
+                        disabled={!canVerify}
+                        className={`mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-xl text-base font-bold transition-colors ${
+                            canVerify ? 'bg-amber-400 text-slate-950 hover:bg-amber-500' : 'cursor-not-allowed bg-slate-100 text-slate-400'
+                        }`}
+                    >
+                        {loading ? (
+                            <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-950/20 border-t-slate-950" />
+                        ) : (
+                            <>
+                                Verify and continue
+                                <ChevronRight size={20} strokeWidth={2.5} />
+                            </>
+                        )}
+                    </button>
+
+                    <div className="mt-5 flex items-center justify-center gap-2 text-sm text-slate-500">
+                        <span>Didn't get it?</span>
+                        <button
+                            type="button"
+                            onClick={handleResend}
+                            disabled={timer > 0 || loading}
+                            className={`inline-flex items-center gap-1.5 font-semibold ${timer > 0 ? 'cursor-not-allowed text-slate-400' : 'text-amber-700 hover:underline'}`}
+                        >
+                            <MessageSquare size={14} />
+                            {timer > 0 ? `Resend in ${timer}s` : 'Resend code'}
+                        </button>
+                    </div>
+                </form>
+            )}
+        </DriverAuthShell>
     );
 };
 

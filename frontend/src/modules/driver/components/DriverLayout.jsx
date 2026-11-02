@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
+    clearDriverAuthState,
     getAuthenticatedDriverRole,
     getCurrentDriver,
     getLocalDriverToken,
@@ -137,6 +138,10 @@ const DriverLayout = () => {
     const [isAllowed, setIsAllowed] = useState(true);
     const verifiedTokenRef = useRef('');
     const verifiedApprovalRef = useRef(false);
+    // The token that has passed /drivers/me, and the one the login page could
+    // not check (server unreachable), so neither screen waits on it again.
+    const [clearedToken, setClearedToken] = useState('');
+    const [softCheckedToken, setSoftCheckedToken] = useState('');
 
     useEffect(() => {
         const currentPath = location.pathname;
@@ -213,6 +218,7 @@ const DriverLayout = () => {
                 if (!isApproved) {
                     if (isPendingAllowedRoute(currentPath)) {
                         setIsAllowed(true);
+                        setClearedToken(token);
                         verifiedTokenRef.current = '';
                         verifiedApprovalRef.current = false;
                         setIsChecking(false);
@@ -227,6 +233,7 @@ const DriverLayout = () => {
                 }
 
                 setIsAllowed(true);
+                setClearedToken(token);
                 verifiedTokenRef.current = token;
                 verifiedApprovalRef.current = true;
 
@@ -282,19 +289,25 @@ const DriverLayout = () => {
                     return;
                 }
 
-                setIsAllowed(false);
                 verifiedTokenRef.current = '';
                 verifiedApprovalRef.current = false;
 
-                if (error?.status === 401) {
+                // The account or token is gone: forget it, or every later visit
+                // would open the app on a token the server refuses.
+                if (error?.status === 401 || error?.status === 404) {
+                    clearDriverAuthState();
+                    setIsAllowed(false);
                     redirectToDriverLogin(navigate, currentPath, authenticatedRole);
                     return;
                 }
 
-                if (error?.status === 404) {
-                    redirectToDriverLogin(navigate, currentPath, authenticatedRole);
+                // Could not check it: the login page still has to work.
+                if (softEntryRoutes.has(currentPath)) {
+                    setSoftCheckedToken(token);
                     return;
                 }
+
+                setIsAllowed(false);
 
                 if (error?.status === 403) {
                     navigate(getPendingDriverRoute(currentPath), { replace: true });
@@ -316,9 +329,14 @@ const DriverLayout = () => {
         };
     }, [isAllowed, location.pathname, location.state, navigate]);
 
+    const currentToken = getLocalDriverToken();
+    const isWaitingForAuth = isOnboardingRoute(location.pathname)
+        ? softEntryRoutes.has(location.pathname) && Boolean(currentToken) && softCheckedToken !== currentToken
+        : isChecking || !isAllowed || !currentToken || clearedToken !== currentToken;
+
     return (
         <div className="driver-theme min-h-screen">
-            {isChecking && !isOnboardingRoute(location.pathname) ? (
+            {isWaitingForAuth ? (
                 <div className="min-h-screen flex items-center justify-center bg-white">
                     <div className="w-10 h-10 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
                 </div>

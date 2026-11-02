@@ -43,6 +43,10 @@ const MainLayout = ({ children }) => {
     location.pathname === '/taxi/user/login' ||
     location.pathname === '/taxi/user/signup' ||
     location.pathname === '/taxi/user/verify-otp' ||
+    location.pathname === '/taxi/driver/login' ||
+    location.pathname === '/taxi/driver/otp-verify' ||
+    location.pathname === '/taxi/owner/login' ||
+    location.pathname === '/taxi/owner/otp-verify' ||
     location.pathname === '/login';
 
   if (isSplashPath || isAuthPath) {
