@@ -75,7 +75,9 @@ const BusSignupBuilderPage = () => {
         <div className="mb-5 flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={() => navigate('/taxi/driver/role-signup')}
+            onClick={() => navigate(
+              getStoredDriverRegistrationSession().entryPath === '/bus-login' ? '/bus-register' : '/taxi/driver/role-signup',
+            )}
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
             <ChevronLeft size={16} />

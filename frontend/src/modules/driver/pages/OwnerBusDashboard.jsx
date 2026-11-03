@@ -511,12 +511,12 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 text-slate-900 lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
-      <aside className="hidden flex-col bg-slate-900 p-5 text-white lg:sticky lg:top-0 lg:flex lg:h-[100dvh]">
+      <aside className={`hidden flex-col p-5 text-white lg:sticky lg:top-0 lg:flex lg:h-[100dvh] ${isBusPortal ? 'bg-gradient-to-b from-[#0a1a33] to-[#123266]' : 'bg-slate-900'}`}>
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400 text-slate-950"><Bus size={20} /></span>
           <div>
-            <p className="font-bold leading-tight">Bus dashboard</p>
-            <p className="text-xs text-slate-400">{isBusPortal ? 'Bus partner' : 'Owner'}</p>
+            <p className="font-bold leading-tight">{isBusPortal ? 'ZI Bus' : 'Bus dashboard'}</p>
+            <p className="text-xs text-slate-300">{isBusPortal ? 'Bus dashboard' : 'Owner'}</p>
           </div>
         </div>
         <nav className="mt-8 space-y-1">
@@ -543,13 +543,13 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
       </aside>
 
       <div className="min-w-0 pb-24 lg:pb-8">
-        <header className="flex items-center gap-2 bg-slate-900 px-4 py-3 text-white lg:hidden">
+        <header className={`flex items-center gap-2 px-4 py-3 text-white lg:hidden ${isBusPortal ? 'bg-[#0a1a33]' : 'bg-slate-900'}`}>
           {isBusPortal ? null : (
             <button type="button" aria-label="Owner home" onClick={() => navigate('/taxi/owner/dashboard')} className="-ml-1 rounded-lg p-1.5 hover:bg-white/10">
               <ArrowLeft size={20} />
             </button>
           )}
-          <p className="font-bold">Bus dashboard</p>
+          <p className="font-bold">{isBusPortal ? 'ZI Bus' : 'Bus dashboard'}</p>
           <button type="button" onClick={() => navigate(managePath)} className="ml-auto rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-200 hover:bg-white/10">
             {manageLabel}
           </button>

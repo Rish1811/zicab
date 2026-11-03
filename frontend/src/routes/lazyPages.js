@@ -93,6 +93,8 @@ export const DriverHome = lazy(() => import('../modules/driver/pages/DriverHome'
 export const OwnerDashboard = lazy(() => import('../modules/driver/pages/OwnerDashboard'));
 export const OwnerBusServicePage = lazy(() => import('../modules/driver/pages/OwnerBusServicePage'));
 export const BusPartnerLogin = lazy(() => import('../modules/driver/pages/BusPartnerLogin'));
+export const BusPartnerOnboarding = lazy(() => import('../modules/driver/pages/BusPartnerOnboarding'));
+export const BusPartnerStatus = lazy(() => import('../modules/driver/pages/BusPartnerStatus'));
 export const BusPartnerDashboard = lazy(() => import('../modules/driver/pages/BusPartnerDashboard'));
 export const OwnerBusDashboard = lazy(() => import('../modules/driver/pages/OwnerBusDashboard'));
 export const OwnerBusBookingsPage = lazy(() => import('../modules/driver/pages/OwnerBusBookingsPage'));

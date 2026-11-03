@@ -1,6 +1,7 @@
 import React from 'react';
 import { useSettings } from '../../../shared/context/SettingsContext';
 import heroImage from '../../../assets/images/yellow_taxi_login_bg.png';
+import BusPortalHero from './BusPortalHero';
 
 const DRIVER_PORTALS = ['Taxi and parcel drivers', 'Bus drivers and conductors', 'Fleet and bus owners', 'Pooling drivers', 'Service centers'];
 const BUS_PORTALS = ['Book seats for passengers', 'See and cancel bookings', 'Register your bus'];
@@ -12,7 +13,7 @@ const DriverAuthShell = ({ isOwnerPortal = false, isBusPortal = false, children 
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'ZI CAB';
   const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
-  const brandName = appName.split(' - ')[0];
+  const brandName = isBusPortal ? 'ZI Bus' : appName.split(' - ')[0];
   const portals = isBusPortal ? BUS_PORTALS : isOwnerPortal ? OWNER_PORTALS : DRIVER_PORTALS;
   const headline = isBusPortal
     ? 'Your bus, all in one place.'
@@ -23,8 +24,14 @@ const DriverAuthShell = ({ isOwnerPortal = false, isBusPortal = false, children 
   return (
     <div className="grid min-h-[100dvh] w-full content-start bg-white text-slate-900 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:content-stretch">
       <aside className="relative h-44 overflow-hidden bg-slate-900 sm:h-56 lg:sticky lg:top-0 lg:h-[100dvh]">
-        <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover object-[60%_70%]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/35 to-slate-950/50" />
+        {isBusPortal ? (
+          <BusPortalHero />
+        ) : (
+          <>
+            <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover object-[60%_70%]" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/35 to-slate-950/50" />
+          </>
+        )}
 
         <div className="relative flex h-full flex-col justify-between p-5 sm:p-7 lg:p-12">
           <div className="flex items-center gap-3">

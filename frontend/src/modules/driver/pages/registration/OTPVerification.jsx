@@ -153,6 +153,8 @@ const OTPVerification = () => {
     const existingAccount = Boolean(session.existingAccount);
     const detectedRole = formatRoleLabel(session.detectedRole || role);
     const entryPath = String(session.entryPath || (isLoginFlow ? `${routePrefix}/login` : `${routePrefix}/reg-phone`));
+    // Registering from the bus login stays in the bus screens.
+    const busRegisterPath = entryPath === '/bus-login' ? '/bus-register' : '';
     const sessionResumeKey = JSON.stringify({
         registrationId,
         phone,
@@ -184,7 +186,7 @@ const OTPVerification = () => {
                     return;
                 }
                 const nextStep = getDriverOnboardingResumeStep(session);
-                navigate(`${routePrefix}/${nextStep}`, {
+                navigate(busRegisterPath || `${routePrefix}/${nextStep}`, {
                     replace: true,
                     state: saveDriverRegistrationSession(session),
                 });
@@ -230,7 +232,7 @@ const OTPVerification = () => {
                 }
 
                 const nextStep = getDriverOnboardingResumeStep(nextSession);
-                navigate(`${routePrefix}/${nextStep}`, {
+                navigate(busRegisterPath || `${routePrefix}/${nextStep}`, {
                     replace: true,
                     state: nextSession,
                 });
@@ -384,7 +386,7 @@ const OTPVerification = () => {
                 navigate('/taxi/driver/select-role');
                 return;
             }
-            navigate(`${routePrefix}/step-personal`);
+            navigate(busRegisterPath || `${routePrefix}/step-personal`);
         } catch (err) {
             setError(err?.message || 'Invalid code');
             setOtp(['', '', '', '']);

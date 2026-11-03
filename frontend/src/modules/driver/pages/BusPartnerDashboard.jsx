@@ -46,7 +46,7 @@ const BusPartnerDashboard = () => {
   }, [hasBusSession]);
 
   if (access === 'login') return <Navigate to="/bus-login" replace />;
-  if (access === 'pending') return <Navigate to="/taxi/driver/registration-status" replace />;
+  if (access === 'pending') return <Navigate to="/bus-register/status" replace />;
   if (access === 'checking') {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50">

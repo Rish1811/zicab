@@ -14,6 +14,8 @@ import {
   BusHome,
   BusPartnerDashboard,
   BusPartnerLogin,
+  BusPartnerOnboarding,
+  BusPartnerStatus,
   BusPreview,
   BusList,
   BusSeats,
@@ -101,6 +103,8 @@ const publicRoutes = (
     {/* Bus partners: their own login and dashboard, not the rider's /bus pages,
         so they sit outside the rider login below. */}
     <Route path="/bus-login" element={<BusPartnerLogin />} />
+    <Route path="/bus-register" element={<BusPartnerOnboarding />} />
+    <Route path="/bus-register/status" element={<BusPartnerStatus />} />
     <Route path="/bus-dashboard" element={<BusPartnerDashboard />} />
     <Route element={<UserAppLayout />}>
       <Route path="/user" element={<UserHomeRoute />} />

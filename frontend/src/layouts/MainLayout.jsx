@@ -50,6 +50,8 @@ const MainLayout = ({ children }) => {
     location.pathname === '/taxi/owner/bus-dashboard' ||
     location.pathname === '/bus-login' ||
     location.pathname === '/bus-dashboard' ||
+    location.pathname.startsWith('/bus-register') ||
+    location.pathname.startsWith('/taxi/driver/role-signup/bus-builder') ||
     location.pathname === '/login';
 
   if (isSplashPath || isAuthPath) {
