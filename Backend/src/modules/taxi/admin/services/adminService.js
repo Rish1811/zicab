@@ -3493,7 +3493,7 @@ const validateSubadminPayload = async (payload = {}, existingAdminId = null, cur
   const permissions = normalizeAdminPermissions(
     adminType === 'superadmin' ? [SUPERADMIN_PERMISSION] : payload.permissions || [],
   );
-  const serviceLocationIds = normalizeObjectIdList(payload.service_location_ids);
+  const requestedLocationIds = normalizeObjectIdList(payload.service_location_ids);
   const zoneIds = normalizeObjectIdList(payload.zone_ids);
   const active = payload.active === undefined ? true : normalizeBoolean(payload.active);
   const status = String(payload.status || (active ? 'active' : 'inactive')).trim().toLowerCase() === 'inactive'
@@ -3517,6 +3517,25 @@ const validateSubadminPayload = async (payload = {}, existingAdminId = null, cur
     throw new ApiError(409, 'Admin email already exists');
   }
 
+  // A location deleted after it was assigned stays on the account, and the form
+  // can't show it to untick, so an edit drops those instead of refusing to save.
+  // Anything else unknown is still an error.
+  const knownLocations = requestedLocationIds.length
+    ? await ServiceLocation.find({ _id: { $in: requestedLocationIds } }).select('_id').lean()
+    : [];
+  const knownLocationIds = new Set(knownLocations.map((item) => String(item._id)));
+  const unknownLocationIds = requestedLocationIds.filter((id) => !knownLocationIds.has(String(id)));
+  if (unknownLocationIds.length > 0) {
+    const current = existingAdminId
+      ? await Admin.findById(existingAdminId).select('service_location_ids').lean()
+      : null;
+    const alreadyAssigned = new Set((current?.service_location_ids || []).map(String));
+    if (unknownLocationIds.some((id) => !alreadyAssigned.has(String(id)))) {
+      throw new ApiError(400, 'One or more selected service locations are invalid');
+    }
+  }
+  const serviceLocationIds = requestedLocationIds.filter((id) => knownLocationIds.has(String(id)));
+
   if (readOnly && permissions.includes('subadmins.manage')) {
     throw new ApiError(400, 'A view-only admin cannot manage sub-admins');
   }
@@ -3527,13 +3546,6 @@ const validateSubadminPayload = async (payload = {}, existingAdminId = null, cur
 
   if (adminType === 'subadmin' && serviceLocationIds.length === 0) {
     throw new ApiError(400, 'Assign at least one service location to the subadmin');
-  }
-
-  if (serviceLocationIds.length > 0) {
-    const count = await ServiceLocation.countDocuments({ _id: { $in: serviceLocationIds } });
-    if (count !== serviceLocationIds.length) {
-      throw new ApiError(400, 'One or more selected service locations are invalid');
-    }
   }
 
   if (zoneIds.length > 0) {
