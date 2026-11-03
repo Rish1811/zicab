@@ -29,6 +29,21 @@ const notificationSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // Read out loud by the apps. Blank text means the message is read.
+    voice_enabled: {
+      type: Boolean,
+      default: false,
+    },
+    voice_text: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    voice_language: {
+      type: String,
+      default: 'en',
+      trim: true,
+    },
     push_title: {
       type: String,
       required: true,

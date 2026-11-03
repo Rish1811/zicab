@@ -5,6 +5,7 @@ import {
   Car,
   ChevronRight,
   Filter,
+  Volume2,
   Image as ImageIcon,
   Loader2,
   MapPin,
@@ -27,11 +28,33 @@ const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5';
 const createInitialFormData = () => ({
   service_location_id: '',
   send_to: '',
-  vehicle_type_id: '',
+  vehicle_type_ids: [],
   push_title: '',
   message: '',
   image: null,
+  voice_enabled: false,
+  voice_text: '',
+  voice_language: 'en',
 });
+
+const VOICE_LANGUAGES = [
+  { code: 'en', label: 'English', speech: 'en-IN' },
+  { code: 'hi', label: 'Hindi', speech: 'hi-IN' },
+  { code: 'kn', label: 'Kannada', speech: 'kn-IN' },
+  { code: 'ta', label: 'Tamil', speech: 'ta-IN' },
+  { code: 'te', label: 'Telugu', speech: 'te-IN' },
+];
+
+/// Vehicle types grouped the way drivers think of them, by the icon each uses.
+const vehicleCategory = (vehicle = {}) => {
+  const icon = String(vehicle.icon_types || '').toLowerCase();
+  if (icon === 'auto') return 'Auto';
+  if (icon === 'bike') return 'Bike';
+  if (['truck', 'lcv', 'mcv', 'hcv', 'ehcv'].includes(icon)) return 'Truck';
+  return 'Cab';
+};
+const VEHICLE_CATEGORY_ORDER = ['Cab', 'Auto', 'Bike', 'Truck'];
+const vehicleIdOf = (vehicle) => String(vehicle._id || vehicle.id);
 
 const createInitialFilters = () => ({
   service_location_id: '',
@@ -125,6 +148,62 @@ const SendNotification = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [audience, setAudience] = useState(null);
+  const vehicleGroups = useMemo(
+    () =>
+      VEHICLE_CATEGORY_ORDER.map((category) => ({
+        category,
+        vehicles: vehicleTypes.filter((vehicle) => vehicleCategory(vehicle) === category),
+      })).filter((group) => group.vehicles.length),
+    [vehicleTypes],
+  );
+
+  const toggleVehicles = (ids, selected) => {
+    setFormData((current) => ({
+      ...current,
+      vehicle_type_ids: selected
+        ? [...new Set([...current.vehicle_type_ids, ...ids])]
+        : current.vehicle_type_ids.filter((id) => !ids.includes(id)),
+    }));
+  };
+
+  const previewVoice = () => {
+    const text = (formData.voice_text || formData.message).trim();
+    if (!text || !window.speechSynthesis) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = VOICE_LANGUAGES.find((item) => item.code === formData.voice_language)?.speech || 'en-IN';
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // The count updates as the audience changes; it is only a guide, so a failure
+  // just hides it.
+  const audienceVehicles = formData.vehicle_type_ids.join(',');
+  useEffect(() => {
+    if (!isCreateRoute || !formData.send_to) {
+      setAudience(null);
+      return undefined;
+    }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      adminService
+        .getNotificationAudience({
+          service_location_id: formData.service_location_id || undefined,
+          send_to: formData.send_to,
+          vehicle_type_ids: audienceVehicles || undefined,
+        })
+        .then((res) => {
+          if (active) setAudience(res?.data?.data || res?.data || res || null);
+        })
+        .catch(() => {
+          if (active) setAudience(null);
+        });
+    }, 300);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [audienceVehicles, formData.send_to, formData.service_location_id, isCreateRoute]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -218,8 +297,10 @@ const SendNotification = () => {
       const payload = {
         service_location_id: formData.service_location_id,
         send_to: formData.send_to,
-        vehicle_type_ids:
-          formData.send_to === 'drivers' && formData.vehicle_type_id ? [formData.vehicle_type_id] : [],
+        vehicle_type_ids: formData.send_to === 'drivers' ? formData.vehicle_type_ids : [],
+        voice_enabled: formData.voice_enabled,
+        voice_text: formData.voice_enabled ? formData.voice_text : '',
+        voice_language: formData.voice_language,
         push_title: formData.push_title,
         title: formData.push_title,
         message: formData.message,
@@ -385,6 +466,9 @@ const SendNotification = () => {
                           <td className="px-6 py-4 text-sm text-gray-600">{item.service_location_name || '-'}</td>
                           <td className="px-6 py-4 text-sm text-gray-600 capitalize">
                             {item.send_to || 'all'}
+                            {item.voice_enabled ? (
+                              <span className="block text-xs text-gray-400 normal-case">Read out loud</span>
+                            ) : null}
                             {item.vehicle_type_names?.length ? (
                               <span className="block text-xs text-gray-400 normal-case">{item.vehicle_type_names.join(', ')}</span>
                             ) : null}
@@ -464,25 +548,71 @@ const SendNotification = () => {
 
                   {formData.send_to === 'drivers' && (
                     <div className="md:col-span-2">
-                      <FieldLabel>Vehicle Type</FieldLabel>
-                      <div className="relative">
-                        <Car size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <select
-                          value={formData.vehicle_type_id}
-                          onChange={(e) => handleFieldChange('vehicle_type_id', e.target.value)}
-                          className={`${inputClass} pl-10`}
-                        >
-                          <option value="">All vehicle types</option>
-                          {vehicleTypes.map((vehicle) => (
-                            <option key={vehicle._id || vehicle.id} value={vehicle._id || vehicle.id}>
-                              {vehicle.name}
-                            </option>
-                          ))}
-                        </select>
+                      <FieldLabel>Vehicle Category</FieldLabel>
+                      <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={formData.vehicle_type_ids.length === 0}
+                          onChange={() => handleFieldChange('vehicle_type_ids', [])}
+                          className="h-4 w-4 accent-amber-500 [color-scheme:light]"
+                        />
+                        All vehicles
+                      </label>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {vehicleGroups.map(({ category, vehicles }) => {
+                          const ids = vehicles.map(vehicleIdOf);
+                          const allChosen = ids.every((id) => formData.vehicle_type_ids.includes(id));
+                          return (
+                            <div key={category} className="rounded-lg border border-gray-200 p-3">
+                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                                <input
+                                  type="checkbox"
+                                  checked={allChosen}
+                                  onChange={() => toggleVehicles(ids, !allChosen)}
+                                  className="h-4 w-4 accent-amber-500 [color-scheme:light]"
+                                />
+                                <Car size={15} className="text-gray-400" />
+                                {category}
+                              </label>
+                              <div className="mt-2 space-y-1.5 pl-6">
+                                {vehicles.map((vehicle) => {
+                                  const id = vehicleIdOf(vehicle);
+                                  const chosen = formData.vehicle_type_ids.includes(id);
+                                  return (
+                                    <label key={id} className="flex items-center gap-2 text-xs text-gray-600">
+                                      <input
+                                        type="checkbox"
+                                        checked={chosen}
+                                        onChange={() => toggleVehicles([id], !chosen)}
+                                        className="h-3.5 w-3.5 accent-amber-500 [color-scheme:light]"
+                                      />
+                                      {vehicle.name}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <p className="mt-1 text-xs text-gray-400">Only drivers registered for this vehicle type will get the push.</p>
+                      <p className="mt-2 text-xs text-gray-400">A driver registered for any chosen vehicle gets the push.</p>
                     </div>
                   )}
+
+                  {formData.send_to ? (
+                    <div className="md:col-span-2 rounded-lg bg-gray-50 px-3 py-2.5 text-xs text-gray-600">
+                      {audience ? (
+                        <p className="font-semibold text-gray-800">
+                          This will reach about {audience.people} {audience.people === 1 ? 'person' : 'people'} on {audience.devices} {audience.devices === 1 ? 'device' : 'devices'}.
+                        </p>
+                      ) : (
+                        <p>Counting who this will reach...</p>
+                      )}
+                      {formData.send_to !== 'drivers' ? (
+                        <p className="mt-1 text-gray-500">Riders get it in every city: the location above only narrows drivers.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="md:col-span-2">
                     <FieldLabel required>Push Title</FieldLabel>
@@ -505,6 +635,58 @@ const SendNotification = () => {
                       placeholder="Enter Message"
                       required
                     />
+                  </div>
+
+                  <div className="md:col-span-2 rounded-lg border border-gray-200 p-4">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={formData.voice_enabled}
+                        onChange={(e) => handleFieldChange('voice_enabled', e.target.checked)}
+                        className="h-4 w-4 accent-amber-500 [color-scheme:light]"
+                      />
+                      <Volume2 size={16} className="text-gray-400" />
+                      Read this out loud on the phone
+                    </label>
+                    {formData.voice_enabled ? (
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <FieldLabel>Voice language</FieldLabel>
+                          <select
+                            value={formData.voice_language}
+                            onChange={(e) => handleFieldChange('voice_language', e.target.value)}
+                            className={inputClass}
+                          >
+                            {VOICE_LANGUAGES.map((language) => (
+                              <option key={language.code} value={language.code}>{language.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <FieldLabel>Words to read (leave blank to read the message)</FieldLabel>
+                          <textarea
+                            value={formData.voice_text}
+                            onChange={(e) => handleFieldChange('voice_text', e.target.value)}
+                            maxLength={500}
+                            rows={3}
+                            className={inputClass}
+                            placeholder="Write in the language chosen above"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={previewVoice}
+                          disabled={!(formData.voice_text || formData.message).trim()}
+                          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          <Volume2 size={14} />
+                          Listen
+                        </button>
+                        <p className="text-xs text-gray-400">
+                          The preview uses this browser's voice, so the phone may sound different. iPhones only read it while the app is open.
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="md:col-span-2">

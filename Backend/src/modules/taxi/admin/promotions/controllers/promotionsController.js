@@ -32,6 +32,10 @@ export const getNotifications = asyncHandler(async (req, res) =>
   ok(res, await promotionsService.listNotifications(req.query)),
 );
 
+export const getNotificationAudience = asyncHandler(async (req, res) =>
+  ok(res, await promotionsService.getNotificationAudience(req.query)),
+);
+
 export const sendNotification = asyncHandler(async (req, res) =>
   ok(res, await promotionsService.createNotification(req.body)),
 );

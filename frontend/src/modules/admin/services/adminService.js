@@ -229,6 +229,7 @@ export const adminService = {
   getPromotionsBootstrap: () => api.get('/admin/promotions/bootstrap'),
   getNotifications: () => api.get('/admin/notifications'),
   sendNotification: (data) => api.post('/admin/notifications/send', data),
+  getNotificationAudience: (params) => api.get('/admin/notifications/audience', { params }),
   deleteNotification: (id) => api.delete(`/admin/notifications/${id}`),
   getBanners: () => api.get('/admin/banners'),
 

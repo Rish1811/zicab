@@ -308,6 +308,28 @@ const collectDirectTargets = async ({ userIds = [], driverIds = [] }) => {
   return targets;
 };
 
+/// How many people and devices an admin push would reach, before sending it.
+export const countPushAudience = async ({ sendTo, serviceLocationId, vehicleTypeIds = [] }) => {
+  const targets = await collectAudienceTargets({ sendTo, serviceLocationId, vehicleTypeIds });
+  return {
+    people: new Set(targets.map((target) => target.entityId)).size,
+    devices: new Set(targets.map((target) => target.token)).size,
+  };
+};
+
+/// The data an admin push carries. The apps read the voice fields; FCM data
+/// values must all be strings.
+export const buildBroadcastData = ({ notificationId, serviceLocationId, sendTo, voice = null }) => ({
+  type: 'admin_broadcast',
+  notificationId: String(notificationId || ''),
+  serviceLocationId: String(serviceLocationId || ''),
+  sendTo: String(sendTo || 'all'),
+  voice_enabled: voice?.enabled ? '1' : '0',
+  voice_text: voice?.enabled ? String(voice.text || '') : '',
+  voice_language: voice?.enabled ? String(voice.language || 'en') : '',
+  click_action: 'FLUTTER_NOTIFICATION_CLICK',
+});
+
 export const sendPushNotificationToAudience = async ({
   notificationId,
   serviceLocationId,
@@ -316,6 +338,7 @@ export const sendPushNotificationToAudience = async ({
   title,
   body,
   image,
+  voice = null,
 }) => {
   const messaging = getFirebaseMessaging();
 
@@ -358,12 +381,7 @@ export const sendPushNotificationToAudience = async ({
         body,
         ...(image ? { imageUrl: image } : {}),
       },
-      data: {
-        notificationId: String(notificationId || ''),
-        serviceLocationId: String(serviceLocationId || ''),
-        sendTo: String(sendTo || 'all'),
-        click_action: 'FLUTTER_NOTIFICATION_CLICK',
-      },
+      data: buildBroadcastData({ notificationId, serviceLocationId, sendTo, voice }),
       android: {
         priority: 'high',
         notification: image ? { imageUrl: image } : undefined,

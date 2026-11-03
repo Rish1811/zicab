@@ -13,6 +13,7 @@ import {
   getPromotionsServiceLocations,
   getPromotionsUsers,
   pushBanner,
+  getNotificationAudience,
   sendNotification,
   togglePromoCodeStatus,
   updateBanner,
@@ -33,6 +34,7 @@ promotionsRouter.get('/admin/promos/users', getPromotionsUsers);
 promotionsRouter.get('/admin/promos/service-locations', getPromotionsServiceLocations);
 
 promotionsRouter.get('/admin/notifications', getNotifications);
+promotionsRouter.get('/admin/notifications/audience', getNotificationAudience);
 promotionsRouter.post('/admin/notifications', sendNotification);
 promotionsRouter.post('/admin/notifications/send', sendNotification);
 promotionsRouter.delete('/admin/notifications/:id', deleteNotification);
