@@ -532,7 +532,7 @@ const Admins = () => {
       setIsCreateOpen(false);
       loadData();
     } catch (error) {
-      toast.error(error?.response?.data?.message || 'Creation failed');
+      toast.error(error?.response?.data?.message || error?.message || 'Creation failed');
     } finally {
       setSaving(false);
     }
@@ -607,7 +607,7 @@ const Admins = () => {
       setIsEditOpen(false);
       loadData();
     } catch (error) {
-      toast.error(error?.response?.data?.message || 'Update failed');
+      toast.error(error?.response?.data?.message || error?.message || 'Update failed');
     } finally {
       setSaving(false);
     }
@@ -630,7 +630,7 @@ const Admins = () => {
       setDeleteConfirmText('');
       loadData();
     } catch (error) {
-      toast.error(error?.response?.data?.message || 'Delete failed');
+      toast.error(error?.response?.data?.message || error?.message || 'Delete failed');
     } finally {
       setSaving(false);
     }

@@ -10,6 +10,7 @@ import {
     getPoolingDriverOnboardingSession,
     persistDriverAuthSession,
     saveDriverRegistrationSession,
+    takeOwnerReturnPath,
     sendDriverLoginOtp,
     sendDriverOtp,
     startPoolingDriverOnboarding,
@@ -63,6 +64,13 @@ const getPostLoginRoute = (role, driver, routePrefix) => {
             : `${routePrefix}/registration-status`;
     }
     return '/taxi/driver/home';
+};
+
+/// An owner sent here from an owner page goes back to it once approved.
+const getRouteAfterLogin = (role, driver, routePrefix) => {
+    const route = getPostLoginRoute(role, driver, routePrefix);
+    const returnPath = takeOwnerReturnPath();
+    return route === '/taxi/owner/home' && returnPath ? returnPath : route;
 };
 
 const syncPushTokens = async () => {
@@ -336,7 +344,7 @@ const OTPVerification = () => {
                 await syncPushTokens();
                 clearDriverRegistrationSession();
                 const normalizedRole = normalizeDriverRole(loggedInRole);
-                const nextPath = getPostLoginRoute(normalizedRole, payload?.driver, routePrefix);
+                const nextPath = getRouteAfterLogin(normalizedRole, payload?.driver, routePrefix);
                 navigate(nextPath, { replace: true });
                 return;
             }
@@ -401,7 +409,7 @@ const OTPVerification = () => {
             await syncPushTokens();
             clearDriverRegistrationSession();
             const normalizedRole = normalizeDriverRole(chosenRole);
-            const nextPath = getPostLoginRoute(normalizedRole, payload?.driver, routePrefix);
+            const nextPath = getRouteAfterLogin(normalizedRole, payload?.driver, routePrefix);
             navigate(nextPath, { replace: true });
         } catch (err) {
             setError(err?.message || 'Invalid code');

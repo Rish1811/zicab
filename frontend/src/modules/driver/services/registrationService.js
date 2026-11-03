@@ -89,6 +89,19 @@ export const clearDriverRegistrationSession = () => {
   localStorage.removeItem(STORAGE_KEY);
 };
 
+const OWNER_RETURN_PATH_KEY = "ownerReturnPath";
+
+/// The owner page someone opened before being asked to log in.
+export const rememberOwnerReturnPath = (path = "") => {
+  writeSessionValue(OWNER_RETURN_PATH_KEY, path);
+};
+
+export const takeOwnerReturnPath = () => {
+  const path = readSessionValue(OWNER_RETURN_PATH_KEY);
+  removeSessionValue(OWNER_RETURN_PATH_KEY);
+  return path.startsWith("/taxi/owner/") ? path : "";
+};
+
 export const clearDriverAuthState = () => {
   clearDriverRegistrationSession();
   DRIVER_AUTH_KEYS.forEach((key) => {

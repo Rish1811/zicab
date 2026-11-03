@@ -6,6 +6,7 @@ import {
     getCurrentDriver,
     getLocalDriverToken,
     getStoredDriverRole,
+    rememberOwnerReturnPath,
 } from '../services/registrationService';
 import DriverRideRequestListener from './DriverRideRequestListener';
 
@@ -86,9 +87,23 @@ const softEntryRoutes = new Set([
     '/taxi/owner/reg-phone',
 ]);
 
-const redirectToDriverLogin = (navigate) => {
+const redirectToDriverLogin = (navigate, pathname = '') => {
+    // An owner page asks for the owner login, whose form also registers new
+    // numbers as owners, and comes back here afterwards.
+    if (pathname.startsWith('/taxi/owner')) {
+        if (!softEntryRoutes.has(pathname)) {
+            rememberOwnerReturnPath(pathname);
+        }
+        navigate('/taxi/owner/login', { replace: true });
+        return;
+    }
     navigate('/taxi/driver/login', { replace: true });
 };
+
+/// Logged in as a driver or bus driver, the owner login must still open: that
+/// session is not an owner's, so it is no reason to leave the page.
+const isOwnerLoginWithOtherSession = (pathname, role) =>
+    (pathname === '/taxi/owner/login' || pathname === '/taxi/owner/reg-phone') && role !== 'owner';
 
 const getStoredRole = () => String(getStoredDriverRole() || 'driver').toLowerCase();
 const getAuthenticatedRole = () => String(getAuthenticatedDriverRole() || 'driver').toLowerCase();
@@ -151,6 +166,7 @@ const DriverLayout = () => {
         const authenticatedRole = getAuthenticatedRole();
         const shouldVerifyOnboardingRoute =
             Boolean(token)
+            && !isOwnerLoginWithOtherSession(currentPath, authenticatedRole)
             && (
                 softEntryRoutes.has(currentPath)
                 || (
@@ -170,6 +186,12 @@ const DriverLayout = () => {
             setIsAllowed(false);
             verifiedTokenRef.current = '';
             verifiedApprovalRef.current = false;
+            redirectToDriverLogin(navigate, currentPath, authenticatedRole);
+            return;
+        }
+
+        if (currentPath.startsWith('/taxi/owner') && authenticatedRole !== 'owner') {
+            setIsAllowed(false);
             redirectToDriverLogin(navigate, currentPath, authenticatedRole);
             return;
         }
@@ -331,7 +353,10 @@ const DriverLayout = () => {
 
     const currentToken = getLocalDriverToken();
     const isWaitingForAuth = isOnboardingRoute(location.pathname)
-        ? softEntryRoutes.has(location.pathname) && Boolean(currentToken) && softCheckedToken !== currentToken
+        ? softEntryRoutes.has(location.pathname)
+            && Boolean(currentToken)
+            && softCheckedToken !== currentToken
+            && !isOwnerLoginWithOtherSession(location.pathname, getAuthenticatedRole())
         : isChecking || !isAllowed || !currentToken || clearedToken !== currentToken;
 
     return (

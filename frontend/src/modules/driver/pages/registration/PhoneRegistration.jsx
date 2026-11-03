@@ -191,11 +191,11 @@ const PhoneRegistration = () => {
   return (
     <DriverAuthShell isOwnerPortal={isOwnerPortal}>
       <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-        {isOwnerPortal ? 'Owner login' : 'Log in or sign up'}
+        {isOwnerPortal ? 'Bus owner login or sign up' : 'Log in or sign up'}
       </h1>
       <p className="mt-2 text-base text-slate-500">
         {isOwnerPortal
-          ? "Enter your mobile number and we'll send you a 4-digit code."
+          ? "Enter your mobile number and we'll send you a 4-digit code. New numbers can register as an owner next."
           : "Enter your mobile number and we'll send you a 4-digit code. New numbers can register next."}
       </p>
 
