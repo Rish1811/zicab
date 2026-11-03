@@ -20,7 +20,7 @@ const chunk = (items, size) => {
   return groups;
 };
 
-const collectAudienceTargets = async ({ sendTo, serviceLocationId }) => {
+const collectAudienceTargets = async ({ sendTo, serviceLocationId, vehicleTypeIds = [] }) => {
   const includeUsers = sendTo === 'all' || sendTo === 'users';
   const includeDrivers = sendTo === 'all' || sendTo === 'drivers';
   const targets = [];
@@ -53,6 +53,14 @@ const collectAudienceTargets = async ({ sendTo, serviceLocationId }) => {
 
     if (serviceLocationId) {
       driverQuery.service_location_id = serviceLocationId;
+    }
+
+    // A driver can be enrolled in several vehicle types; match any of them.
+    if (vehicleTypeIds.length) {
+      driverQuery.$or = [
+        { vehicleTypeId: { $in: vehicleTypeIds } },
+        { vehicleTypeIds: { $in: vehicleTypeIds } },
+      ];
     }
 
     const drivers = await Driver.find(driverQuery)
@@ -304,6 +312,7 @@ export const sendPushNotificationToAudience = async ({
   notificationId,
   serviceLocationId,
   sendTo,
+  vehicleTypeIds = [],
   title,
   body,
   image,
@@ -321,7 +330,7 @@ export const sendPushNotificationToAudience = async ({
     };
   }
 
-  const targets = await collectAudienceTargets({ sendTo, serviceLocationId });
+  const targets = await collectAudienceTargets({ sendTo, serviceLocationId, vehicleTypeIds });
   const dedupedTargets = Array.from(
     new Map(targets.map((target) => [target.token, target])).values(),
   );

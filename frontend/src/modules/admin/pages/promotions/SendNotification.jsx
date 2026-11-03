@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Bell,
+  Car,
   ChevronRight,
   Filter,
   Image as ImageIcon,
@@ -26,6 +27,7 @@ const labelClass = 'block text-xs font-semibold text-gray-500 mb-1.5';
 const createInitialFormData = () => ({
   service_location_id: '',
   send_to: '',
+  vehicle_type_id: '',
   push_title: '',
   message: '',
   image: null,
@@ -122,6 +124,7 @@ const SendNotification = () => {
   const [filters, setFilters] = useState(createInitialFilters);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
+  const [vehicleTypes, setVehicleTypes] = useState([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -141,6 +144,18 @@ const SendNotification = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Vehicle types are only needed to narrow a drivers-only push.
+  useEffect(() => {
+    if (formData.send_to !== 'drivers' || vehicleTypes.length) return;
+    adminService
+      .getVehicleTypes()
+      .then((res) => {
+        const results = res?.data?.results || res?.results || [];
+        setVehicleTypes(Array.isArray(results) ? results.filter((v) => v.active !== false) : []);
+      })
+      .catch((error) => console.error('Error fetching vehicle types:', error));
+  }, [formData.send_to, vehicleTypes.length]);
 
   useEffect(() => {
     if (!isCreateRoute) {
@@ -203,6 +218,8 @@ const SendNotification = () => {
       const payload = {
         service_location_id: formData.service_location_id,
         send_to: formData.send_to,
+        vehicle_type_ids:
+          formData.send_to === 'drivers' && formData.vehicle_type_id ? [formData.vehicle_type_id] : [],
         push_title: formData.push_title,
         title: formData.push_title,
         message: formData.message,
@@ -366,7 +383,12 @@ const SendNotification = () => {
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600 max-w-[340px] truncate">{item.message}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{item.service_location_name || '-'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600 capitalize">{item.send_to || 'all'}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600 capitalize">
+                            {item.send_to || 'all'}
+                            {item.vehicle_type_names?.length ? (
+                              <span className="block text-xs text-gray-400 normal-case">{item.vehicle_type_names.join(', ')}</span>
+                            ) : null}
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-end gap-2">
                               <button
@@ -439,6 +461,28 @@ const SendNotification = () => {
                       </select>
                     </div>
                   </div>
+
+                  {formData.send_to === 'drivers' && (
+                    <div className="md:col-span-2">
+                      <FieldLabel>Vehicle Type</FieldLabel>
+                      <div className="relative">
+                        <Car size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <select
+                          value={formData.vehicle_type_id}
+                          onChange={(e) => handleFieldChange('vehicle_type_id', e.target.value)}
+                          className={`${inputClass} pl-10`}
+                        >
+                          <option value="">All vehicle types</option>
+                          {vehicleTypes.map((vehicle) => (
+                            <option key={vehicle._id || vehicle.id} value={vehicle._id || vehicle.id}>
+                              {vehicle.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-400">Only drivers registered for this vehicle type will get the push.</p>
+                    </div>
+                  )}
 
                   <div className="md:col-span-2">
                     <FieldLabel required>Push Title</FieldLabel>

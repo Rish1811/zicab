@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { ApiError } from '../../../../../utils/ApiError.js';
 import { ServiceLocation } from '../../models/ServiceLocation.js';
+import { Vehicle } from '../../models/Vehicle.js';
 import { ensureAdminState } from '../../services/adminService.js';
 import { User } from '../../../user/models/User.js';
 import { Banner } from '../models/Banner.js';
@@ -125,6 +126,8 @@ const serializeNotification = (item) => ({
   service_location_id: item.service_location_id || '',
   service_location_name: item.service_location_name || '',
   send_to: item.send_to || 'all',
+  vehicle_type_ids: Array.isArray(item.vehicle_type_ids) ? item.vehicle_type_ids.map(String) : [],
+  vehicle_type_names: Array.isArray(item.vehicle_type_names) ? item.vehicle_type_names : [],
   push_title: item.push_title || '',
   message: item.message || '',
   image: item.image || '',
@@ -331,6 +334,23 @@ const normalizeNotificationPayload = async (payload, existing = null) => {
     throw new ApiError(400, 'Send to must be all, drivers, or users');
   }
 
+  const rawVehicleTypeIds = Array.isArray(payload.vehicle_type_ids)
+    ? payload.vehicle_type_ids
+    : payload.vehicle_type_id
+      ? [payload.vehicle_type_id]
+      : [];
+  const vehicleTypeIds = sendTo === 'drivers'
+    ? [...new Set(rawVehicleTypeIds.map((id) => String(id || '').trim()).filter(Boolean))]
+    : [];
+  const vehicles = vehicleTypeIds.length
+    ? await Vehicle.find({ _id: { $in: vehicleTypeIds.map((id) => toObjectIdOrThrow(id, 'vehicle type id')) } })
+      .select('_id name')
+      .lean()
+    : [];
+  if (vehicles.length !== vehicleTypeIds.length) {
+    throw new ApiError(400, 'Selected vehicle type was not found');
+  }
+
   const pushTitle = normalizeText(payload.push_title ?? payload.title ?? existing?.push_title);
   const message = normalizeText(payload.message ?? existing?.message);
   let image = normalizeText(payload.image ?? existing?.image);
@@ -362,6 +382,8 @@ const normalizeNotificationPayload = async (payload, existing = null) => {
     service_location_id: serviceLocation._id,
     service_location_name: serviceLocation.service_location_name || serviceLocation.name || '',
     send_to: sendTo,
+    vehicle_type_ids: vehicles.map((vehicle) => vehicle._id),
+    vehicle_type_names: vehicles.map((vehicle) => vehicle.name || ''),
     push_title: pushTitle,
     message,
     image,
@@ -541,6 +563,7 @@ export const createNotification = async (payload) => {
     notificationId: notification._id,
     serviceLocationId: notification.service_location_id,
     sendTo: notification.send_to,
+    vehicleTypeIds: notification.vehicle_type_ids,
     title: notification.push_title,
     body: notification.message,
     image: notification.image,

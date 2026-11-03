@@ -20,6 +20,15 @@ const notificationSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    // Drivers-only pushes can be narrowed to these vehicle types; empty = every type.
+    vehicle_type_ids: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'TaxiVehicle' }],
+      default: [],
+    },
+    vehicle_type_names: {
+      type: [String],
+      default: [],
+    },
     push_title: {
       type: String,
       required: true,
