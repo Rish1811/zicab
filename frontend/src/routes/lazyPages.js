@@ -92,6 +92,8 @@ export const ApplicationStatus = lazy(() => import('../modules/driver/pages/regi
 export const DriverHome = lazy(() => import('../modules/driver/pages/DriverHome'));
 export const OwnerDashboard = lazy(() => import('../modules/driver/pages/OwnerDashboard'));
 export const OwnerBusServicePage = lazy(() => import('../modules/driver/pages/OwnerBusServicePage'));
+export const BusPartnerLogin = lazy(() => import('../modules/driver/pages/BusPartnerLogin'));
+export const BusPartnerDashboard = lazy(() => import('../modules/driver/pages/BusPartnerDashboard'));
 export const OwnerBusDashboard = lazy(() => import('../modules/driver/pages/OwnerBusDashboard'));
 export const OwnerBusBookingsPage = lazy(() => import('../modules/driver/pages/OwnerBusBookingsPage'));
 export const OwnerPoolingVehicleForm = lazy(() => import('../modules/driver/pages/OwnerPoolingVehicleForm'));

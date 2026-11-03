@@ -12,6 +12,8 @@ import {
   BusConfirm,
   BusDetails,
   BusHome,
+  BusPartnerDashboard,
+  BusPartnerLogin,
   BusPreview,
   BusList,
   BusSeats,
@@ -147,6 +149,9 @@ const publicRoutes = (
       <Route path="/cab/spiritual" element={<SpiritualTrip />} />
       <Route path="/cab/spiritual-vehicle" element={<SpiritualTripVehicle />} />
       <Route path="/cab/spiritual-confirm" element={<SpiritualTripConfirm />} />
+      {/* Bus partners: their own login and dashboard, not the rider's /bus pages. */}
+      <Route path="/bus-login" element={<BusPartnerLogin />} />
+      <Route path="/bus-dashboard" element={<BusPartnerDashboard />} />
       <Route path="/bus/list" element={<BusList />} />
       <Route path="/bus/seats" element={<BusSeats />} />
       {/* Same steps as the signed-in /taxi/user/bus routes: details is the bus

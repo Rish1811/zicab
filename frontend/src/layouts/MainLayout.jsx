@@ -48,6 +48,8 @@ const MainLayout = ({ children }) => {
     location.pathname === '/taxi/owner/login' ||
     location.pathname === '/taxi/owner/otp-verify' ||
     location.pathname === '/taxi/owner/bus-dashboard' ||
+    location.pathname === '/bus-login' ||
+    location.pathname === '/bus-dashboard' ||
     location.pathname === '/login';
 
   if (isSplashPath || isAuthPath) {

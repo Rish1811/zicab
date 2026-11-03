@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import HorizontalSeatMap from '../../admin/pages/bus-service/HorizontalSeatMap';
 import {
+  clearDriverAuthState,
   cancelOwnerBusBookingSeats,
   createOwnerBusReservation,
   getOwnerBusBookings,
@@ -68,8 +69,19 @@ const Field = ({ label, children, className = '' }) => (
   </label>
 );
 
-const OwnerBusDashboard = () => {
+/// `portal`: 'owner' for a fleet owner, 'bus' for a bus account (one bus, its own
+/// login). The bookings and seats are the same; only the way around differs.
+const OwnerBusDashboard = ({ portal = 'owner' }) => {
   const navigate = useNavigate();
+  const isBusPortal = portal === 'bus';
+  const manageLabel = isBusPortal ? 'Trip console' : 'Manage buses';
+  const managePath = isBusPortal ? '/taxi/driver/bus-home' : '/taxi/owner/bus-service';
+  const handleBusLogout = () => {
+    clearDriverAuthState();
+    navigate('/bus-login', { replace: true });
+  };
+  const sourceLabel = (source) =>
+    isBusPortal && source === 'bus_driver' ? 'Booked by you' : SOURCE_LABEL[source] || source;
   const [tab, setTab] = useState('book');
   const [buses, setBuses] = useState([]);
   const [loadingBuses, setLoadingBuses] = useState(true);
@@ -453,7 +465,7 @@ const OwnerBusDashboard = () => {
                   <div className="min-w-0">
                     <p className="font-semibold text-slate-900">{booking.passenger?.name || booking.user?.name || 'Passenger'}</p>
                     <p className="mt-0.5 text-sm text-slate-500">
-                      {[booking.passenger?.phone || booking.user?.phone, booking.pnr || booking.bookingCode, SOURCE_LABEL[booking.bookingSource] || booking.bookingSource].filter(Boolean).join(' · ')}
+                      {[booking.passenger?.phone || booking.user?.phone, booking.pnr || booking.bookingCode, sourceLabel(booking.bookingSource)].filter(Boolean).join(' · ')}
                     </p>
                   </div>
                   <div className="text-right">
@@ -504,7 +516,7 @@ const OwnerBusDashboard = () => {
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-400 text-slate-950"><Bus size={20} /></span>
           <div>
             <p className="font-bold leading-tight">Bus dashboard</p>
-            <p className="text-xs text-slate-400">Owner</p>
+            <p className="text-xs text-slate-400">{isBusPortal ? 'Bus partner' : 'Owner'}</p>
           </div>
         </div>
         <nav className="mt-8 space-y-1">
@@ -519,26 +531,33 @@ const OwnerBusDashboard = () => {
               {label}
             </button>
           ))}
-          <button type="button" onClick={() => navigate('/taxi/owner/bus-service')} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-300 hover:bg-white/5 hover:text-white">
+          <button type="button" onClick={() => navigate(managePath)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-300 hover:bg-white/5 hover:text-white">
             <Settings2 size={18} />
-            Manage buses
+            {manageLabel}
           </button>
         </nav>
-        <button type="button" onClick={() => navigate('/taxi/owner/dashboard')} className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-300 hover:bg-white/5 hover:text-white">
+        <button type="button" onClick={isBusPortal ? handleBusLogout : () => navigate('/taxi/owner/dashboard')} className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-300 hover:bg-white/5 hover:text-white">
           <LayoutGrid size={18} />
-          Owner home
+          {isBusPortal ? 'Log out' : 'Owner home'}
         </button>
       </aside>
 
       <div className="min-w-0 pb-24 lg:pb-8">
         <header className="flex items-center gap-2 bg-slate-900 px-4 py-3 text-white lg:hidden">
-          <button type="button" aria-label="Owner home" onClick={() => navigate('/taxi/owner/dashboard')} className="-ml-1 rounded-lg p-1.5 hover:bg-white/10">
-            <ArrowLeft size={20} />
-          </button>
+          {isBusPortal ? null : (
+            <button type="button" aria-label="Owner home" onClick={() => navigate('/taxi/owner/dashboard')} className="-ml-1 rounded-lg p-1.5 hover:bg-white/10">
+              <ArrowLeft size={20} />
+            </button>
+          )}
           <p className="font-bold">Bus dashboard</p>
-          <button type="button" onClick={() => navigate('/taxi/owner/bus-service')} className="ml-auto rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-200 hover:bg-white/10">
-            Manage buses
+          <button type="button" onClick={() => navigate(managePath)} className="ml-auto rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-200 hover:bg-white/10">
+            {manageLabel}
           </button>
+          {isBusPortal ? (
+            <button type="button" onClick={handleBusLogout} className="rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-200 hover:bg-white/10">
+              Log out
+            </button>
+          ) : null}
         </header>
 
         <main className="mx-auto max-w-[1400px] space-y-5 p-4 sm:p-6">
@@ -551,11 +570,17 @@ const OwnerBusDashboard = () => {
           ) : !buses.length ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
               <Bus size={32} className="mx-auto text-slate-400" />
-              <h1 className="mt-3 text-xl font-bold">No buses yet</h1>
-              <p className="mt-1 text-sm text-slate-500">Add a bus and its schedule, then you can book seats here.</p>
-              <button type="button" onClick={() => navigate('/taxi/owner/bus-service/create')} className="mt-5 rounded-xl bg-amber-400 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-amber-500">
-                Add a bus
-              </button>
+              <h1 className="mt-3 text-xl font-bold">{isBusPortal ? 'No bus linked yet' : 'No buses yet'}</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                {isBusPortal
+                  ? 'Your account is not linked to a bus yet. Contact support to get it assigned.'
+                  : 'Add a bus and its schedule, then you can book seats here.'}
+              </p>
+              {isBusPortal ? null : (
+                <button type="button" onClick={() => navigate('/taxi/owner/bus-service/create')} className="mt-5 rounded-xl bg-amber-400 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-amber-500">
+                  Add a bus
+                </button>
+              )}
             </div>
           ) : (
             <>

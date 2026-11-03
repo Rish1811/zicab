@@ -9018,13 +9018,65 @@ export const getOwnerFleetDashboard = async (req, res) => {
   });
 };
 
-export const listOwnerBusServices = async (req, res) => {
-  const owner = await Owner.findById(req.auth.sub).lean();
+/// Which buses the logged-in account answers for: an owner's own buses, or the
+/// one bus a bus account runs. Everything on the bus dashboard goes through this.
+const resolveBusAccountScope = async (req) => {
+  if (req.auth?.role === "bus_driver") {
+    const busDriver = await BusDriver.findById(req.auth.sub).lean();
+    if (!busDriver) {
+      throw new ApiError(404, "Bus account not found");
+    }
+    if (busDriver.approve === false || String(busDriver.status || "").toLowerCase() === "pending") {
+      throw new ApiError(403, "Your bus account is pending approval");
+    }
+    return {
+      isBusAccount: true,
+      // No bus assigned matches nothing, rather than every bus.
+      filter: { _id: busDriver.assignedBusServiceId || new mongoose.Types.ObjectId() },
+      bookedBy: {
+        userId: busDriver._id,
+        reservedByDriverId: busDriver._id,
+        bookingSource: "bus_driver",
+        codePrefix: "BDR",
+      },
+    };
+  }
 
+  const owner = await Owner.findById(req.auth.sub).lean();
   if (!owner) {
     throw new ApiError(404, "Owner not found");
   }
+  return {
+    isBusAccount: false,
+    owner,
+    filter: { ownerId: owner._id },
+    bookedBy: { bookingSource: "owner", codePrefix: "OWN" },
+  };
+};
 
+export const listOwnerBusServices = async (req, res) => {
+  const scope = await resolveBusAccountScope(req);
+
+  if (scope.isBusAccount) {
+    const buses = await BusService.find(scope.filter)
+      .select("busName operatorName serviceNumber status schedules fareCurrency")
+      .lean();
+    res.json({
+      success: true,
+      data: buses.map((bus) => ({
+        id: String(bus._id),
+        busName: bus.busName || "",
+        operatorName: bus.operatorName || "",
+        serviceNumber: bus.serviceNumber || "",
+        status: bus.status || "draft",
+        schedules: Array.isArray(bus.schedules) ? bus.schedules : [],
+        fareCurrency: bus.fareCurrency || "INR",
+      })),
+    });
+    return;
+  }
+
+  const { owner } = scope;
   res.json({
     success: true,
     data: await listBusServices({ ownerId: owner._id }),
@@ -9100,22 +9152,18 @@ export const deleteOwnerBusService = async (req, res) => {
   });
 };
 
-/// One of this owner's own buses, or a 404: never another owner's.
+/// One of this account's own buses, or a 404: never anyone else's.
 const findOwnerBus = async (req) => {
-  const owner = await Owner.findById(req.auth.sub).lean();
-  if (!owner) {
-    throw new ApiError(404, "Owner not found");
-  }
-
+  const scope = await resolveBusAccountScope(req);
   const busServiceId = toCleanString(req.params?.id);
   const busService = mongoose.Types.ObjectId.isValid(busServiceId)
-    ? await BusService.findOne({ _id: busServiceId, ownerId: owner._id }).lean()
+    ? await BusService.findOne({ $and: [{ _id: busServiceId }, scope.filter] }).lean()
     : null;
   if (!busService) {
     throw new ApiError(404, "Bus service not found");
   }
 
-  return { owner, busService };
+  return { scope, busService };
 };
 
 export const getOwnerBusSeatLayout = async (req, res) => {
@@ -9158,7 +9206,7 @@ export const getOwnerBusSeatLayout = async (req, res) => {
 };
 
 export const createOwnerBusReservation = async (req, res) => {
-  const { owner, busService } = await findOwnerBus(req);
+  const { scope, busService } = await findOwnerBus(req);
   if (String(busService.status || "") !== "active") {
     throw new ApiError(409, "This bus is not active, so its seats can't be booked");
   }
@@ -9167,24 +9215,17 @@ export const createOwnerBusReservation = async (req, res) => {
     busService,
     body: req.body,
     rejectDepartedTrips: true,
-    bookedBy: {
-      bookingSource: "owner",
-      codePrefix: "OWN",
-    },
+    bookedBy: scope.bookedBy,
   });
 
   res.status(201).json({
     success: true,
-    data: { ...serializeOwnerBusBooking(booking.toObject()), pnr: booking.pnr || "", bookedByOwnerId: String(owner._id) },
+    data: { ...serializeOwnerBusBooking(booking.toObject()), pnr: booking.pnr || "" },
   });
 };
 
 export const getOwnerBusBookings = async (req, res) => {
-  const owner = await Owner.findById(req.auth.sub).lean();
-
-  if (!owner) {
-    throw new ApiError(404, "Owner not found");
-  }
+  const scope = await resolveBusAccountScope(req);
 
   const busServiceId = toCleanString(req.query?.busServiceId);
   const travelDate = toCleanString(req.query?.travelDate || req.query?.date);
@@ -9192,7 +9233,7 @@ export const getOwnerBusBookings = async (req, res) => {
   const status = toCleanString(req.query?.status).toLowerCase();
   const search = toCleanString(req.query?.search).toLowerCase();
 
-  const ownerBuses = await BusService.find({ ownerId: owner._id })
+  const ownerBuses = await BusService.find(scope.filter)
     .sort({ operatorName: 1, busName: 1 })
     .select("_id busName operatorName serviceNumber coachType busCategory status route schedules blueprint seatPrice variantPricing fareCurrency ownerDriverId driverName driverPhone")
     .lean();
@@ -9447,11 +9488,7 @@ export const cancelOwnerBusBookingSeats = async (req, res) => {
 };
 
 const cancelOwnerBusBookingSeatsClaimed = async (req, res) => {
-  const owner = await Owner.findById(req.auth.sub).lean();
-
-  if (!owner) {
-    throw new ApiError(404, "Owner not found");
-  }
+  const scope = await resolveBusAccountScope(req);
 
   const bookingId = toCleanString(req.params?.id);
   const selectedSeatIds = Array.isArray(req.body?.seatIds)
@@ -9469,8 +9506,7 @@ const cancelOwnerBusBookingSeatsClaimed = async (req, res) => {
   }
 
   const busService = await BusService.findOne({
-    _id: booking.busServiceId,
-    ownerId: owner._id,
+    $and: [{ _id: booking.busServiceId }, scope.filter],
   });
   if (!busService) {
     throw new ApiError(403, "This bus booking does not belong to your bus service");

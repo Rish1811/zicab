@@ -67,8 +67,12 @@ const getPostLoginRoute = (role, driver, routePrefix) => {
 };
 
 /// An owner sent here from an owner page goes back to it once approved.
-const getRouteAfterLogin = (role, driver, routePrefix) => {
+const getRouteAfterLogin = (role, driver, routePrefix, entryPath = '') => {
     const route = getPostLoginRoute(role, driver, routePrefix);
+    // Came in through the bus login: back to the bus dashboard.
+    if (entryPath === '/bus-login' && route === '/taxi/driver/bus-home') {
+        return '/bus-dashboard';
+    }
     const returnPath = takeOwnerReturnPath();
     return route === '/taxi/owner/home' && returnPath ? returnPath : route;
 };
@@ -344,7 +348,7 @@ const OTPVerification = () => {
                 await syncPushTokens();
                 clearDriverRegistrationSession();
                 const normalizedRole = normalizeDriverRole(loggedInRole);
-                const nextPath = getRouteAfterLogin(normalizedRole, payload?.driver, routePrefix);
+                const nextPath = getRouteAfterLogin(normalizedRole, payload?.driver, routePrefix, entryPath);
                 navigate(nextPath, { replace: true });
                 return;
             }
@@ -409,7 +413,7 @@ const OTPVerification = () => {
             await syncPushTokens();
             clearDriverRegistrationSession();
             const normalizedRole = normalizeDriverRole(chosenRole);
-            const nextPath = getRouteAfterLogin(normalizedRole, payload?.driver, routePrefix);
+            const nextPath = getRouteAfterLogin(normalizedRole, payload?.driver, routePrefix, entryPath);
             navigate(nextPath, { replace: true });
         } catch (err) {
             setError(err?.message || 'Invalid code');
@@ -474,7 +478,7 @@ const OTPVerification = () => {
     const canVerify = otp.join('').length === 4 && !loading && !resolvingSession;
 
     return (
-        <DriverAuthShell isOwnerPortal={routePrefix === '/taxi/owner'}>
+        <DriverAuthShell isOwnerPortal={routePrefix === '/taxi/owner'} isBusPortal={entryPath === '/bus-login'}>
             <button
                 type="button"
                 onClick={showRoleSelector ? () => setShowRoleSelector(false) : () => navigate(entryPath)}

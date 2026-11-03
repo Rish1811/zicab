@@ -3,16 +3,22 @@ import { useSettings } from '../../../shared/context/SettingsContext';
 import heroImage from '../../../assets/images/yellow_taxi_login_bg.png';
 
 const DRIVER_PORTALS = ['Taxi and parcel drivers', 'Bus drivers and conductors', 'Fleet and bus owners', 'Pooling drivers', 'Service centers'];
+const BUS_PORTALS = ['Book seats for passengers', 'See and cancel bookings', 'Register your bus'];
 const OWNER_PORTALS = ['Your vehicles and drivers', 'Bus services and bookings', 'Fleet earnings and payouts'];
 
 /// The frame around the driver and owner login screens: the photo beside the
 /// form on a laptop, a short band above it on a phone.
-const DriverAuthShell = ({ isOwnerPortal = false, children }) => {
+const DriverAuthShell = ({ isOwnerPortal = false, isBusPortal = false, children }) => {
   const { settings } = useSettings();
   const appName = settings.general?.app_name || 'ZI CAB';
   const appLogo = settings.general?.logo || settings.customization?.logo || settings.general?.favicon || '';
   const brandName = appName.split(' - ')[0];
-  const portals = isOwnerPortal ? OWNER_PORTALS : DRIVER_PORTALS;
+  const portals = isBusPortal ? BUS_PORTALS : isOwnerPortal ? OWNER_PORTALS : DRIVER_PORTALS;
+  const headline = isBusPortal
+    ? 'Your bus, all in one place.'
+    : isOwnerPortal
+      ? 'Your fleet, all in one place.'
+      : 'One login for everyone who keeps us moving.';
 
   return (
     <div className="grid min-h-[100dvh] w-full content-start bg-white text-slate-900 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:content-stretch">
@@ -30,7 +36,7 @@ const DriverAuthShell = ({ isOwnerPortal = false, children }) => {
 
           <div className="hidden max-w-lg lg:block">
             <h2 className="text-4xl font-bold leading-tight tracking-tight text-white xl:text-5xl">
-              {isOwnerPortal ? 'Your fleet, all in one place.' : 'One login for everyone who keeps us moving.'}
+              {headline}
             </h2>
             <ul className="mt-8 flex flex-wrap gap-2">
               {portals.map((label) => (

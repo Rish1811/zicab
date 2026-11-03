@@ -276,6 +276,16 @@ const PhoneRegistration = () => {
       </button>
 
       {!isOwnerPortal ? (
+        <button
+          type="button"
+          onClick={() => navigate('/bus-login')}
+          className="mt-3 w-full text-center text-sm font-medium text-slate-500 hover:text-slate-800"
+        >
+          Run a bus? <span className="font-semibold text-amber-700">Go to bus login</span>
+        </button>
+      ) : null}
+
+      {!isOwnerPortal ? (
         <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-slate-200 pt-6">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
             <UtensilsCrossed size={18} />

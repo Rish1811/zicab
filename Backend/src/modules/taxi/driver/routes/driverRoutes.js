@@ -417,12 +417,12 @@ driverRouter.get(
 );
 driverRouter.get(
   "/fleet/bus-services",
-  authenticate(["owner"]),
+  authenticate(["owner", "bus_driver"]),
   asyncHandler(listOwnerBusServices),
 );
 driverRouter.get(
   "/fleet/bus-bookings",
-  authenticate(["owner"]),
+  authenticate(["owner", "bus_driver"]),
   asyncHandler(getOwnerBusBookings),
 );
 driverRouter.get(
@@ -432,12 +432,12 @@ driverRouter.get(
 );
 driverRouter.get(
   "/fleet/bus-services/:id/seats",
-  authenticate(["owner"]),
+  authenticate(["owner", "bus_driver"]),
   asyncHandler(getOwnerBusSeatLayout),
 );
 driverRouter.post(
   "/fleet/bus-services/:id/reservations",
-  authenticate(["owner"]),
+  authenticate(["owner", "bus_driver"]),
   asyncHandler(createOwnerBusReservation),
 );
 driverRouter.post(
@@ -457,7 +457,7 @@ driverRouter.delete(
 );
 driverRouter.post(
   "/fleet/bus-bookings/:id/cancel",
-  authenticate(["owner"]),
+  authenticate(["owner", "bus_driver"]),
   asyncHandler(cancelOwnerBusBookingSeats),
 );
 driverRouter.get(
