@@ -98,6 +98,10 @@ const publicRoutes = (
     <Route path="/onboarding" element={<Onboarding />} />
     <Route path="/verify-otp" element={<VerifyOTP />} />
     <Route path="/signup" element={<Signup />} />
+    {/* Bus partners: their own login and dashboard, not the rider's /bus pages,
+        so they sit outside the rider login below. */}
+    <Route path="/bus-login" element={<BusPartnerLogin />} />
+    <Route path="/bus-dashboard" element={<BusPartnerDashboard />} />
     <Route element={<UserAppLayout />}>
       <Route path="/user" element={<UserHomeRoute />} />
     </Route>
@@ -149,9 +153,6 @@ const publicRoutes = (
       <Route path="/cab/spiritual" element={<SpiritualTrip />} />
       <Route path="/cab/spiritual-vehicle" element={<SpiritualTripVehicle />} />
       <Route path="/cab/spiritual-confirm" element={<SpiritualTripConfirm />} />
-      {/* Bus partners: their own login and dashboard, not the rider's /bus pages. */}
-      <Route path="/bus-login" element={<BusPartnerLogin />} />
-      <Route path="/bus-dashboard" element={<BusPartnerDashboard />} />
       <Route path="/bus/list" element={<BusList />} />
       <Route path="/bus/seats" element={<BusSeats />} />
       {/* Same steps as the signed-in /taxi/user/bus routes: details is the bus

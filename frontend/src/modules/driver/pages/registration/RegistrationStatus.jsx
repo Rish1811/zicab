@@ -162,7 +162,7 @@ const RegistrationStatus = () => {
             normalizedRole === "owner"
               ? "/taxi/owner/home"
               : normalizedRole === "bus_driver"
-                ? "/taxi/driver/bus-home"
+                ? "/bus-dashboard"
               : normalizedRole === "pooling_driver"
                 ? "/taxi/driver/pooling"
                 : normalizedRole === "service_center" || normalizedRole === "service_center_staff"
