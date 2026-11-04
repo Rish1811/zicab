@@ -37,7 +37,7 @@ const legalContent = {
     title: 'Refund & Cancellation Policy',
     icon: ReceiptText,
     intro:
-      'This page explains refund eligibility, cancellation timelines, and indicative prices for the main vehicle types available on the ZI CAB Technologies Pvt Ltd platform. Refunds are reviewed based on service status, time of cancellation, and payment mode.',
+      'This page explains refund eligibility, cancellation timelines, and indicative prices for the main vehicle types available on the Zi Group Pvt Ltd platform. Refunds are reviewed based on service status, time of cancellation, and payment mode.',
     sections: [
       {
         title: 'When refunds may be approved',
@@ -51,7 +51,7 @@ const legalContent = {
       {
         title: 'Refund policy overview',
         body:
-          'ZI CAB Technologies Pvt Ltd reviews refund requests on a case-by-case basis to confirm whether the booking was completed, cancelled before service, cancelled after dispatch, or affected by a technical or payment issue. Approved refunds are returned only after internal verification of ride logs, payment status, and service records.',
+          'Zi Group Pvt Ltd reviews refund requests on a case-by-case basis to confirm whether the booking was completed, cancelled before service, cancelled after dispatch, or affected by a technical or payment issue. Approved refunds are returned only after internal verification of ride logs, payment status, and service records.',
       },
       {
         title: 'Cancellation rules',
@@ -100,7 +100,7 @@ const legalContent = {
         bullets: [
           'Raise the issue through the support team with your booking ID, payment details, and reason for the request.',
           'Submit the request as early as possible after the cancelled or affected booking.',
-          'ZI CAB Technologies Pvt Ltd may ask for screenshots, transaction references, or additional verification before approval.',
+          'Zi Group Pvt Ltd may ask for screenshots, transaction references, or additional verification before approval.',
         ],
       },
       {
@@ -119,7 +119,7 @@ const legalContent = {
     title: 'Cancellation Policy',
     icon: Scale,
     intro:
-      'This page summarizes how cancellations are handled across ZI CAB Technologies Pvt Ltd booking categories.',
+      'This page summarizes how cancellations are handled across Zi Group Pvt Ltd booking categories.',
     sections: [
       {
         title: 'General policy',
