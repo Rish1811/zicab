@@ -118,6 +118,7 @@ export const carryOverSeatDetails = (previous = {}, next = {}) => {
       return {
         ...cell,
         status: old.status === 'blocked' ? 'blocked' : cell.status,
+        ladiesOnly: old.ladiesOnly === true,
         label: customNumbers ? old.label : cell.label,
       };
     }),

@@ -453,7 +453,8 @@ const settleDriverCancellationFee = async (ride, session) => {
     return { feeAmount: 0, driverDebitStatus: 'none', userCreditStatus: 'none', driverWalletResult: null };
   }
 
-  const feeReferenceBase = `ride-cancel:driver:${String(ride._id)}`;
+  // Per driver: the same ride can now pass through more than one cancelling driver.
+  const feeReferenceBase = `ride-cancel:driver:${String(ride._id)}:${String(ride.driverId)}`;
   const driverDebit = await applyDriverWalletAdjustmentByReference({
     driverId: ride.driverId,
     amount: -feeAmount,
@@ -1239,24 +1240,33 @@ const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
     return existing;
   }
 
-  const cancelUpdate = {
-    status: RIDE_STATUS.CANCELLED,
-    liveStatus: RIDE_LIVE_STATUS.CANCELLED,
-    cancelledBy: 'driver',
-    cancelledAt: new Date(),
-  };
-  if (existing.bookingMode === 'bidding') {
-    cancelUpdate.biddingStatus = 'cancelled';
+  if (existing.status === RIDE_STATUS.ONGOING) {
+    stopDispatchFlow(rideId);
+    throw new Error('This trip has already started and cannot be cancelled');
   }
 
-  let ride = await Ride.findOneAndUpdate(
+  // The driver drops out, not the booking: the ride goes back to searching and
+  // on to the next driver. It only ends if nobody can be found.
+  const reassignUpdate = {
+    status: RIDE_STATUS.SEARCHING,
+    liveStatus: RIDE_LIVE_STATUS.SEARCHING,
+    driverId: null,
+    acceptedAt: null,
+    arrivedAt: null,
+  };
+  if (existing.bookingMode === 'bidding') {
+    reassignUpdate.biddingStatus = 'open';
+    reassignUpdate.acceptedBidId = null;
+  }
+
+  const ride = await Ride.findOneAndUpdate(
     {
       _id: rideId,
       driverId,
-      status: { $nin: [RIDE_STATUS.CANCELLED, RIDE_STATUS.COMPLETED] },
+      status: { $nin: [RIDE_STATUS.CANCELLED, RIDE_STATUS.COMPLETED, RIDE_STATUS.ONGOING] },
       liveStatus: { $nin: [RIDE_LIVE_STATUS.CANCELLED, RIDE_LIVE_STATUS.COMPLETED] },
     },
-    { $set: cancelUpdate },
+    { $set: reassignUpdate },
     { new: true },
   );
 
@@ -1267,9 +1277,10 @@ const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
 
   outcome.cancelled = true;
 
+  // Charged against the ride as the driver held it, since it no longer has one.
   let cancellationSettlement = null;
   try {
-    cancellationSettlement = await settleDriverCancellationFee(ride);
+    cancellationSettlement = await settleDriverCancellationFee(existing);
   } catch (error) {
     console.error('Could not settle the driver cancellation fee', error);
   }
@@ -1277,61 +1288,45 @@ const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
   await Promise.all([
     ride.deliveryId
       ? Delivery.findByIdAndUpdate(ride.deliveryId, {
-        driverId: ride.driverId || null,
+        driverId: null,
         status: ride.status,
         liveStatus: ride.liveStatus,
       })
       : Promise.resolve(),
-    User.findByIdAndUpdate(ride.userId, { currentRideId: null }),
-    ride.driverId ? Driver.findByIdAndUpdate(ride.driverId, { isOnRide: false }) : Promise.resolve(),
+    Driver.findByIdAndUpdate(driverId, { isOnRide: false }),
   ]);
 
+  // Everyone who already said no, plus this driver, stays out of the new search.
+  const earlierRejections = (existing.dispatchTracking?.rejectedDriverIds || []).map(String);
   await persistDispatchTrackingProgress({ rideId, reset: true }).catch(() => null);
+  await persistDispatchTrackingProgress({
+    rideId,
+    rejectedDriverIds: [...earlierRejections, String(driverId)],
+  }).catch(() => null);
 
-  const cancelReason = 'Your scheduled ride was cancelled by the driver.';
-
-  emitToRoom(getUserRoom(ride.userId), 'rideCancelled', {
-    rideId: String(ride._id),
-    room: getRideRoom(ride._id),
-    reason: cancelReason,
-  });
-
-  emitToRoom(getRideRoom(ride._id), 'rideRequestClosed', {
-    rideId: String(ride._id),
-    reason: 'driver-cancelled',
-    message: cancelReason,
-  });
-
-  if (ride.driverId) {
-    emitToRoom(getDriverRoom(ride.driverId), 'rideRequestClosed', {
-      rideId: String(ride._id),
-      reason: 'driver-cancelled',
-      message: 'Scheduled ride cancelled.',
-    });
-  }
-
-  for (const notifiedDriverId of dispatchState.notifiedDriverIds) {
-    emitToDriver(notifiedDriverId, 'rideRequestClosed', {
-      rideId: String(ride._id),
-      reason: 'driver-cancelled',
-      message: cancelReason,
-    });
-  }
+  const userMessage = 'Your driver cancelled. We are finding you another driver.';
 
   emitToRoom(getRideRoom(ride._id), SOCKET_EVENTS.RIDE_STATUS_UPDATED, {
     rideId: String(ride._id),
     status: ride.status,
     liveStatus: ride.liveStatus,
+    message: userMessage,
+  });
+
+  emitToRoom(getDriverRoom(driverId), 'rideRequestClosed', {
+    rideId: String(ride._id),
+    reason: 'driver-cancelled',
+    message: 'Scheduled ride cancelled.',
   });
 
   if (cancellationSettlement?.driverWalletResult?.transaction) {
-    emitToDriver(ride.driverId, 'driver:wallet:updated', {
+    emitToDriver(driverId, 'driver:wallet:updated', {
       wallet: cancellationSettlement.driverWalletResult.wallet,
       transaction: cancellationSettlement.driverWalletResult.transaction,
       notification: {
-        id: `ride-cancel-debit-${String(ride._id)}`,
+        id: `ride-cancel-debit-${String(ride._id)}-${String(driverId)}`,
         title: 'Cancellation fee charged',
-        body: `Rs ${Number(cancellationSettlement.feeAmount || 0).toFixed(2)} deducted for scheduled ride cancellation.`,
+        body: `Rs ${Number(cancellationSettlement.feeAmount || 0).toFixed(2)} deducted for cancelling a scheduled ride.`,
         sentAt: new Date().toISOString(),
       },
     });
@@ -1339,18 +1334,21 @@ const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
 
   sendPushNotificationToEntities({
     userIds: [String(ride.userId)],
-    title: 'Scheduled ride cancelled',
-    body: cancelReason,
+    title: 'Finding you another driver',
+    body: userMessage,
     data: {
-      type: 'ride_cancelled_by_driver',
+      type: 'ride_driver_changed',
       rideId: String(ride._id),
       serviceType: ride.serviceType || 'ride',
     },
   }).catch((error) => {
-    console.error('Failed to send user scheduled-ride cancellation push notification', error);
+    console.error('Failed to send user driver-changed push notification', error);
   });
 
-  stopDispatchFlow(rideId);
+  // The driver is already off the ride, so a search that fails to start mustn't fail their cancel.
+  await startDispatchFlow(ride, { forceRestart: true }).catch((error) => {
+    console.error('Could not restart dispatch after a driver cancelled', error);
+  });
   return ride;
 };
 

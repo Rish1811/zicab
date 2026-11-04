@@ -1066,3 +1066,15 @@ body.splash-active {
 .user-app-theme .bus-seat-booked span:not([style*='background']) {
   color: #1e293b !important;
 }
+
+/* A seat only women can book: pink in the light and dark themes alike. */
+.bus-seat-ladies,
+.user-app-theme .bus-seat-ladies,
+.user-app-theme button.bus-seat-ladies {
+  background-color: #fbcfe8 !important;
+  border-color: #ec4899 !important;
+  color: #831843 !important;
+}
+.user-app-theme .bus-seat-ladies span:not([style*='background']) {
+  color: #831843 !important;
+}

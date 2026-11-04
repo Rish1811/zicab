@@ -261,6 +261,11 @@
 .zb-seat.is-sideways.is-sleeper::before { right: 4px; top: 18%; bottom: 18%; width: 4px; height: auto; }
 .zb-seat-price { font-size: 9.5px; font-weight: 800; white-space: nowrap; }
 .zb-seat:active:not(:disabled) { transform: scale(0.92); }
+.zb-seat.is-ladies {
+  background: #fbcfe8;
+  border-color: #ec4899;
+  color: #831843;
+}
 .zb-seat.is-selected {
   background: var(--zb-accent);
   border-color: var(--zb-accent);

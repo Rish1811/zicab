@@ -3471,6 +3471,15 @@ export const createBusBookingOrder = async (req, res) => {
   );
   const seatCellMap = new Map(availableSeatCells.map((seat) => [String(seat.id), seat]));
   const invalidSeat = seatIds.find((seatId) => !seatCellMap.has(seatId));
+  // Each seat's own traveller, or the lead passenger when only one was sent.
+  const ladiesSeatIndex = seatIds.findIndex((seatId, index) => (
+    seatCellMap.get(seatId)?.ladiesOnly === true
+    && String(seatPassengers[index]?.gender ?? passenger.gender).toLowerCase() !== 'female'
+  ));
+  if (ladiesSeatIndex >= 0) {
+    const seatId = seatIds[ladiesSeatIndex];
+    throw new ApiError(400, `Seat ${seatCellMap.get(seatId)?.label || seatId} is for women only`);
+  }
   if (invalidSeat) {
     throw new ApiError(400, `Seat ${invalidSeat} is not available for booking`);
   }

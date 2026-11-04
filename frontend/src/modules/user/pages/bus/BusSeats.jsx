@@ -75,7 +75,7 @@ const Deck = ({ title, rows, selectedIds, onToggle, priceOf, showWheel, vertical
               type="button"
               disabled={booked}
               onClick={() => onToggle(seat)}
-              className={`zb-seat ${sleeper ? 'is-sleeper' : ''} ${vertical ? '' : 'is-sideways'} ${booked ? 'is-booked' : ''} ${selected ? 'is-selected' : ''}`}
+              className={`zb-seat ${sleeper ? 'is-sleeper' : ''} ${vertical ? '' : 'is-sideways'} ${booked ? 'is-booked' : ''} ${seat.ladiesOnly && !booked ? 'is-ladies' : ''} ${selected ? 'is-selected' : ''}`}
               style={{ ...size, justifySelf: 'center', alignSelf: 'center' }}
               aria-label={booked ? `Seat ${seat.label || seat.id}, booked` : `Seat ${seat.label || seat.id}, ${formatRupees(priceOf(seat))}`}
               title={booked ? `${seat.label || seat.id} · Booked` : `${seat.label || seat.id} · ${formatRupees(priceOf(seat))}`}
@@ -206,7 +206,7 @@ const BusSeats = () => {
       setSeatNotice(`You can book up to ${MAX_SEATS} seats at a time.`);
       return;
     }
-    setSelectedSeats((current) => [...current, { id: seat.id, label: seat.label || seat.id, variant: seat.variant || 'seat', price: priceOf(seat) }]);
+    setSelectedSeats((current) => [...current, { id: seat.id, label: seat.label || seat.id, variant: seat.variant || 'seat', price: priceOf(seat), ladiesOnly: seat.ladiesOnly === true }]);
   };
 
   const lowerDeck = seatLayout?.blueprint?.lowerDeck || [];
@@ -273,6 +273,11 @@ const BusSeats = () => {
               <span className="zb-muted flex items-center gap-2 text-[11px] font-bold">
                 <span className="zb-seat is-booked !min-h-0 h-4 w-4" /> Booked
               </span>
+              {[...lowerDeck, ...upperDeck].flat().some((cell) => cell?.ladiesOnly) ? (
+                <span className="zb-muted flex items-center gap-2 text-[11px] font-bold">
+                  <span className="zb-seat is-ladies !min-h-0 h-4 w-4" /> Ladies only
+                </span>
+              ) : null}
               {variants.map(([name, price]) => (
                 <span key={name} className="zb-muted text-[11px] font-bold">{name} {formatRupees(price)}</span>
               ))}

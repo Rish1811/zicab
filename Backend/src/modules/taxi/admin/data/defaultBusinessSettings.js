@@ -91,9 +91,9 @@ export const createDefaultBusinessSettings = () => ({
     enable_my_route_booking_feature: '0',
     how_many_times_a_driver_can_enable_the_my_route_booking_per_day: '1',
     // The most rides a driver may cancel per day, week or month.
-    enable_driver_cancellation_limit: '0',
+    enable_driver_cancellation_limit: '1',
     driver_max_cancellations: '3',
-    driver_cancellation_limit_period: 'day',
+    driver_cancellation_limit_period: 'week',
     // Riders see how many women are on a bus once the count reaches the minimum.
     show_bus_female_travellers: '1',
     bus_female_travellers_min: '3',

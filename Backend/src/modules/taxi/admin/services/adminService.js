@@ -687,6 +687,7 @@ const normalizeBusSeatCell = (cell = {}) => {
     label: sanitizeBusText(cell.label),
     variant: sanitizeBusText(cell.variant, 'seat') || 'seat',
     status: cell.status === 'blocked' ? 'blocked' : 'available',
+    ladiesOnly: cell.ladiesOnly === true,
   };
 };
 

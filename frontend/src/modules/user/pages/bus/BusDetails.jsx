@@ -248,6 +248,13 @@ const BusDetails = () => {
       document.getElementById('zb-traveller')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
+    const genderOfSeat = (seat, index) => (index === 0 ? gender : otherTravellers[seat.id]?.gender);
+    const wrongLadiesSeat = selectedSeats.find((seat, index) => seat.ladiesOnly && genderOfSeat(seat, index) !== 'Female');
+    if (wrongLadiesSeat) {
+      setError(`Seat ${wrongLadiesSeat.label} is for women only.`);
+      document.getElementById('zb-traveller')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     setError('');
     setIsPaying(true);
 

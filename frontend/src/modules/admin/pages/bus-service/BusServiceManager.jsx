@@ -394,6 +394,7 @@ const BusServiceManager = ({
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [seatNumberMethod, setSeatNumberMethod] = useState('');
+  const [markingLadiesSeats, setMarkingLadiesSeats] = useState(false);
   const [numberingSeatId, setNumberingSeatId] = useState('');
   const [upcomingBusBookings, setUpcomingBusBookings] = useState(0);
   const [ownerDrivers, setOwnerDrivers] = useState([]);
@@ -1253,6 +1254,20 @@ const BusServiceManager = ({
       active = false;
     };
   }, [savedBusId]);
+
+  const toggleLadiesSeat = (seatId) => {
+    setDraft((current) => {
+      const blueprint = { ...current.blueprint };
+      ['lowerDeck', 'upperDeck'].forEach((deckKey) => {
+        blueprint[deckKey] = (blueprint[deckKey] || []).map((row) =>
+          row.map((cell) => (
+            cell?.kind === 'seat' && cell.id === seatId ? { ...cell, ladiesOnly: cell.ladiesOnly !== true } : cell
+          )),
+        );
+      });
+      return { ...current, blueprint };
+    });
+  };
 
   const toggleSeatStatus = (seatId) => {
     const nextBlueprint = JSON.parse(JSON.stringify(draft.blueprint));
@@ -2725,8 +2740,20 @@ const BusServiceManager = ({
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <button
+                type="button"
+                aria-pressed={markingLadiesSeats}
+                onClick={() => setMarkingLadiesSeats((current) => !current)}
+                className={`mb-3 rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                  markingLadiesSeats ? 'bus-seat-ladies' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {markingLadiesSeats ? 'Done marking ladies seats' : 'Mark ladies seats'}
+              </button>
               <p className="mb-3 text-[11px] font-semibold text-slate-500">
-                {seatNumberMethod === 'manual'
+                {markingLadiesSeats
+                  ? 'Tap a seat or berth to make it a pink ladies seat, tap again to undo. Only a woman can book it.'
+                  : seatNumberMethod === 'manual'
                   ? 'Click a seat or berth to type its number.'
                   : 'Shown the way riders will see it. Tap a seat or berth to block it from sale, tap again to reopen it.'}
               </p>
@@ -2739,9 +2766,11 @@ const BusServiceManager = ({
                   active: seatNumberMethod === 'manual' && numberingSeatId === cell.id,
                   title: seatNumberProblems[cell.id],
                 })}
-                onSeatClick={(cell) =>
-                  seatNumberMethod === 'manual' ? setNumberingSeatId(cell.id) : toggleSeatStatus(cell.id)
-                }
+                onSeatClick={(cell) => {
+                  if (markingLadiesSeats) toggleLadiesSeat(cell.id);
+                  else if (seatNumberMethod === 'manual') setNumberingSeatId(cell.id);
+                  else toggleSeatStatus(cell.id);
+                }}
               />
             </div>
 

@@ -73,6 +73,7 @@ const Deck = ({ label, rows, isLower, vertical, getSeat, onSeatClick, showPrices
           const seat = getSeat(cell) || {};
           const status = seat.status || 'available';
           const price = Number(seat.price || 0);
+          const ladies = cell.ladiesOnly === true && status === 'available';
           const dimmed = priceFilter != null && status === 'available' && price !== priceFilter;
           const clickable = Boolean(onSeatClick);
           const size = berth ? berthSize : { width: 38, height: 38 };
@@ -87,9 +88,9 @@ const Deck = ({ label, rows, isLower, vertical, getSeat, onSeatClick, showPrices
               type="button"
               disabled={!clickable}
               onClick={() => onSeatClick?.(cell)}
-              title={seat.title || `${cell.label || cell.id}${price ? ` · ${money(price)}` : ''} · ${status}`}
+              title={seat.title || `${cell.label || cell.id}${ladies ? ' · Ladies' : ''}${price ? ` · ${money(price)}` : ''} · ${status}`}
               className={`relative flex items-center justify-center border ${vertical ? 'text-[9px]' : 'text-[10px]'} font-semibold leading-none transition ${
-                STATUS_STYLE[status] || STATUS_STYLE.available
+                ladies ? 'bus-seat-ladies' : STATUS_STYLE[status] || STATUS_STYLE.available
               } ${dimmed ? 'opacity-30' : ''} ${clickable ? 'cursor-pointer' : 'cursor-default'} ${
                 seat.invalid ? 'ring-2 ring-rose-500' : seat.active ? 'ring-2 ring-amber-400' : ''
               }`}
@@ -202,6 +203,11 @@ const HorizontalSeatMap = ({ blueprint, getSeat = () => ({}), onSeatClick, showP
             {text}
           </span>
         ))}
+        {[...lower, ...upper].flat().some((cell) => cell?.ladiesOnly === true) ? (
+          <span className="flex items-center gap-1.5">
+            <span className="bus-seat-ladies h-3.5 w-5 rounded border" /> Ladies seat
+          </span>
+        ) : null}
         <span className="flex items-center gap-1.5">
           <span className="h-3 w-6 rounded border border-slate-300 bg-white" /> Sleeper
         </span>

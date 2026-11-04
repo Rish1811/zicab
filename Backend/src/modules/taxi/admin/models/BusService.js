@@ -27,6 +27,11 @@ const busSeatCellSchema = new mongoose.Schema(
       enum: ['available', 'blocked'],
       default: 'available',
     },
+    // Pink on the seat map: only a woman can book it in the rider app or website.
+    ladiesOnly: {
+      type: Boolean,
+      default: false,
+    },
   },
   { _id: false },
 );

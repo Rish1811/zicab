@@ -3181,6 +3181,7 @@ export const cancelDriverScheduledRide = async (req, res) => {
       rideId: String(ride._id || ""),
       status: ride.status || RIDE_STATUS.CANCELLED,
       liveStatus: ride.liveStatus || RIDE_LIVE_STATUS.CANCELLED,
+      cancellationLimit: await getDriverCancelStatus(req.auth.sub),
     },
   });
 };
