@@ -78,6 +78,7 @@ const OwnerBusServicePage = () => {
           <BusServiceManager
             api={ownerBusApi}
             basePath="/taxi/owner/bus-service"
+            allowSeatNumbering={false}
             badgeLabel="Owner Bus Control"
             title="Add And Manage Your Buses"
             description="Create owner bus services from the same flow as admin, then manage routes, seats, pricing, and schedules in a mobile-friendly screen."

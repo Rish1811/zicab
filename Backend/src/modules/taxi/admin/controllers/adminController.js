@@ -902,6 +902,19 @@ export const getPendingBusDriverSignups = asyncHandler(async (_req, res) =>
 export const createBusService = asyncHandler(async (req, res) =>
   ok(res, await adminService.createBusService(req.body)),
 );
+/// Upcoming bookings on a bus, so renumbering its seats can warn about tickets
+/// already issued. India's date, like travelDate.
+export const getBusServiceUpcomingBookings = asyncHandler(async (req, res) => {
+  const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+  ok(res, {
+    count: await BusBooking.countDocuments({
+      busServiceId: req.params.id,
+      status: 'confirmed',
+      travelDate: { $gte: today },
+    }),
+  });
+});
+
 export const updateBusService = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateBusService(req.params.id, req.body)),
 );

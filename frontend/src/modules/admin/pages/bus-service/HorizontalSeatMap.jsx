@@ -21,7 +21,9 @@ import React, { useMemo, useState } from 'react';
 const STATUS_STYLE = {
   available: 'border-slate-300 bg-white text-slate-700 hover:border-slate-500',
   selected: 'border-blue-600 bg-blue-600 text-white',
-  booked: 'border-slate-200 bg-slate-200 text-slate-400',
+  // In index.css rather than colour classes: the app's dark theme remaps those,
+  // which made a sold seat look just like a free one.
+  booked: 'bus-seat-booked',
   held: 'border-amber-300 bg-amber-50 text-amber-700',
   blocked: 'border-rose-200 bg-rose-50 text-rose-400',
 };
@@ -88,12 +90,14 @@ const Deck = ({ label, rows, isLower, vertical, getSeat, onSeatClick, showPrices
               title={seat.title || `${cell.label || cell.id}${price ? ` · ${money(price)}` : ''} · ${status}`}
               className={`relative flex items-center justify-center border ${vertical ? 'text-[9px]' : 'text-[10px]'} font-semibold leading-none transition ${
                 STATUS_STYLE[status] || STATUS_STYLE.available
-              } ${dimmed ? 'opacity-30' : ''} ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
+              } ${dimmed ? 'opacity-30' : ''} ${clickable ? 'cursor-pointer' : 'cursor-default'} ${
+                seat.invalid ? 'ring-2 ring-rose-500' : seat.active ? 'ring-2 ring-amber-400' : ''
+              }`}
               style={{ ...size, borderRadius: berth ? 6 : 7, justifySelf: 'center', alignSelf: 'center' }}
             >
               <span
-                className={`absolute rounded-sm ${status === 'selected' ? 'bg-blue-300' : status === 'booked' ? 'bg-slate-300' : 'bg-slate-200'}`}
-                style={pillow}
+                className={`absolute rounded-sm ${status === 'selected' ? 'bg-blue-300' : status === 'booked' ? '' : 'bg-slate-200'}`}
+                style={status === 'booked' ? { ...pillow, backgroundColor: '#64748b' } : pillow}
               />
               <span className={vertical ? 'pb-1 [writing-mode:horizontal-tb]' : 'pr-1.5'}>
                 {showPrices && price && status !== 'booked' ? money(price) : cell.label}

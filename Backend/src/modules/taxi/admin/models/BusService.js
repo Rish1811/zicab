@@ -461,6 +461,12 @@ const busServiceSchema = new mongoose.Schema(
         enum: ['horizontal', 'vertical'],
         default: 'horizontal',
       },
+      // How the seat numbers were set. No mode: the numbers the layout generated.
+      seatNumbering: {
+        mode: { type: String, enum: ['', 'auto', 'manual', 'excel'], default: '' },
+        pattern: { type: String, default: '', trim: true },
+        start: { type: Number, default: 1 },
+      },
       layoutConfig: {
         lower: {
           type: busDeckLayoutConfigSchema,

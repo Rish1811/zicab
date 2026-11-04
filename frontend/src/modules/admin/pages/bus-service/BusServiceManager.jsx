@@ -30,6 +30,8 @@ import {
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
 import HorizontalSeatMap from './HorizontalSeatMap';
+import SeatNumberingPanel from './SeatNumberingPanel';
+import { carryOverSeatDetails, findSeatNumberProblems } from './seatNumbering';
 import { computeDrivingRoute } from '../../../../shared/utils/googleRoutes';
 import {
   BUS_BLUEPRINT_TEMPLATES,
@@ -346,6 +348,7 @@ const BusServiceManager = ({
   description = 'Define coaches, preview seat blueprints, manage inventory, and publish recurring departures with multi-stop routes.',
   emptyLabel = 'No buses found.',
   defaultStatus = 'draft',
+  allowSeatNumbering = true,
 }) => {
   const buildFreshDraft = () => ({
     ...createBusDraft(),
@@ -390,6 +393,9 @@ const BusServiceManager = ({
   const [draft, setDraft] = useState(() => buildFreshDraft());
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [seatNumberMethod, setSeatNumberMethod] = useState('');
+  const [numberingSeatId, setNumberingSeatId] = useState('');
+  const [upcomingBusBookings, setUpcomingBusBookings] = useState(0);
   const [ownerDrivers, setOwnerDrivers] = useState([]);
   const [driverSearch, setDriverSearch] = useState('');
   const [routePath, setRoutePath] = useState([]);
@@ -1145,6 +1151,15 @@ const BusServiceManager = ({
   };
 
   const switchBlueprintTemplate = (templateKey) => {
+    // A new template means new seats, so numbers set for the old ones can't carry.
+    if (
+      draft.blueprint?.seatNumbering?.mode
+      && !window.confirm('Changing the layout resets your seat numbers. Continue?')
+    ) {
+      return;
+    }
+    setSeatNumberMethod('');
+    setNumberingSeatId('');
     setDraft((current) => ({
       ...current,
       blueprint: {
@@ -1193,12 +1208,51 @@ const BusServiceManager = ({
       return {
         ...current,
         blueprint: {
-          ...createBusBlueprint(current.blueprint?.templateKey || 'seater_2_2', nextLayoutConfig),
+          // Seats that still exist keep their numbers and stay blocked.
+          ...carryOverSeatDetails(
+            current.blueprint,
+            createBusBlueprint(current.blueprint?.templateKey || 'seater_2_2', nextLayoutConfig),
+          ),
           seatLayoutOrientation: current.blueprint?.seatLayoutOrientation || 'horizontal',
         },
       };
     });
   };
+
+  // Generated numbers on older buses can repeat across decks; only numbers someone
+  // chose are held to being unique.
+  const seatNumberProblems = useMemo(
+    () => (draft.blueprint?.seatNumbering?.mode ? findSeatNumberProblems(draft.blueprint) : {}),
+    [draft.blueprint],
+  );
+
+  // Opening another bus shows how that bus was numbered.
+  useEffect(() => {
+    setSeatNumberMethod(draft.blueprint?.seatNumbering?.mode || '');
+    setNumberingSeatId('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.id]);
+
+  // Only for an admin editing a saved bus: registration has no bookings, and
+  // other portals can't read this.
+  const savedBusId = allowSeatNumbering && basePath === '/admin/bus-service' && catalog.some((item) => item.id === draft.id)
+    ? draft.id
+    : '';
+  useEffect(() => {
+    setUpcomingBusBookings(0);
+    if (!savedBusId) return undefined;
+    let active = true;
+    adminService
+      .getBusUpcomingBookings(savedBusId)
+      .then((response) => {
+        const data = response?.data?.data || response?.data || response;
+        if (active) setUpcomingBusBookings(Number(data?.count) || 0);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [savedBusId]);
 
   const toggleSeatStatus = (seatId) => {
     const nextBlueprint = JSON.parse(JSON.stringify(draft.blueprint));
@@ -1371,6 +1425,11 @@ const BusServiceManager = ({
   const handleSave = async () => {
     if (!draft.operatorName.trim() || !draft.busName.trim() || !draft.route.originCity.trim() || !draft.route.destinationCity.trim()) {
       toast.error('Add operator, bus name, origin and destination first.');
+      return;
+    }
+
+    if (Object.keys(seatNumberProblems).length) {
+      toast.error('Fix the seat numbers shown in red first.');
       return;
     }
 
@@ -2610,6 +2669,22 @@ const BusServiceManager = ({
               </div>
             </div>
 
+            {allowSeatNumbering ? (
+              <SeatNumberingPanel
+                key={draft.id}
+                blueprint={draft.blueprint}
+                onChange={(blueprint) => setDraft((current) => ({ ...current, blueprint }))}
+                method={seatNumberMethod}
+                onMethodChange={(method) => {
+                  setSeatNumberMethod(method);
+                  setNumberingSeatId('');
+                }}
+                selectedSeatId={numberingSeatId}
+                onSelectSeat={setNumberingSeatId}
+                upcomingBookings={upcomingBusBookings}
+              />
+            ) : null}
+
             <div className="mb-5 flex flex-wrap gap-3">
             {BUS_BLUEPRINT_TEMPLATES.map((template) => {
               const active = draft.blueprint.templateKey === template.key;
@@ -2651,13 +2726,22 @@ const BusServiceManager = ({
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="mb-3 text-[11px] font-semibold text-slate-500">
-                Shown the way riders will see it. Tap a seat or berth to block it from sale, tap again to reopen it.
+                {seatNumberMethod === 'manual'
+                  ? 'Click a seat or berth to type its number.'
+                  : 'Shown the way riders will see it. Tap a seat or berth to block it from sale, tap again to reopen it.'}
               </p>
               <HorizontalSeatMap
                 blueprint={draft.blueprint}
                 legend="editor"
-                getSeat={(cell) => ({ status: cell.status === 'blocked' ? 'blocked' : 'available' })}
-                onSeatClick={(cell) => toggleSeatStatus(cell.id)}
+                getSeat={(cell) => ({
+                  status: cell.status === 'blocked' ? 'blocked' : 'available',
+                  invalid: Boolean(seatNumberProblems[cell.id]),
+                  active: seatNumberMethod === 'manual' && numberingSeatId === cell.id,
+                  title: seatNumberProblems[cell.id],
+                })}
+                onSeatClick={(cell) =>
+                  seatNumberMethod === 'manual' ? setNumberingSeatId(cell.id) : toggleSeatStatus(cell.id)
+                }
               />
             </div>
 

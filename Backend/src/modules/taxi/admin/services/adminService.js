@@ -765,6 +765,35 @@ const normalizeBusCancellationRule = (rule = {}, index = 0) => ({
   notes: sanitizeBusText(rule.notes),
 });
 
+const normalizeBusSeatNumbering = (value = {}) => {
+  const mode = ['auto', 'manual', 'excel'].includes(value?.mode) ? value.mode : '';
+  return {
+    mode,
+    pattern: mode === 'auto' ? sanitizeBusText(value?.pattern) : '',
+    start: Math.max(1, Math.floor(Number(value?.start) || 1)),
+  };
+};
+
+/// Seat numbers set by hand, sheet or pattern must each be unique on the bus.
+/// Buses still on their generated numbers aren't checked: those can repeat across
+/// decks, and refusing them would stop older buses from saving.
+const assertValidBusSeatNumbers = (blueprint) => {
+  if (!blueprint.seatNumbering?.mode) return;
+  const seen = new Set();
+  [...blueprint.lowerDeck, ...blueprint.upperDeck].flat().forEach((cell) => {
+    if (cell.kind !== 'seat') return;
+    const label = String(cell.label || '').trim();
+    if (!/^[A-Za-z0-9-]{1,5}$/.test(label)) {
+      throw new ApiError(400, `Seat number "${label}" must be up to 5 letters, numbers or hyphens`);
+    }
+    const key = label.toLowerCase();
+    if (seen.has(key)) {
+      throw new ApiError(400, `Seat number ${label} is used more than once`);
+    }
+    seen.add(key);
+  });
+};
+
 export const normalizeSeatLayoutOrientation = (value) =>
   String(value || '').trim().toLowerCase() === 'vertical' ? 'vertical' : 'horizontal';
 
@@ -783,7 +812,9 @@ const normalizeBusServicePayload = (payload = {}, existing = {}) => {
     ),
     lowerDeck: normalizeBusDeck(payload.blueprint?.lowerDeck ?? existing.blueprint?.lowerDeck ?? []),
     upperDeck: normalizeBusDeck(payload.blueprint?.upperDeck ?? existing.blueprint?.upperDeck ?? []),
+    seatNumbering: normalizeBusSeatNumbering(payload.blueprint?.seatNumbering ?? existing.blueprint?.seatNumbering),
   };
+  assertValidBusSeatNumbers(blueprint);
 
   const route = normalizeBusRoute(payload.route, existing.route);
   const returnRoute = normalizeBusRoute(payload.returnRoute, existing.returnRoute);
@@ -915,6 +946,7 @@ const serializeBusService = (item = {}) => ({
     layoutConfig: normalizeBusLayoutConfig(item.blueprint?.layoutConfig || {}),
     lowerDeck: normalizeBusDeck(item.blueprint?.lowerDeck || []),
     upperDeck: normalizeBusDeck(item.blueprint?.upperDeck || []),
+    seatNumbering: normalizeBusSeatNumbering(item.blueprint?.seatNumbering),
   },
   route: normalizeBusRoute(item.route),
   returnRouteEnabled: Boolean(item.returnRouteEnabled),

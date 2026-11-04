@@ -1054,3 +1054,15 @@ body.splash-active {
     max-width: 100% !important;
   }
 }
+
+/* A sold seat on the bus seat map: grey in the light and dark themes alike. */
+.bus-seat-booked,
+.user-app-theme .bus-seat-booked,
+.user-app-theme button.bus-seat-booked {
+  background-color: #94a3b8 !important;
+  border-color: #94a3b8 !important;
+  color: #1e293b !important;
+}
+.user-app-theme .bus-seat-booked span:not([style*='background']) {
+  color: #1e293b !important;
+}

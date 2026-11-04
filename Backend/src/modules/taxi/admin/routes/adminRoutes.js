@@ -212,6 +212,7 @@ import {
   updateAirport,
   updateAdminAccount,
   updateBusService,
+  getBusServiceUpcomingBookings,
   updateDriver,
   updateEmployee,
   updateDriverNeededDocument,
@@ -402,6 +403,7 @@ adminRouter.patch('/admin/airports/:id', updateAirport);
 adminRouter.delete('/admin/airports/:id', deleteAirport);
 adminRouter.get('/admin/bus-services', getBusServices);
 adminRouter.get('/admin/bus-services/pending-drivers', getPendingBusDriverSignups);
+adminRouter.get('/admin/bus-services/:id/upcoming-bookings', getBusServiceUpcomingBookings);
 adminRouter.post('/admin/bus-services', createBusService);
 adminRouter.patch('/admin/bus-services/:id', updateBusService);
 adminRouter.patch('/admin/bus-services/pending-drivers/:id/approve', approveBusDriverSignup);

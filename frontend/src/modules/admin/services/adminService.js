@@ -227,6 +227,7 @@ export const adminService = {
    * Notifications & Banners
    */
   getPromotionsBootstrap: () => api.get('/admin/promotions/bootstrap'),
+  getBusUpcomingBookings: (busId) => api.get(`/admin/bus-services/${busId}/upcoming-bookings`),
   getNotifications: () => api.get('/admin/notifications'),
   sendNotification: (data) => api.post('/admin/notifications/send', data),
   getNotificationAudience: (params) => api.get('/admin/notifications/audience', { params }),
