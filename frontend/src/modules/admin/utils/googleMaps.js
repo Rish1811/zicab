@@ -1,4 +1,5 @@
 import { useJsApiLoader } from '@react-google-maps/api';
+import { installPlacesCompat } from './placesCompat';
 
 export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
@@ -23,13 +24,18 @@ export const getLatLng = (source, fallback = INDIA_CENTER) => {
   return fallback;
 };
 
-const useGoogleMapsLoader = () =>
-  useJsApiLoader({
+const useGoogleMapsLoader = () => {
+  const loader = useJsApiLoader({
     id: GOOGLE_MAPS_LOADER_ID,
     googleMapsApiKey: HAS_VALID_GOOGLE_MAPS_KEY ? GOOGLE_MAPS_API_KEY : '',
     libraries: GOOGLE_MAPS_LIBRARIES,
     version: '3.64',
   });
+
+  // Before any page below this renders a search box.
+  if (loader.isLoaded) installPlacesCompat();
+  return loader;
+};
 
 export const useBaseGoogleMapsLoader = () => useGoogleMapsLoader();
 
