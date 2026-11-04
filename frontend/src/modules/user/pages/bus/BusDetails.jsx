@@ -127,7 +127,8 @@ const BusDetails = () => {
   const [name, setName] = useState(profile.name);
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
-  const [otherGenders, setOtherGenders] = useState({});
+  // Everyone after the lead traveller, by seat id.
+  const [otherTravellers, setOtherTravellers] = useState({});
   const [phone, setPhone] = useState(profile.phone);
   const [email, setEmail] = useState(profile.email);
   const [boardingStopId, setBoardingStopId] = useState('');
@@ -238,8 +239,12 @@ const BusDetails = () => {
       document.getElementById('zb-traveller')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    if (!gender || selectedSeats.slice(1).some((seat) => !otherGenders[seat.id])) {
-      setError(selectedSeats.length > 1 ? 'Choose the gender for each seat.' : 'Choose the traveller’s gender.');
+    const otherSeatMissing = selectedSeats.slice(1).find((seat) => {
+      const traveller = otherTravellers[seat.id] || {};
+      return !String(traveller.name || '').trim() || !(Number(traveller.age) >= 1 && Number(traveller.age) <= 120) || !traveller.gender;
+    });
+    if (!gender || otherSeatMissing) {
+      setError(otherSeatMissing ? `Fill in the name, age and gender for seat ${otherSeatMissing.label}.` : 'Choose the traveller’s gender.');
       document.getElementById('zb-traveller')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
@@ -256,7 +261,7 @@ const BusDetails = () => {
         seatIds: selectedSeats.map((seat) => seat.id),
         passenger: { name, age, gender, phone, email },
         passengers: selectedSeats.map((seat, index) => (
-          index === 0 ? { name, age, gender } : { gender: otherGenders[seat.id] }
+          index === 0 ? { name, age, gender, phone, email } : otherTravellers[seat.id]
         )),
         boardingStopId: effectiveBoarding || undefined,
         droppingStopId: effectiveDropping || undefined,
@@ -388,24 +393,45 @@ const BusDetails = () => {
               </div>
             </div>
           </div>
-          {selectedSeats.slice(1).map((seat) => (
-            <div key={seat.id}>
-              <span className={fieldLabel}>Gender for seat {seat.label}</span>
-              <div className="zb-soft grid grid-cols-3 gap-1 p-1">
-                {['Male', 'Female', 'Other'].map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    aria-pressed={otherGenders[seat.id] === item}
-                    onClick={() => setOtherGenders((current) => ({ ...current, [seat.id]: item }))}
-                    className={`zb-chip justify-center !border-0 !px-1 ${otherGenders[seat.id] === item ? 'is-active' : '!bg-transparent'}`}
-                  >
-                    {item}
-                  </button>
-                ))}
+          {selectedSeats.slice(1).map((seat) => {
+            const traveller = otherTravellers[seat.id] || {};
+            const update = (field, value) => setOtherTravellers((current) => ({
+              ...current,
+              [seat.id]: { ...current[seat.id], [field]: value },
+            }));
+            return (
+              <div key={seat.id} className="space-y-3">
+                <div className="zb-divider" />
+                <p className="zb-text text-sm font-extrabold">Traveller for seat {seat.label}</p>
+                <label className="block">
+                  <span className={fieldLabel}>Full name</span>
+                  <input className="zb-input" value={traveller.name || ''} onChange={(event) => update('name', event.target.value)} />
+                </label>
+                <div className="grid grid-cols-[1fr_2fr] gap-3">
+                  <label className="block">
+                    <span className={fieldLabel}>Age</span>
+                    <input className="zb-input" type="number" min="1" max="120" inputMode="numeric" value={traveller.age || ''} onChange={(event) => update('age', event.target.value)} />
+                  </label>
+                  <div>
+                    <span className={fieldLabel}>Gender</span>
+                    <div className="zb-soft grid grid-cols-3 gap-1 p-1">
+                      {['Male', 'Female', 'Other'].map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          aria-pressed={traveller.gender === item}
+                          onClick={() => update('gender', item)}
+                          className={`zb-chip justify-center !border-0 !px-1 ${traveller.gender === item ? 'is-active' : '!bg-transparent'}`}
+                        >
+                          {item}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <label className="block">
             <span className={fieldLabel}><Phone size={11} className="mb-0.5 inline" /> Mobile</span>
             <input className="zb-input" type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" />

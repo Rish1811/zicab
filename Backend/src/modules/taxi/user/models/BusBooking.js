@@ -32,27 +32,14 @@ const passengerSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// One entry per booked seat: who is travelling in it.
 const seatPassengerSchema = new mongoose.Schema(
   {
-    seatId: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-    name: {
-      type: String,
-      default: '',
-      trim: true,
-    },
-    age: {
-      type: Number,
-      default: null,
-    },
-    gender: {
-      type: String,
-      default: '',
-      trim: true,
-    },
+    seatId: { type: String, default: '', trim: true },
+    seatLabel: { type: String, default: '', trim: true },
+    name: { type: String, default: '', trim: true },
+    age: { type: Number, default: null },
+    gender: { type: String, default: '', trim: true },
   },
   { _id: false },
 );
@@ -160,7 +147,7 @@ const busBookingSchema = new mongoose.Schema(
     },
     // Each seat's traveller. Empty on older bookings, and on operator bookings,
     // which record only one passenger.
-    seatPassengers: {
+    passengers: {
       type: [seatPassengerSchema],
       default: [],
     },

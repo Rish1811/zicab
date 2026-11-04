@@ -6,21 +6,6 @@ const LOWEST_MINIMUM = 3;
 
 const isFemale = (gender) => String(gender || '').trim().toLowerCase() === 'female';
 
-/// One traveller per seat, as the rider entered them. Empty when the list doesn't
-/// match the seats, so nobody ends up against the wrong seat.
-export const buildSeatPassengers = (passengers, seatIds = []) => {
-  if (!Array.isArray(passengers) || passengers.length !== seatIds.length) {
-    return [];
-  }
-
-  return seatIds.map((seatId, index) => ({
-    seatId,
-    name: String(passengers[index]?.name || '').trim().slice(0, 120),
-    age: Number(passengers[index]?.age) || null,
-    gender: String(passengers[index]?.gender || '').trim().slice(0, 20),
-  }));
-};
-
 /// Women on a booking's seats that are still active. Bookings with only a lead
 /// passenger (older ones, and those made by an operator) count just that person.
 export const countFemaleSeats = (booking = {}) => {
@@ -30,9 +15,9 @@ export const countFemaleSeats = (booking = {}) => {
     return 0;
   }
 
-  const seatPassengers = booking.seatPassengers || [];
-  if (seatPassengers.length > 0) {
-    return seatPassengers.filter((item) => activeSeats.includes(String(item.seatId)) && isFemale(item.gender)).length;
+  const passengers = booking.passengers || [];
+  if (passengers.length > 0) {
+    return passengers.filter((item) => activeSeats.includes(String(item.seatId)) && isFemale(item.gender)).length;
   }
   return isFemale(booking.passenger?.gender) ? 1 : 0;
 };
@@ -64,7 +49,7 @@ export const getVisibleFemaleTravellers = async ({ busServiceIds = [], travelDat
       travelDate,
       status: 'confirmed',
     })
-      .select('busServiceId scheduleId seatIds cancelledSeats passenger seatPassengers')
+      .select('busServiceId scheduleId seatIds cancelledSeats passenger passengers')
       .lean();
 
     const counts = new Map();

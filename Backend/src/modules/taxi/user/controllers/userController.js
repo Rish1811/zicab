@@ -68,7 +68,7 @@ import {
 } from '../../services/paymentDiagnostics.js';
 import { getRequestClientIp } from '../../../../utils/clientIp.js';
 import { listBusRoutes, withScheduleRoute } from '../../bus/utils/busRoutes.js';
-import { buildSeatPassengers, getVisibleFemaleTravellers } from '../../services/busFemaleTravellersService.js';
+import { getVisibleFemaleTravellers } from '../../services/busFemaleTravellersService.js';
 
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say', '']);
 
@@ -3408,12 +3408,15 @@ export const createBusBookingOrder = async (req, res) => {
   const busServiceId = String(req.body?.busServiceId || '');
   const scheduleId = toCleanString(req.body?.scheduleId);
   const travelDate = normalizeBusTravelDate(req.body?.travelDate || req.body?.date);
+  // One entry per seat; the first is the lead passenger (phone + email).
+  const rawPassengers = Array.isArray(req.body?.passengers) ? req.body.passengers : [];
+  const leadSource = rawPassengers[0] || req.body?.passenger;
   const passenger = {
-    name: toCleanString(req.body?.passenger?.name),
-    age: Number(req.body?.passenger?.age || 0),
-    gender: toCleanString(req.body?.passenger?.gender),
-    phone: normalizePhone(req.body?.passenger?.phone),
-    email: normalizeEmail(req.body?.passenger?.email),
+    name: toCleanString(leadSource?.name),
+    age: Number(leadSource?.age || 0),
+    gender: toCleanString(leadSource?.gender),
+    phone: normalizePhone(leadSource?.phone),
+    email: normalizeEmail(leadSource?.email),
   };
   const seatIds = Array.isArray(req.body?.seatIds)
     ? [...new Set(req.body.seatIds.map((item) => toCleanString(item)).filter(Boolean))]
@@ -3432,6 +3435,25 @@ export const createBusBookingOrder = async (req, res) => {
 
   if (!Number.isFinite(passenger.age) || passenger.age < 1 || passenger.age > 120) {
     throw new ApiError(400, 'Passenger age must be valid');
+  }
+
+  let seatPassengers = [];
+  if (rawPassengers.length > 0) {
+    if (rawPassengers.length !== seatIds.length) {
+      throw new ApiError(400, 'Passenger details are required for every selected seat');
+    }
+    seatPassengers = rawPassengers.map((item) => {
+      const entry = {
+        name: toCleanString(item?.name),
+        age: Number(item?.age || 0),
+        gender: toCleanString(item?.gender),
+      };
+      validateName(entry.name);
+      if (!Number.isFinite(entry.age) || entry.age < 1 || entry.age > 120) {
+        throw new ApiError(400, 'Passenger age must be valid');
+      }
+      return entry;
+    });
   }
 
   const busService = await BusService.findById(busServiceId).lean();
@@ -3554,7 +3576,11 @@ export const createBusBookingOrder = async (req, res) => {
     seatLabels: seatIds.map((seatId) => seatCellMap.get(seatId)?.label || seatId),
     seatPrices,
     passenger,
-    seatPassengers: buildSeatPassengers(req.body?.passengers, seatIds),
+    passengers: seatPassengers.map((entry, index) => ({
+      seatId: seatIds[index],
+      seatLabel: seatCellMap.get(seatIds[index])?.label || seatIds[index],
+      ...entry,
+    })),
     amount,
     foodAmount: food.total,
     ...(boardingPoint ? { boardingPoint } : {}),
