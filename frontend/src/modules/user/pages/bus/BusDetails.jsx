@@ -126,7 +126,8 @@ const BusDetails = () => {
   const [travellerMode, setTravellerMode] = useState('self');
   const [name, setName] = useState(profile.name);
   const [age, setAge] = useState('');
-  const [gender, setGender] = useState('Male');
+  const [gender, setGender] = useState('');
+  const [otherGenders, setOtherGenders] = useState({});
   const [phone, setPhone] = useState(profile.phone);
   const [email, setEmail] = useState(profile.email);
   const [boardingStopId, setBoardingStopId] = useState('');
@@ -237,6 +238,11 @@ const BusDetails = () => {
       document.getElementById('zb-traveller')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
+    if (!gender || selectedSeats.slice(1).some((seat) => !otherGenders[seat.id])) {
+      setError(selectedSeats.length > 1 ? 'Choose the gender for each seat.' : 'Choose the traveller’s gender.');
+      document.getElementById('zb-traveller')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     setError('');
     setIsPaying(true);
 
@@ -249,6 +255,9 @@ const BusDetails = () => {
         travelDate: date,
         seatIds: selectedSeats.map((seat) => seat.id),
         passenger: { name, age, gender, phone, email },
+        passengers: selectedSeats.map((seat, index) => (
+          index === 0 ? { name, age, gender } : { gender: otherGenders[seat.id] }
+        )),
         boardingStopId: effectiveBoarding || undefined,
         droppingStopId: effectiveDropping || undefined,
         foodOrders: foodOrders(),
@@ -379,6 +388,24 @@ const BusDetails = () => {
               </div>
             </div>
           </div>
+          {selectedSeats.slice(1).map((seat) => (
+            <div key={seat.id}>
+              <span className={fieldLabel}>Gender for seat {seat.label}</span>
+              <div className="zb-soft grid grid-cols-3 gap-1 p-1">
+                {['Male', 'Female', 'Other'].map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-pressed={otherGenders[seat.id] === item}
+                    onClick={() => setOtherGenders((current) => ({ ...current, [seat.id]: item }))}
+                    className={`zb-chip justify-center !border-0 !px-1 ${otherGenders[seat.id] === item ? 'is-active' : '!bg-transparent'}`}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
           <label className="block">
             <span className={fieldLabel}><Phone size={11} className="mb-0.5 inline" /> Mobile</span>
             <input className="zb-input" type="tel" inputMode="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoComplete="tel" />

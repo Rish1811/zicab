@@ -94,6 +94,9 @@ export const createDefaultBusinessSettings = () => ({
     enable_driver_cancellation_limit: '0',
     driver_max_cancellations: '3',
     driver_cancellation_limit_period: 'day',
+    // Riders see how many women are on a bus once the count reaches the minimum.
+    show_bus_female_travellers: '1',
+    bus_female_travellers_min: '3',
   },
   bid_ride: {
     // The master switch, and which services may be bid on at all. Both are

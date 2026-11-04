@@ -68,6 +68,7 @@ import {
 } from '../../services/paymentDiagnostics.js';
 import { getRequestClientIp } from '../../../../utils/clientIp.js';
 import { listBusRoutes, withScheduleRoute } from '../../bus/utils/busRoutes.js';
+import { buildSeatPassengers, getVisibleFemaleTravellers } from '../../services/busFemaleTravellersService.js';
 
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say', '']);
 
@@ -854,6 +855,11 @@ const cleanupExpiredBusSeatHolds = async () => {
 
 const createBusBookingCode = () =>
   `BUS${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+const femaleTravellersField = (visibleCounts, busServiceId, scheduleId) => {
+  const count = visibleCounts.get(`${String(busServiceId)}:${String(scheduleId)}`);
+  return count ? { femaleTravellers: count } : {};
+};
 
 const serializeBusSearchResult = ({ busService, schedule, availableSeats, travelDate }) => ({
   id: `${String(busService._id)}:${String(schedule.id)}:${travelDate}`,
@@ -3228,6 +3234,7 @@ export const searchBuses = async (req, res) => {
   });
 
   const countFoodStops = await getFoodStopCounter(busIds);
+  const femaleTravellers = await getVisibleFemaleTravellers({ busServiceIds: busIds, travelDate });
   const results = items.flatMap((busService) => {
     const schedules = Array.isArray(busService.schedules) ? busService.schedules : [];
     const totalSeats = flattenBusBlueprintSeats(busService.blueprint).filter(
@@ -3251,6 +3258,7 @@ export const searchBuses = async (req, res) => {
           }),
           totalSeats,
           foodStops: countFoodStops(busService._id, schedule.id),
+          ...femaleTravellersField(femaleTravellers, busService._id, schedule.id),
         };
       });
   });
@@ -3368,6 +3376,10 @@ export const getBusSeatLayout = async (req, res) => {
   const availableSeats = flattenBusBlueprintSeats(blueprint).filter(
     (seat) => String(seat.status || 'available') === 'available',
   ).length;
+  const femaleTravellers = await getVisibleFemaleTravellers({
+    busServiceIds: [busService._id],
+    travelDate,
+  });
 
   res.status(200).json({
     success: true,
@@ -3376,6 +3388,7 @@ export const getBusSeatLayout = async (req, res) => {
       scheduleId,
       travelDate,
       availableSeats,
+      ...femaleTravellersField(femaleTravellers, busService._id, scheduleId),
       bus: serializeBusSearchResult({
         busService: withScheduleRoute(busService, schedule),
         schedule,
@@ -3541,6 +3554,7 @@ export const createBusBookingOrder = async (req, res) => {
     seatLabels: seatIds.map((seatId) => seatCellMap.get(seatId)?.label || seatId),
     seatPrices,
     passenger,
+    seatPassengers: buildSeatPassengers(req.body?.passengers, seatIds),
     amount,
     foodAmount: food.total,
     ...(boardingPoint ? { boardingPoint } : {}),

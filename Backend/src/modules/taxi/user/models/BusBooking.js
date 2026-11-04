@@ -32,6 +32,31 @@ const passengerSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const seatPassengerSchema = new mongoose.Schema(
+  {
+    seatId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    name: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    age: {
+      type: Number,
+      default: null,
+    },
+    gender: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+  },
+  { _id: false },
+);
+
 const cancelledSeatSchema = new mongoose.Schema(
   {
     seatId: {
@@ -132,6 +157,12 @@ const busBookingSchema = new mongoose.Schema(
     passenger: {
       type: passengerSchema,
       default: () => ({}),
+    },
+    // Each seat's traveller. Empty on older bookings, and on operator bookings,
+    // which record only one passenger.
+    seatPassengers: {
+      type: [seatPassengerSchema],
+      default: [],
     },
     amount: {
       type: Number,

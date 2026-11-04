@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowDownUp, BusFront, ChevronLeft, ChevronRight, Radio, Snowflake, Star, UtensilsCrossed } from 'lucide-react';
+import { ArrowDownUp, BusFront, ChevronLeft, ChevronRight, Radio, Snowflake, Star, UtensilsCrossed, Users } from 'lucide-react';
 import userBusService from '../../services/busService';
 import { BusScreen, BusTopBar, EmptyState, Skeleton, TripLine } from '../../components/bus/ZiBusUi';
 import { addDays, formatDay, formatRupees, routePrefixFor, toDateKey } from '../../components/bus/zibusFormat';
@@ -64,6 +64,9 @@ const BusCard = ({ bus, onSelect }) => {
             {seatsLeft} seat{seatsLeft === 1 ? '' : 's'} left
           </span>
         )}
+        {Number(bus.femaleTravellers || 0) > 0 ? (
+          <span className="zb-badge is-food"><Users size={11} /> {bus.femaleTravellers} women travelling</span>
+        ) : null}
         {Number(bus.ratingCount || 0) > 0 ? (
           <span className="zb-badge is-accent"><Star size={11} fill="currentColor" /> {Number(bus.rating).toFixed(1)}</span>
         ) : null}

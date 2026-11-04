@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Radio, X } from 'lucide-react';
+import { AlertTriangle, Radio, X, Users } from 'lucide-react';
 import userBusService, { BUS_SEAT_EVENTS } from '../../services/busService';
 import { socketService } from '../../../../shared/api/socket';
 import { BusScreen, BusTopBar, EmptyState, FooterBar, Skeleton } from '../../components/bus/ZiBusUi';
@@ -252,6 +252,16 @@ const BusSeats = () => {
               <span className="zb-badge is-green"><Radio size={11} className="zb-pulse" /> Live seat status</span>
               <span className="zb-text text-sm font-extrabold">{Number(seatLayout?.availableSeats ?? 0)} seats left</span>
             </div>
+
+            {Number(seatLayout?.femaleTravellers || 0) > 0 ? (
+              <div className="zb-card flex items-center gap-2 p-3">
+                <Users size={16} className="zb-food-text shrink-0" />
+                <p className="zb-text text-sm font-bold">
+                  {seatLayout.femaleTravellers} women travelling on this bus
+                  <span className="zb-muted block text-[11px] font-semibold">As entered by travellers when booking</span>
+                </p>
+              </div>
+            ) : null}
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
               <span className="zb-muted flex items-center gap-2 text-[11px] font-bold">

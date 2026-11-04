@@ -255,6 +255,37 @@ const TransportRideSettings = () => {
                 </div>
              </div>
 
+             <div className="mt-10 pt-8 border-t border-gray-100">
+                <h4 className="text-[13px] font-bold text-gray-700 uppercase tracking-tight mb-1">Women Travelling On A Bus</h4>
+                <p className="text-sm text-gray-500 mb-6">
+                   Shows riders how many women are on a bus, as entered by travellers when booking.
+                   Below the minimum nothing shows. The minimum can't go below 3.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-10 gap-y-6">
+                   <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700 block ml-0.5">Show To Riders</label>
+                      <select
+                       value={settings.show_bus_female_travellers ?? '1'}
+                       onChange={(e) => handleChange('show_bus_female_travellers', e.target.value)}
+                       className="w-full bg-white border border-gray-200 rounded-lg py-2.5 px-4 text-sm text-gray-900 focus:outline-none focus:border-yellow-400"
+                      >
+                         <option value="1">On</option>
+                         <option value="0">Off</option>
+                      </select>
+                   </div>
+
+                   <InputField
+                      label="Minimum Women To Show"
+                      name="bus_female_travellers_min"
+                      value={settings.bus_female_travellers_min ?? '3'}
+                      onChange={handleChange}
+                      type="number"
+                      placeholder="3"
+                   />
+                </div>
+             </div>
+
              <div className="mt-10 flex justify-end pt-6 border-t border-gray-100">
                 <button 
                   onClick={handleUpdate}
