@@ -1,3 +1,4 @@
+import { ApiError } from '../../../utils/ApiError.js';
 import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import { runRedisCommand } from '../../../infrastructure/redis/redisClient.js';
@@ -1060,6 +1061,11 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
     return existing;
   }
 
+  // Once the driver has entered the pickup OTP the parcel is in their hands.
+  if (isParcelPastPickupOtp(existing)) {
+    throw new ApiError(409, 'This parcel has already been picked up and can no longer be cancelled');
+  }
+
   const cancelUpdate = {
     status: RIDE_STATUS.CANCELLED,
     liveStatus: RIDE_LIVE_STATUS.CANCELLED,
@@ -1118,6 +1124,14 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
   });
 
   if (ride.driverId) {
+    // Also on the driver's own room: the ride-room copy below never reaches a
+    // driver whose socket reconnected without rejoining it, and the app then
+    // kept the trip open and ignored every later offer.
+    emitToRoom(getDriverRoom(ride.driverId), 'rideCancelled', {
+      rideId: String(ride._id),
+      room: getRideRoom(ride._id),
+      reason: 'User cancelled the ride',
+    });
     emitToRoom(getDriverRoom(ride.driverId), 'rideRequestClosed', {
       rideId: String(ride._id),
       reason: 'user-cancelled',
@@ -1170,6 +1184,18 @@ export const cancelRideByUser = async ({ rideId, userId }) => {
   return ride;
 };
 
+/// A parcel stays cancellable (by rider or driver) from acceptance until the
+/// driver enters the pickup OTP, which moves it to 'started'.
+const isParcelPastPickupOtp = (ride) =>
+  String(ride?.serviceType || '') === 'parcel' &&
+  [RIDE_LIVE_STATUS.STARTED, RIDE_LIVE_STATUS.ARRIVED].includes(ride?.liveStatus);
+
+const isCancellableActiveParcel = (ride) =>
+  String(ride?.serviceType || '') === 'parcel' &&
+  Boolean(ride?.driverId) &&
+  [RIDE_LIVE_STATUS.ACCEPTED, RIDE_LIVE_STATUS.ARRIVING].includes(ride?.liveStatus) &&
+  ![RIDE_STATUS.CANCELLED, RIDE_STATUS.COMPLETED].includes(ride?.status);
+
 const isCancellableScheduledRide = (ride) => {
   const scheduledAt = ride?.scheduledAt ? new Date(ride.scheduledAt) : null;
   return (
@@ -1179,6 +1205,22 @@ const isCancellableScheduledRide = (ride) => {
     ![RIDE_STATUS.CANCELLED, RIDE_STATUS.COMPLETED].includes(ride.status) &&
     ![RIDE_LIVE_STATUS.CANCELLED, RIDE_LIVE_STATUS.COMPLETED].includes(ride.liveStatus)
   );
+};
+
+export const cancelActiveParcelByDriver = async ({ rideId, driverId }) => {
+  const candidate = await Ride.findOne({ _id: rideId, driverId }).select('serviceType status liveStatus driverId').lean();
+  const reservation = isCancellableActiveParcel(candidate)
+    ? await reserveDriverCancellation(driverId)
+    : null;
+
+  const outcome = { cancelled: false };
+  try {
+    return await runScheduledRideCancellation({ rideId, driverId, outcome, kind: 'parcel' });
+  } finally {
+    if (!outcome.cancelled) {
+      await releaseDriverCancellation(reservation);
+    }
+  }
 };
 
 export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
@@ -1200,7 +1242,8 @@ export const cancelScheduledRideByDriver = async ({ rideId, driverId }) => {
   }
 };
 
-const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
+const runScheduledRideCancellation = async ({ rideId, driverId, outcome, kind = 'scheduled' }) => {
+  const isParcelCancel = kind === 'parcel';
   const dispatchState = getDispatchState(rideId);
   stopDispatchFlow(rideId, { releaseLease: false });
 
@@ -1225,7 +1268,14 @@ const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
   const isScheduledRide =
     scheduledAt && Number.isFinite(scheduledAt.getTime()) && scheduledAt.getTime() > Date.now();
 
-  if (!isScheduledRide) {
+  if (isParcelCancel) {
+    if (String(existing.serviceType || '') !== 'parcel') {
+      throw new Error('Only parcel deliveries can be cancelled from the active trip');
+    }
+    if (isParcelPastPickupOtp(existing)) {
+      throw new Error('The parcel is already picked up - it can no longer be cancelled');
+    }
+  } else if (!isScheduledRide) {
     stopDispatchFlow(rideId);
     throw new Error('Only upcoming scheduled rides can be cancelled by the driver');
   }
@@ -1304,7 +1354,9 @@ const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
     rejectedDriverIds: [...earlierRejections, String(driverId)],
   }).catch(() => null);
 
-  const userMessage = 'Your driver cancelled. We are finding you another driver.';
+  const userMessage = isParcelCancel
+    ? 'Your delivery partner cancelled. We are finding you another one.'
+    : 'Your driver cancelled. We are finding you another driver.';
 
   emitToRoom(getRideRoom(ride._id), SOCKET_EVENTS.RIDE_STATUS_UPDATED, {
     rideId: String(ride._id),
@@ -1316,7 +1368,7 @@ const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
   emitToRoom(getDriverRoom(driverId), 'rideRequestClosed', {
     rideId: String(ride._id),
     reason: 'driver-cancelled',
-    message: 'Scheduled ride cancelled.',
+    message: isParcelCancel ? 'Parcel delivery cancelled.' : 'Scheduled ride cancelled.',
   });
 
   if (cancellationSettlement?.driverWalletResult?.transaction) {
@@ -1326,7 +1378,7 @@ const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
       notification: {
         id: `ride-cancel-debit-${String(ride._id)}-${String(driverId)}`,
         title: 'Cancellation fee charged',
-        body: `Rs ${Number(cancellationSettlement.feeAmount || 0).toFixed(2)} deducted for cancelling a scheduled ride.`,
+        body: `Rs ${Number(cancellationSettlement.feeAmount || 0).toFixed(2)} deducted for ${isParcelCancel ? 'parcel' : 'scheduled ride'} cancellation.`,
         sentAt: new Date().toISOString(),
       },
     });
@@ -1334,7 +1386,7 @@ const runScheduledRideCancellation = async ({ rideId, driverId, outcome }) => {
 
   sendPushNotificationToEntities({
     userIds: [String(ride.userId)],
-    title: 'Finding you another driver',
+    title: isParcelCancel ? 'Finding you another delivery partner' : 'Finding you another driver',
     body: userMessage,
     data: {
       type: 'ride_driver_changed',
