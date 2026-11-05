@@ -291,7 +291,7 @@ const BusDetails = () => {
             const booking = toPlainData(unwrapPayload(await userBusService.verifyBookingPayment(response)));
             navigate(`${routePrefix}/bus/confirm`, {
               replace: true,
-              state: buildBusRouteState({ booking, fromCity: bus.fromCity || fromCity, toCity: bus.toCity || toCity, date }),
+              state: buildBusRouteState({ booking, fromCity: bus.fromCity || fromCity, toCity: bus.toCity || toCity, date, returnDate: state.returnDate }),
             });
           } catch (verifyError) {
             setError(verifyError?.message || 'Payment could not be confirmed');

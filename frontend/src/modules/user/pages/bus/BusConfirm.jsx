@@ -11,7 +11,7 @@ const BusConfirm = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const routePrefix = routePrefixFor(location.pathname);
-  const { booking, fromCity, toCity, date } = location.state || {};
+  const { booking, fromCity, toCity, date, returnDate } = location.state || {};
   const [ticket, setTicket] = useState(null);
 
   useEffect(() => {
@@ -58,6 +58,16 @@ const BusConfirm = () => {
           <h1 className="zb-h1 mt-1">You’re all set!</h1>
           <p className="zb-muted mt-1 text-sm font-semibold">Ticket sent to {booking.passenger?.phone || 'your phone'}.</p>
         </div>
+
+        {returnDate ? (
+          <button
+            type="button"
+            onClick={() => navigate(`${routePrefix}/bus/list`, { state: { fromCity: bus.toCity || toCity, toCity: bus.fromCity || fromCity, date: returnDate } })}
+            className="zb-btn zb-btn-primary mt-6 w-full"
+          >
+            Book your return on {formatDay(returnDate)}
+          </button>
+        ) : null}
 
         <div className="zb-card mt-6 overflow-hidden">
           <div className="p-5" style={{ background: 'linear-gradient(140deg, var(--zb-hero-a), var(--zb-hero-b))' }}>

@@ -20,6 +20,7 @@ import userBusService from '../../services/busService';
 import { useSettings } from '../../../../shared/context/SettingsContext';
 import { BusScreen, SectionTitle, Skeleton } from '../../components/bus/ZiBusUi';
 import { addDays, formatDay, formatRupees, routePrefixFor, toDateKey } from '../../components/bus/zibusFormat';
+import BusHomeDesktop from './BusHomeDesktop';
 
 const isEnabledFlag = (value) => {
   if (typeof value === 'boolean') return value;
@@ -36,6 +37,20 @@ const HOW_IT_WORKS = [
   { icon: QrCode, title: 'Get PNR & QR', text: 'Instant e-ticket. Show the QR at the door.' },
   { icon: Navigation, title: 'Track your bus', text: 'Live location from 1 hour before boarding.' },
 ];
+
+const MAX_PASSENGERS = 6;
+const DESKTOP_QUERY = '(min-width: 1024px)';
+
+const useIsDesktop = () => {
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia(DESKTOP_QUERY).matches);
+  useEffect(() => {
+    const query = window.matchMedia(DESKTOP_QUERY);
+    const onChange = (event) => setIsDesktop(event.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+  return isDesktop;
+};
 
 const monthStart = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
 
@@ -143,6 +158,9 @@ const BusHome = () => {
   const [fromCity, setFromCity] = useState('');
   const [toCity, setToCity] = useState('');
   const [date, setDate] = useState(today);
+  const [returnDate, setReturnDate] = useState('');
+  const [passengers, setPassengers] = useState(1);
+  const isDesktop = useIsDesktop();
   const [error, setError] = useState('');
   const [routes, setRoutes] = useState([]);
   const [routesLoading, setRoutesLoading] = useState(true);
@@ -201,9 +219,53 @@ const BusHome = () => {
     if (!from.trim() || !to.trim()) return setError('Enter where you are leaving from and going to.');
     if (normalizeCity(from) === normalizeCity(to)) return setError('From and To can’t be the same city.');
     setError('');
-    navigate(`${routePrefix}/bus/list`, { state: { fromCity: from.trim(), toCity: to.trim(), date } });
+    navigate(`${routePrefix}/bus/list`, {
+      state: {
+        fromCity: from.trim(),
+        toCity: to.trim(),
+        date,
+        ...(isDesktop ? { passengers, ...(returnDate ? { returnDate } : {}) } : {}),
+      },
+    });
     return undefined;
   };
+
+  if (isDesktop) {
+    return (
+      <BusHomeDesktop
+        busEnabled={busEnabled}
+        cities={cities}
+        routes={routes}
+        routesLoading={routesLoading}
+        fromCity={fromCity}
+        toCity={toCity}
+        date={date}
+        returnDate={returnDate}
+        passengers={passengers}
+        today={today}
+        error={error}
+        matchingRoute={matchingRoute}
+        maxPassengers={MAX_PASSENGERS}
+        routePrefix={routePrefix}
+        nextTrip={nextTrip}
+        onFromChange={setFromCity}
+        onToChange={setToCity}
+        onDateChange={(key) => {
+          setDate(key);
+          if (returnDate && returnDate < key) setReturnDate('');
+        }}
+        onReturnDateChange={setReturnDate}
+        onPassengersChange={setPassengers}
+        onSwap={() => { setFromCity(toCity); setToCity(fromCity); }}
+        onSearch={() => goSearch()}
+        onRouteSearch={(route) => {
+          setFromCity(route.fromCity);
+          setToCity(route.toCity);
+          goSearch(route.fromCity, route.toCity);
+        }}
+      />
+    );
+  }
 
   return (
     <BusScreen>

@@ -263,6 +263,12 @@ const BusSeats = () => {
               </div>
             ) : null}
 
+            {Number(state.passengers) > 1 ? (
+              <p className="zb-text px-1 text-sm font-bold">
+                {selectedSeats.length} of {state.passengers} seats chosen for your group
+              </p>
+            ) : null}
+
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
               <span className="zb-muted flex items-center gap-2 text-[11px] font-bold">
                 <span className="zb-seat !min-h-0 h-4 w-4" /> Available
