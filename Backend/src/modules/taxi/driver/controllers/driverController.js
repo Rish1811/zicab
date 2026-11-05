@@ -17,6 +17,7 @@ import { clearExpiredHoldsForSeats, publishBusSeatChange } from "../../bus/servi
 import { busTripBookingProblem, priceBusSeats } from "../../bus/utils/busTime.js";
 import { withBusCancellationClaim } from "../../bus/services/busPaymentService.js";
 import { publishBusLiveLocation } from "../../bus/services/busTicketService.js";
+import { getLadiesNeighbourSeatIds } from "../../services/busFemaleTravellersService.js";
 import { resolveScheduleRoute } from "../../bus/utils/busRoutes.js";
 import { cancelAndRefundFoodForBooking } from "../../bus/services/dhabaService.js";
 import { Owner } from "../../admin/models/Owner.js";
@@ -1006,6 +1007,7 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
     .lean();
 
   const reservedSeatIds = new Set(activeHolds.map((item) => String(item.seatId || "")));
+  const ladiesNeighbourSeatIds = await getLadiesNeighbourSeatIds({ busService, scheduleId, travelDate });
 
   const normalizeDeck = (deckRows = []) =>
     (Array.isArray(deckRows) ? deckRows : []).map((row) =>
@@ -1027,6 +1029,7 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
         return {
           ...cell,
           status: isBlocked || isReserved ? "booked" : "available",
+          ladiesOnly: cell.ladiesOnly === true || ladiesNeighbourSeatIds.has(seatId),
         };
       }),
     );
@@ -5865,6 +5868,12 @@ const createManualBusReservation = async ({ busService, body, bookedBy, rejectDe
   const invalidSeat = seatIds.find((seatId) => !availableSeatMap.has(seatId));
   if (invalidSeat) {
     throw new ApiError(409, `Seat ${invalidSeat} is not available`);
+  }
+
+  // One passenger is recorded here, so their gender stands for every seat.
+  const ladiesSeat = seatIds.map((seatId) => availableSeatMap.get(seatId)).find((seat) => seat?.ladiesOnly === true);
+  if (ladiesSeat && passenger.gender.toLowerCase() !== "female") {
+    throw new ApiError(409, `Seat ${ladiesSeat.label || ladiesSeat.id} is for women only`);
   }
 
   // Same pricing as the rider app: each seat type's fare plus the bus's tax.
