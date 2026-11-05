@@ -68,7 +68,7 @@ import {
 } from '../../services/paymentDiagnostics.js';
 import { getRequestClientIp } from '../../../../utils/clientIp.js';
 import { listBusRoutes, withScheduleRoute } from '../../bus/utils/busRoutes.js';
-import { getVisibleFemaleTravellers } from '../../services/busFemaleTravellersService.js';
+import { getLadiesNeighbourSeatIds, getVisibleFemaleTravellers } from '../../services/busFemaleTravellersService.js';
 
 const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer-not-to-say', '']);
 
@@ -3346,6 +3346,12 @@ export const getBusSeatLayout = async (req, res) => {
     .lean();
 
   const reservedSeatIds = new Set(holds.map((item) => String(item.seatId)));
+  const ladiesNeighbourSeatIds = await getLadiesNeighbourSeatIds({
+    busService,
+    scheduleId,
+    travelDate,
+    bookedByUserId: req.auth?.sub,
+  });
   const normalizeDeck = (deckRows = []) =>
     deckRows.map((row) =>
       (Array.isArray(row) ? row : []).map((cell) => {
@@ -3360,6 +3366,7 @@ export const getBusSeatLayout = async (req, res) => {
         return {
           ...cell,
           status: isBlocked || isReserved ? 'booked' : 'available',
+          ladiesOnly: cell.ladiesOnly === true || ladiesNeighbourSeatIds.has(seatId),
         };
       }),
     );
@@ -3472,8 +3479,14 @@ export const createBusBookingOrder = async (req, res) => {
   const seatCellMap = new Map(availableSeatCells.map((seat) => [String(seat.id), seat]));
   const invalidSeat = seatIds.find((seatId) => !seatCellMap.has(seatId));
   // Each seat's own traveller, or the lead passenger when only one was sent.
+  const ladiesNeighbourSeatIds = await getLadiesNeighbourSeatIds({
+    busService,
+    scheduleId,
+    travelDate,
+    bookedByUserId: userId,
+  });
   const ladiesSeatIndex = seatIds.findIndex((seatId, index) => (
-    seatCellMap.get(seatId)?.ladiesOnly === true
+    (seatCellMap.get(seatId)?.ladiesOnly === true || ladiesNeighbourSeatIds.has(seatId))
     && String(seatPassengers[index]?.gender ?? passenger.gender).toLowerCase() !== 'female'
   ));
   if (ladiesSeatIndex >= 0) {

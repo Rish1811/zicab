@@ -283,6 +283,18 @@ const TransportRideSettings = () => {
                       type="number"
                       placeholder="3"
                    />
+
+                   <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700 block ml-0.5">Seat Beside A Woman</label>
+                      <select
+                       value={settings.enable_bus_ladies_neighbour_rule ?? '1'}
+                       onChange={(e) => handleChange('enable_bus_ladies_neighbour_rule', e.target.value)}
+                       className="w-full bg-white border border-gray-200 rounded-lg py-2.5 px-4 text-sm text-gray-900 focus:outline-none focus:border-yellow-400"
+                      >
+                         <option value="1">Women only</option>
+                         <option value="0">Anyone</option>
+                      </select>
+                   </div>
                 </div>
              </div>
 

@@ -97,6 +97,8 @@ export const createDefaultBusinessSettings = () => ({
     // Riders see how many women are on a bus once the count reaches the minimum.
     show_bus_female_travellers: '1',
     bus_female_travellers_min: '3',
+    // The seat directly beside a woman can only be booked by another woman.
+    enable_bus_ladies_neighbour_rule: '1',
   },
   bid_ride: {
     // The master switch, and which services may be bid on at all. Both are
