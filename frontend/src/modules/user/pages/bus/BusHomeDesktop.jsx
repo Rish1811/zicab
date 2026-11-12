@@ -185,7 +185,7 @@ const BusHomeDesktop = ({
             <p className={`zbd-search-note ${error || !busEnabled ? 'is-error' : ''}`}>
               {error || (!busEnabled
                 ? 'Bus booking is paused right now.'
-                : `${matchingRoute.busCount || 1} bus${(matchingRoute.busCount || 1) > 1 ? 'es' : ''} on this route, from ${formatRupees(matchingRoute.startingPrice)}`)}
+                : `${matchingRoute.busCount || 1} bus${(matchingRoute.busCount || 1) > 1 ? 'es' : ''} on this route${Number(matchingRoute.startingPrice) > 0 ? `, from ${formatRupees(matchingRoute.startingPrice)}` : ''}`)}
             </p>
           ) : null}
         </form>
@@ -243,8 +243,13 @@ const BusHomeDesktop = ({
                         <p><Armchair size={15} /> {route.busCount || 1} bus{(route.busCount || 1) > 1 ? 'es' : ''} on this route</p>
                       </div>
                       <div className="zbd-route-price">
-                        <small>Starting from</small>
-                        <strong>{formatRupees(route.startingPrice)}</strong>
+                        {/* A bus with no seat price set would read "from ₹0". */}
+                        {Number(route.startingPrice) > 0 ? (
+                          <>
+                            <small>Starting from</small>
+                            <strong>{formatRupees(route.startingPrice)}</strong>
+                          </>
+                        ) : null}
                         <button type="button" onClick={() => onRouteSearch(route)}>Book Now <ArrowRight size={16} /></button>
                       </div>
                     </div>

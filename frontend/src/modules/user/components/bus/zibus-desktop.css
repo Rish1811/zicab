@@ -278,10 +278,19 @@
 .zbd.is-embedded .zbd-input:focus { border-color: var(--zbd-teal) !important; box-shadow: 0 0 0 3px rgba(15, 143, 131, 0.15); }
 .zbd.is-embedded .zbd-input option { background: #fff; color: #0b1f3f; }
 /* The website page is narrower than the full window, so the search bar takes two lines. */
+.zbd.is-embedded .zbd-wrap { width: calc(100% - 40px); container-type: inline-size; }
 .zbd.is-embedded .zbd-search { grid-template-columns: 1fr 38px 1fr 1fr 1fr; }
 .zbd.is-embedded .zbd-divider { display: none; }
-.zbd.is-embedded .zbd-search-btn { grid-column: 4 / 6; }
-.zbd.is-embedded .zbd-wrap { width: calc(100% - 40px); }
+/* Second line: passengers, then the button across the rest. */
+.zbd.is-embedded .zbd-search-btn { grid-column: 3 / 6; }
+/* Wide enough for the design's single line. */
+@container (min-width: 1180px) {
+  .zbd.is-embedded .zbd-search {
+    grid-template-columns: minmax(130px, 1.1fr) 38px minmax(130px, 1.1fr) 1px minmax(140px, 1fr) minmax(140px, 1fr) 1px minmax(130px, 0.9fr) auto;
+  }
+  .zbd.is-embedded .zbd-divider { display: block; }
+  .zbd.is-embedded .zbd-search-btn { grid-column: auto; }
+}
 
 /* Phones and tablets, which only the website page reaches. */
 @media (max-width: 1023px) {
