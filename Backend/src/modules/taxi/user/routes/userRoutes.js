@@ -164,9 +164,10 @@ userRouter.post('/rental-advance/razorpay/verify', authenticate(['user']), async
 userRouter.post('/rental-advance/phonepe/order', authenticate(['user']), paymentOrderRateLimit, asyncHandler(createPhonePeRentalAdvancePaymentOrder));
 userRouter.get('/rental-advance/phonepe/status/:merchantTransactionId', authenticate(['user']), asyncHandler(verifyPhonePeRentalAdvancePayment));
 userRouter.post('/rental-advance/wallet', authenticate(['user']), asyncHandler(payRentalAdvanceWithWallet));
-userRouter.get('/buses/routes', authenticate(['user']), asyncHandler(getBusRouteSuggestions));
-// The same list without a login, for the public Zi Bus page on the website.
+// The bus routes list without a login, for the public Zi Bus page on the website.
 userRouter.get('/buses/popular-routes', asyncHandler(getBusRouteSuggestions));
+
+userRouter.get('/buses/routes', authenticate(['user']), asyncHandler(getBusRouteSuggestions));
 userRouter.get('/buses/search', authenticate(['user']), asyncHandler(searchBuses));
 userRouter.get('/buses/:id/seats', authenticate(['user']), asyncHandler(getBusSeatLayout));
 userRouter.get('/bus-bookings', authenticate(['user']), asyncHandler(listMyBusBookings));
