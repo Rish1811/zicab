@@ -9,6 +9,7 @@ import Partner from './pages/Partner';
 import Driver from './pages/Driver';
 import Advertise from './pages/Advertise';
 import ContactUs from './pages/ContactUs';
+import ZiBus from './pages/ZiBus';
 
 /**
  * The landing pages take `openBookingModal` / `setActiveTab` as props, from when
@@ -26,6 +27,7 @@ const PAGES = {
   home: withShellContext(Home),
   about: withShellContext(AboutUs),
   services: withShellContext(Services),
+  bus: withShellContext(ZiBus),
   corporate: withShellContext(Corporate),
   partner: withShellContext(Partner),
   driver: withShellContext(Driver),

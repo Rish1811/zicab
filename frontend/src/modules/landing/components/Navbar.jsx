@@ -11,6 +11,7 @@ const Navbar = ({ activeTab, setActiveTab, openBookingModal }) => {
     { id: 'home', label: 'Home' },
     { id: 'about', label: 'About Us' },
     { id: 'services', label: 'Services' },
+    { id: 'bus', label: 'Zi Bus' },
     { id: 'corporate', label: 'Corporate' },
     { id: 'partner', label: 'Partner' },
     { id: 'driver', label: 'Driver' },

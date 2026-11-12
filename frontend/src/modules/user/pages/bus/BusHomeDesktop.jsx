@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
@@ -27,6 +27,7 @@ const NAV_LABELS = {
   home: 'Home',
   about: 'About Us',
   services: 'Services',
+  bus: 'Zi Bus',
   corporate: 'Corporate',
   partner: 'Partner',
   driver: 'Driver',
@@ -49,10 +50,15 @@ const CITY_PICTURES = [
 const pictureFor = (toCity = '') => CITY_PICTURES.find(([pattern]) => pattern.test(toCity))?.[1] || null;
 
 const ROUTES_SHOWN = 3;
+const BANNER_SECONDS = 5;
 
-/// The ZI Bus search page on a computer. It sits above the app's phone shell so
-/// it can use the full width; below 1024px BusHome shows the phone layout.
+/// The ZI Bus search page. For signed-in riders on a computer it sits above the
+/// app's phone shell so it can use the full width (below 1024px BusHome shows the
+/// phone layout). `embedded` is the public website page, inside the site's own
+/// menu and footer, at every screen size.
 const BusHomeDesktop = ({
+  embedded = false,
+  heroImages = [],
   busEnabled,
   cities,
   routes,
@@ -78,6 +84,15 @@ const BusHomeDesktop = ({
   onRouteSearch,
 }) => {
   const [showAllRoutes, setShowAllRoutes] = useState(false);
+  // Admin's Zi Bus banners take turns in the hero; the bundled coach until there are some.
+  const slides = heroImages.length ? heroImages : [heroBus];
+  const [tick, setTick] = useState(0);
+  const slide = tick % slides.length;
+  useEffect(() => {
+    if (slides.length < 2) return undefined;
+    const timer = window.setInterval(() => setTick((current) => current + 1), BANNER_SECONDS * 1000);
+    return () => window.clearInterval(timer);
+  }, [slides.length]);
   const visibleRoutes = showAllRoutes ? routes : routes.slice(0, ROUTES_SHOWN);
   const { settings } = useSettings();
   const logo = settings.general?.logo || '/zicab-logo.jpg';
@@ -89,8 +104,9 @@ const BusHomeDesktop = ({
     </select>
   );
 
-  return createPortal(
-    <div className="zbd">
+  const page = (
+    <div className={`zbd ${embedded ? 'is-embedded' : ''}`}>
+      {embedded ? null : (
       <header className="zbd-nav">
         <div className="zbd-wrap zbd-nav-inner">
           <Link to="/" className="zbd-brand">
@@ -102,16 +118,25 @@ const BusHomeDesktop = ({
           </Link>
           <nav className="zbd-links" aria-label="Main">
             {LANDING_TABS.map((tab) => (
-              <Link key={tab.id} to={tab.path} className={tab.id === 'services' ? 'is-active' : ''}>{NAV_LABELS[tab.id]}</Link>
+              <Link key={tab.id} to={tab.path} className={tab.id === 'bus' ? 'is-active' : ''}>{NAV_LABELS[tab.id]}</Link>
             ))}
             <Link to={`${routePrefix}/profile/bus-bookings`}>My Trips</Link>
           </nav>
           <a href="#zbd-search" className="zbd-cta"><Bus size={18} /> Book a Bus</a>
         </div>
       </header>
+      )}
 
       <section className="zbd-hero">
-        <img className="zbd-hero-bus" src={heroBus} alt="A ZI Bus coach on the highway" />
+        {slides.map((image, index) => (
+          <img
+            key={image}
+            className={`zbd-hero-bus ${index === slide ? 'is-shown' : ''}`}
+            src={image}
+            alt={index === slide ? 'ZI Bus' : ''}
+            aria-hidden={index !== slide}
+          />
+        ))}
         <div className="zbd-wrap zbd-hero-text">
           <span className="zbd-pill"><Bus size={18} /> ZI BUS</span>
           <h1>Your Journey, Your Way.</h1>
@@ -232,9 +257,10 @@ const BusHomeDesktop = ({
           )}
         </section>
       </div>
-    </div>,
-    document.body,
+    </div>
   );
+
+  return embedded ? page : createPortal(page, document.body);
 };
 
 export default BusHomeDesktop;

@@ -71,6 +71,8 @@
   position: absolute;
   top: 0;
   right: 0;
+  opacity: 0;
+  transition: opacity 0.8s ease;
   width: min(56%, 980px);
   height: calc(100% - 64px);
   object-fit: cover;
@@ -264,4 +266,36 @@
   .zbd-route-body { flex-direction: column; }
   .zbd-route-price { align-items: flex-start; }
   .zbd-feature { padding: 4px 16px; }
+}
+
+.zbd-hero-bus.is-shown { opacity: 1; }
+
+/* The public website page: in the page flow, under the site's own menu. */
+.zbd.is-embedded { position: static; inset: auto; z-index: auto; overflow: visible; }
+
+/* The website styles its own form fields; these stay as the design has them. */
+.zbd.is-embedded .zbd-input { background: #fff !important; color: #0b1f3f !important; border: 1px solid #d5dbe3 !important; box-shadow: none; }
+.zbd.is-embedded .zbd-input:focus { border-color: var(--zbd-teal) !important; box-shadow: 0 0 0 3px rgba(15, 143, 131, 0.15); }
+.zbd.is-embedded .zbd-input option { background: #fff; color: #0b1f3f; }
+/* The website page is narrower than the full window, so the search bar takes two lines. */
+.zbd.is-embedded .zbd-search { grid-template-columns: 1fr 38px 1fr 1fr 1fr; }
+.zbd.is-embedded .zbd-divider { display: none; }
+.zbd.is-embedded .zbd-search-btn { grid-column: 4 / 6; }
+.zbd.is-embedded .zbd-wrap { width: calc(100% - 40px); }
+
+/* Phones and tablets, which only the website page reaches. */
+@media (max-width: 1023px) {
+  .zbd-wrap { width: calc(100% - 32px); }
+  .zbd-hero { height: auto; padding-bottom: 96px; }
+  .zbd-hero-bus { width: 100%; height: 100%; opacity: 0; -webkit-mask-image: none; mask-image: none; }
+  .zbd-hero-bus.is-shown { opacity: 0.35; }
+  .zbd-hero-text { padding-top: 36px; }
+  .zbd-hero-text p { font-size: 17px; }
+  .zbd-search, .zbd.is-embedded .zbd-search { grid-template-columns: 1fr; gap: 12px; padding: 18px; }
+  .zbd-swap { width: 100%; height: 28px; }
+  .zbd-search-btn, .zbd.is-embedded .zbd-search-btn { grid-column: auto; width: 100%; }
+  .zbd-features { grid-template-columns: 1fr; gap: 18px; }
+  .zbd-feature { border-left: 0; padding: 0; }
+  .zbd-routes-head h2 { font-size: 26px; }
+  .zbd-route-grid { grid-template-columns: 1fr; }
 }

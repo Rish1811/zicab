@@ -10,6 +10,7 @@ export const LANDING_TABS = [
   { id: 'home', path: '/' },
   { id: 'about', path: '/about' },
   { id: 'services', path: '/services' },
+  { id: 'bus', path: '/zi-bus' },
   { id: 'corporate', path: '/corporate' },
   { id: 'partner', path: '/partner' },
   { id: 'driver', path: '/drive-with-us' },
