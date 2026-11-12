@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Award, BellRing, Bike, Briefcase, Building, Building2, Car, CheckCircle2, Clock,
   Compass, DollarSign, FileText, Gift, Globe, GraduationCap, HardHat, Headphones,
-  HeartHandshake, Image, MapPin, Navigation, PhoneCall, Plane, ShieldCheck, Shield,
+  HeartHandshake, Image, MapPin, Navigation, Package, PhoneCall, Plane, ShieldCheck, Shield,
   ShoppingBag, Smartphone, Sparkles, Stethoscope, TrendingUp, UserCheck, Users,
   UtensilsCrossed, Wallet,
 } from 'lucide-react';
@@ -22,7 +22,7 @@ import { LANDING_FALLBACK } from './landingFallback';
 const ICONS = {
   Award, BellRing, Bike, Briefcase, Building, Building2, Car, CheckCircle2, Clock,
   Compass, DollarSign, FileText, Gift, Globe, GraduationCap, HardHat, Headphones,
-  HeartHandshake, Image, MapPin, Navigation, PhoneCall, Plane, Shield, ShieldCheck,
+  HeartHandshake, Image, MapPin, Navigation, Package, PhoneCall, Plane, Shield, ShieldCheck,
   ShoppingBag, Smartphone, Stethoscope, TrendingUp, UserCheck, Users,
   UtensilsCrossed, Wallet,
 };
