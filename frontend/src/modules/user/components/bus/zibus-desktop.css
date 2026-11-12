@@ -278,14 +278,27 @@
 .zbd.is-embedded .zbd-input:focus { border-color: var(--zbd-teal) !important; box-shadow: 0 0 0 3px rgba(15, 143, 131, 0.15); }
 .zbd.is-embedded .zbd-input option { background: #fff; color: #0b1f3f; }
 /* The website page is narrower than the full window, so the search bar takes two lines. */
-.zbd.is-embedded .zbd-wrap { width: calc(100% - 40px); container-type: inline-size; }
+.zbd.is-embedded .zbd-wrap { width: min(1320px, calc(100% - 64px)); container-type: inline-size; }
 .zbd.is-embedded .zbd-search { grid-template-columns: 1fr 38px 1fr 1fr 1fr; }
 .zbd.is-embedded .zbd-divider { display: none; }
 /* Second line: passengers, then the button across the rest. */
 .zbd.is-embedded .zbd-search-btn { grid-column: 3 / 6; }
-/* Wide enough for the design's single line. */
-@container (min-width: 1180px) {
+/* Most laptops: the design's single line, a little tighter. */
+@container (min-width: 1000px) {
+  .zbd.is-embedded .zbd-search { grid-template-columns: 1fr 30px 1fr 1fr 1fr 0.9fr auto; gap: 10px; padding: 20px; }
+  .zbd.is-embedded .zbd-field > span { font-size: 13px; gap: 5px; }
+  .zbd.is-embedded .zbd-field small { display: none; }
+  .zbd.is-embedded .zbd-input { padding: 0 10px; font-size: 14px; }
+  .zbd.is-embedded .zbd-swap { width: 30px; }
+  .zbd.is-embedded .zbd-search-btn { grid-column: auto; padding: 0 18px; }
+}
+/* Wide enough for the design's single line as drawn. */
+@container (min-width: 1300px) {
+  .zbd.is-embedded .zbd-field small { display: inline; font-size: 13px; }
+  .zbd.is-embedded .zbd-field > span { font-size: 14px; }
   .zbd.is-embedded .zbd-search {
+    gap: 14px;
+    padding: 22px 26px;
     grid-template-columns: minmax(130px, 1.1fr) 38px minmax(130px, 1.1fr) 1px minmax(140px, 1fr) minmax(140px, 1fr) 1px minmax(130px, 0.9fr) auto;
   }
   .zbd.is-embedded .zbd-divider { display: block; }
@@ -294,7 +307,7 @@
 
 /* Phones and tablets, which only the website page reaches. */
 @media (max-width: 1023px) {
-  .zbd-wrap { width: calc(100% - 32px); }
+  .zbd-wrap, .zbd.is-embedded .zbd-wrap { width: calc(100% - 32px); }
   .zbd-hero { height: auto; padding-bottom: 96px; }
   .zbd-hero-bus { width: 100%; height: 100%; opacity: 0; -webkit-mask-image: none; mask-image: none; }
   .zbd-hero-bus.is-shown { opacity: 0.35; }

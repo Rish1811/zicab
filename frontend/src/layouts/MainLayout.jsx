@@ -29,6 +29,7 @@ const MainLayout = ({ children }) => {
     '/partner',
     '/drive-with-us',
     '/advertise',
+    '/zi-bus',
   ];
   const isStaticPath = staticPages.includes(location.pathname);
   const isAdminPath =
