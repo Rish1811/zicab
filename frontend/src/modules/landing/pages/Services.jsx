@@ -2,14 +2,16 @@ import { useLanding } from '../landingContentContext';
 import { LANDING_ICONS } from '../useLandingContent';
 import useAppModules from '../useAppModules';
 import React, { useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Car, Plane, Compass, Briefcase, Building2, ShoppingBag,
-  CheckCircle, ArrowRight, Bike
+  CheckCircle, ArrowRight, Bike, Bus
 } from 'lucide-react';
 import useReveal from '../hooks/useReveal';
 
 const Services = ({ openBookingModal }) => {
   const pageRef = useRef(null);
+  const navigate = useNavigate();
   useReveal(pageRef);
 
 
@@ -99,7 +101,16 @@ const Services = ({ openBookingModal }) => {
                       </div>
                     )}
 
-                    <button className="btn btn-teal w-full mt-4" onClick={openBookingModal}>
+                    <button
+                      className="btn btn-teal w-full mt-4"
+                      onClick={() => {
+                        if (s.id === 'bus' || normalise(s.title).includes('bus')) {
+                          navigate('/bus');
+                        } else {
+                          openBookingModal?.();
+                        }
+                      }}
+                    >
                       {servicesPage.ctaLabel} <ArrowRight size={16} />
                     </button>
                   </div>

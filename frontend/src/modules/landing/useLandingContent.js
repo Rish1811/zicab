@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Award, BellRing, Bike, Briefcase, Building, Building2, Car, CheckCircle2, Clock,
+  Award, BellRing, Bike, Briefcase, Building, Building2, Bus, Car, CheckCircle2, Clock,
   Compass, DollarSign, FileText, Gift, Globe, GraduationCap, HardHat, Headphones,
   HeartHandshake, Image, MapPin, Navigation, Package, PhoneCall, Plane, ShieldCheck, Shield,
   ShoppingBag, Smartphone, Sparkles, Stethoscope, TrendingUp, UserCheck, Users,
@@ -20,7 +20,7 @@ import { LANDING_FALLBACK } from './landingFallback';
 
 // The API stores an icon name; components cannot be serialised.
 const ICONS = {
-  Award, BellRing, Bike, Briefcase, Building, Building2, Car, CheckCircle2, Clock,
+  Award, BellRing, Bike, Briefcase, Building, Building2, Bus, Car, CheckCircle2, Clock,
   Compass, DollarSign, FileText, Gift, Globe, GraduationCap, HardHat, Headphones,
   HeartHandshake, Image, MapPin, Navigation, Package, PhoneCall, Plane, Shield, ShieldCheck,
   ShoppingBag, Smartphone, Stethoscope, TrendingUp, UserCheck, Users,
