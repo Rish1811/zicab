@@ -148,9 +148,12 @@ export const LANDING_FALLBACK = {
       { label: 'Verified Drivers', count: 500, suffix: '+' },
     ],
     foundersTag: 'Leadership',
-    foundersHeading: 'Meet the Founder',
+    foundersHeading: 'Meet the Founders',
     founders: [
       { name: 'Shamsher Mohammed', role: 'Founder & CEO', photo: '', bio: '', linkedin: '' },
+      { name: 'Tabrez M J', role: 'Co-Founder', photo: '', bio: '', linkedin: '' },
+      { name: 'Nseer A K', role: 'Co-Founder', photo: '', bio: '', linkedin: '' },
+      { name: 'K M Shareef', role: 'Co-Founder', photo: '', bio: '', linkedin: '' },
     ],
     pillarsHeading: 'The Pillars of ZI CAB',
     pillars: [
