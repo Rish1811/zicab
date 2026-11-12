@@ -25,7 +25,7 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
     { id: 'Dzire', name: 'Maruti Suzuki Swift Dzire (Sedan)', rate: '₹23/km', capacity: '4 Seats', eta: '4 mins' },
     { id: 'Ertiga', name: 'Maruti Suzuki Ertiga (MUV)', rate: '₹33/km', capacity: '6 Seats', eta: '6 mins' },
     { id: 'Innova Crysta', name: 'Toyota Innova Crysta (Premium SUV)', rate: '₹35/km', capacity: '6 Seats', eta: '8 mins' },
-    { id: 'Toyota Fortuner', name: 'Toyota Fortuner (Luxury SUV)', rate: '₹30/km', capacity: '7 Seats', eta: '12 mins' },
+    { id: 'Toyota Fortuner', name: 'Toyota Fortuner (Luxury SUV)', rate: '₹40/km', capacity: '7 Seats', eta: '12 mins' },
   ];
 
   const tripTypes = [
@@ -188,10 +188,6 @@ const BookingModal = ({ isOpen, onClose, selectedVehicle = null }) => {
               <div className="sum-item">
                 <span className="sum-label">Selected Car:</span>
                 <span className="sum-val highlight">{vehicle}</span>
-              </div>
-              <div className="sum-item">
-                <span className="sum-label">Est. Fare:</span>
-                <span className="sum-val fare">₹780 (Fixed rate, no surge)</span>
               </div>
             </div>
 

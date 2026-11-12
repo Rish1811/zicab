@@ -160,7 +160,7 @@ const fallbackVehicles = [
       type: 'Luxury SUV',
       seats: '7 Seats',
       bags: '4 Bags',
-      price: '₹30',
+      price: '₹40',
       unit: '/km',
       image: '/vehicles/fortuner.jpg'
     }
