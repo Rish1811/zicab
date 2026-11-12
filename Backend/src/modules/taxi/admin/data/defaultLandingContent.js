@@ -130,7 +130,7 @@ export const defaultLandingContent = {
       { label: 'Verified Drivers' },
       { label: '24x7 Live SOS' },
     ],
-    copyright: '© 2026 Zi Group Pvt Ltd. All Rights Reserved.',
+    copyright: '© 2026 Zicab Group Private Limited. All Rights Reserved.',
   },
 
   seo: {

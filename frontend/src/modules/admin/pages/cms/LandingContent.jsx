@@ -130,7 +130,7 @@ const SEO_FIELDS = [
 const FOOTER_FIELDS = [
   { name: 'description', label: 'About blurb', placeholder: 'ZI CAB is a premium cab booking platform...', wide: true },
   { name: 'servicesHeading', label: 'Services column heading', placeholder: 'Cab Services' },
-  { name: 'copyright', label: 'Copyright line', placeholder: '© 2026 Zi Group Pvt Ltd. All Rights Reserved.', wide: true },
+  { name: 'copyright', label: 'Copyright line', placeholder: '© 2026 Zicab Group Private Limited. All Rights Reserved.', wide: true },
 ];
 
 const BRAND_FIELDS = [

@@ -1,12 +1,12 @@
 TERMS AND CONDITIONS
 Last updated: 22 September 2026
 
-These Terms and Conditions ("Terms") govern your use of the ZI CAB rider app, the ZI CAB driver app and our website at https://zicab.in (together, the "ZI CAB Platform"), operated by Zi Group Pvt Ltd ("ZI CAB", "we", "us" or "our").
+These Terms and Conditions ("Terms") govern your use of the ZI CAB rider app, the ZI CAB driver app and our website at https://zicab.in (together, the "ZI CAB Platform"), operated by Zicab Group Private Limited ("ZI CAB", "we", "us" or "our").
 
 This document is an electronic record under the Information Technology Act, 2000 and the rules made under it, and does not require a physical or digital signature. By creating an account or using the ZI CAB Platform, you agree to these Terms and to our Privacy Policy at https://zicab.in/privacy. If you do not agree, please do not use the ZI CAB Platform.
 
 A. About ZI CAB
-Zi Group Pvt Ltd
+Zicab Group Private Limited
 Founder & CEO: Shamsher Mohammed
 Office No 13, Grand Majestic Mall, Gandhinagar, Bengaluru - 560009, Karnataka, India
 Phone / WhatsApp: +91 8904343123
@@ -105,7 +105,7 @@ R. Indemnity
 You agree to indemnify ZI CAB against any claims, losses or penalties arising from your breach of these Terms, your violation of any law, or your misuse of the ZI CAB Platform.
 
 S. Intellectual Property
-The ZI CAB name, logo, apps, website and their content belong to Zi Group Pvt Ltd. You may use them only to access the ZI CAB Platform for its intended purpose, and may not copy, modify, reverse engineer or resell them.
+The ZI CAB name, logo, apps, website and their content belong to Zicab Group Private Limited. You may use them only to access the ZI CAB Platform for its intended purpose, and may not copy, modify, reverse engineer or resell them.
 
 T. Changes to the Service and These Terms
 We may change, add or remove features, prices and services from time to time. We may also update these Terms. The latest version will always be available at https://zicab.in/terms with the date it was last updated. If we make important changes we will notify you in the app, by SMS or by email. Continuing to use the ZI CAB Platform after the changes take effect means you accept them.
@@ -116,7 +116,7 @@ These Terms are governed by the laws of India. Any dispute will first be attempt
 V. Grievance Officer and Contact
 For any question, complaint or grievance about these Terms or the ZI CAB Platform, please contact:
 Shamsher Mohammed, Founder & CEO
-Zi Group Pvt Ltd
+Zicab Group Private Limited
 Office No 13, Grand Majestic Mall, Gandhinagar, Bengaluru - 560009, Karnataka, India
 Phone / WhatsApp: +91 8904343123
 Email: zicabofficial@gmail.com
