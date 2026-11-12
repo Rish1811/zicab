@@ -124,16 +124,16 @@ const fallbackVehicles = [
       type: 'Auto',
       seats: '3 Seats',
       bags: '1 Bag',
-      price: '₹8',
+      price: '₹17',
       unit: '/km',
       image: '/vehicles/auto.jpg'
     },
     {
-      name: 'Maruti Suzuki Dzire',
+      name: 'Maruti Suzuki Swift Dzire',
       type: 'Sedan',
       seats: '4 Seats',
       bags: '2 Bags',
-      price: '₹12',
+      price: '₹23',
       unit: '/km',
       image: '/vehicles/dzire.jpg'
     },
@@ -142,7 +142,7 @@ const fallbackVehicles = [
       type: 'MUV',
       seats: '6 Seats',
       bags: '4 Bags',
-      price: '₹16',
+      price: '₹33',
       unit: '/km',
       image: '/vehicles/ertiga.jpg'
     },
@@ -151,7 +151,7 @@ const fallbackVehicles = [
       type: 'Premium SUV',
       seats: '6 Seats',
       bags: '4 Bags',
-      price: '₹20',
+      price: '₹35',
       unit: '/km',
       image: '/vehicles/innova-crysta.jpg'
     },
