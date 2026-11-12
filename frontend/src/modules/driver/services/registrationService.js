@@ -588,6 +588,21 @@ export const getOwnerBusBookingCalendar = (params = {}) =>
 export const cancelOwnerBusBookingSeats = (bookingId, payload = {}) =>
   api.post(`/drivers/fleet/bus-bookings/${bookingId}/cancel`, payload, withDriverAuth());
 
+export const blockOwnerBusSeats = (busId, payload) =>
+  api.post(`/drivers/fleet/bus-services/${busId}/seat-blocks`, payload, withDriverAuth());
+
+export const releaseOwnerBusSeatBlocks = (busId, payload) =>
+  api.post(`/drivers/fleet/bus-services/${busId}/seat-blocks/release`, payload, withDriverAuth());
+
+export const setOwnerBusBoarding = (bookingId, state) =>
+  api.patch(`/drivers/fleet/bus-bookings/${bookingId}/boarding`, { state }, withDriverAuth());
+
+export const setOwnerBusCollection = (bookingId, method) =>
+  api.patch(`/drivers/fleet/bus-bookings/${bookingId}/collection`, { method }, withDriverAuth());
+
+export const getOwnerBusBookingTicket = (bookingId) =>
+  api.get(`/drivers/fleet/bus-bookings/${bookingId}/ticket`, withDriverAuth());
+
 export const createOwnerBusService = (payload) =>
   api.post("/drivers/fleet/bus-services", payload, withDriverAuth());
 

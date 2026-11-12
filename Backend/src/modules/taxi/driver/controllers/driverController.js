@@ -713,6 +713,12 @@ const serializeOwnerBusBooking = (booking = {}) => {
       paidAt: booking.payment?.paidAt || null,
     },
     cancellation: booking.cancellation || {},
+    pnr: booking.pnr || "",
+    boarding: {
+      boardedAt: booking.boarding?.boardedAt || null,
+      noShowAt: booking.boarding?.noShowAt || null,
+    },
+    counterPayment: { method: booking.counterPayment?.method || "" },
     routeSnapshot: booking.routeSnapshot || {},
     user: booking.userId
       ? {
@@ -1003,10 +1009,13 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
     // Expired holds don't count, even before the sweeper removes them.
     $or: [{ status: "booked" }, { status: "held", expiresAt: { $gt: new Date() } }],
   })
-    .select("seatId")
+    .select("seatId source bookingId")
     .lean();
 
   const reservedSeatIds = new Set(activeHolds.map((item) => String(item.seatId || "")));
+  const tripBlockedSeatIds = activeHolds
+    .filter((item) => item.source === VENDOR_BLOCK_SOURCE && !item.bookingId)
+    .map((item) => String(item.seatId || ""));
   const ladiesNeighbourSeatIds = await getLadiesNeighbourSeatIds({ busService, scheduleId, travelDate });
 
   const normalizeDeck = (deckRows = []) =>
@@ -1052,6 +1061,7 @@ const buildBusDriverSeatLayout = async ({ busService, scheduleId, travelDate }) 
     travelDate,
     availableSeats,
     blueprint,
+    tripBlockedSeatIds,
   };
 };
 
@@ -5919,6 +5929,15 @@ const createManualBusReservation = async ({ busService, body, bookedBy, rejectDe
       paidAt: new Date(),
     },
     notes,
+    ...(COUNTER_PAYMENT_METHODS.includes(toCleanString(body?.collection).toLowerCase())
+      ? {
+          counterPayment: {
+            method: toCleanString(body.collection).toLowerCase(),
+            updatedAt: new Date(),
+            updatedBy: `${bookedBy.bookingSource}:${String(bookedBy.userId || "")}`,
+          },
+        }
+      : {}),
   });
 
   await clearExpiredHoldsForSeats({ busServiceId: busService._id, scheduleId, travelDate, seatIds });
@@ -9231,6 +9250,164 @@ export const createOwnerBusReservation = async (req, res) => {
   res.status(201).json({
     success: true,
     data: { ...serializeOwnerBusBooking(booking.toObject()), pnr: booking.pnr || "" },
+  });
+};
+
+// ---- marks and blocks for the bus vendor panel -----------------------------
+
+// A seat lock with no booking behind it: the vendor took the seat off sale for
+// one trip. Riders, partner channels and the counter all see it as taken.
+const VENDOR_BLOCK_SOURCE = "vendor-block";
+const COUNTER_PAYMENT_METHODS = ["cash", "upi", "unpaid"];
+const BOARDING_STATES = ["waiting", "boarded", "no_show"];
+
+const vendorActor = (req) => `${req.auth?.role || "vendor"}:${String(req.auth?.sub || "")}`;
+
+/// One of this account's bookings, or a 404.
+const findOwnerBusBooking = async (req) => {
+  const scope = await resolveBusAccountScope(req);
+  const bookingId = toCleanString(req.params?.id);
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw new ApiError(404, "Booking not found");
+  }
+  const busIds = (await BusService.find(scope.filter).select("_id").lean()).map((item) => item._id);
+  const booking = await BusBooking.findOne({ _id: bookingId, busServiceId: { $in: busIds } });
+  if (!booking) {
+    throw new ApiError(404, "Booking not found");
+  }
+  return booking;
+};
+
+const readTripSeats = (req, busService) => {
+  const scheduleId = toCleanString(req.body?.scheduleId);
+  const travelDate = normalizeBusTravelDate(req.body?.travelDate || req.body?.date);
+  const seatIds = Array.isArray(req.body?.seatIds)
+    ? [...new Set(req.body.seatIds.map((item) => toCleanString(item)).filter(Boolean))]
+    : [];
+  if (!scheduleId || seatIds.length === 0) {
+    throw new ApiError(400, "scheduleId and seatIds are required");
+  }
+  if (!isScheduleAvailableOnDate(findBusSchedule(busService, scheduleId), travelDate)) {
+    throw new ApiError(404, "This bus does not run on the selected date");
+  }
+  const busSeatIds = new Set(flattenBusBlueprintSeats(busService.blueprint).map((seat) => String(seat.id || "")));
+  const unknown = seatIds.find((seatId) => !busSeatIds.has(seatId));
+  if (unknown) {
+    throw new ApiError(400, `Seat ${unknown} is not on this bus`);
+  }
+  return { scheduleId, travelDate, seatIds };
+};
+
+export const blockOwnerBusSeats = async (req, res) => {
+  const { busService } = await findOwnerBus(req);
+  const { scheduleId, travelDate, seatIds } = readTripSeats(req, busService);
+  const holdToken = `block:${String(req.auth?.sub || "")}`;
+
+  await clearExpiredHoldsForSeats({ busServiceId: busService._id, scheduleId, travelDate, seatIds });
+  const startedAt = new Date();
+  try {
+    await BusSeatHold.insertMany(
+      seatIds.map((seatId) => ({
+        busServiceId: busService._id,
+        bookingId: null,
+        userId: null,
+        source: VENDOR_BLOCK_SOURCE,
+        scheduleId,
+        travelDate,
+        seatId,
+        holdToken,
+        status: "booked",
+        expiresAt: null,
+      })),
+      { ordered: true },
+    );
+  } catch (error) {
+    // All or nothing: drop the blocks this request made before the clash.
+    await BusSeatHold.deleteMany({
+      busServiceId: busService._id,
+      scheduleId,
+      travelDate,
+      seatId: { $in: seatIds },
+      source: VENDOR_BLOCK_SOURCE,
+      bookingId: null,
+      holdToken,
+      createdAt: { $gte: startedAt },
+    });
+    if (error?.code === 11000) {
+      throw new ApiError(409, "One or more of these seats are already booked or blocked");
+    }
+    throw error;
+  }
+
+  publishBusSeatChange({ busServiceId: busService._id, scheduleId, travelDate, change: "booked", seatIds });
+  res.json({ success: true, data: await buildBusDriverSeatLayout({ busService, scheduleId, travelDate }) });
+};
+
+export const releaseOwnerBusSeatBlocks = async (req, res) => {
+  const { busService } = await findOwnerBus(req);
+  const { scheduleId, travelDate, seatIds } = readTripSeats(req, busService);
+
+  // Only blocks: a seat someone has booked is never freed from here.
+  const result = await BusSeatHold.deleteMany({
+    busServiceId: busService._id,
+    scheduleId,
+    travelDate,
+    seatId: { $in: seatIds },
+    source: VENDOR_BLOCK_SOURCE,
+    bookingId: null,
+  });
+  if (result.deletedCount) {
+    publishBusSeatChange({ busServiceId: busService._id, scheduleId, travelDate, change: "released", seatIds });
+  }
+  res.json({ success: true, data: await buildBusDriverSeatLayout({ busService, scheduleId, travelDate }) });
+};
+
+export const setOwnerBusBoarding = async (req, res) => {
+  const booking = await findOwnerBusBooking(req);
+  const state = toCleanString(req.body?.state).toLowerCase();
+  if (!BOARDING_STATES.includes(state)) {
+    throw new ApiError(400, "state must be waiting, boarded or no_show");
+  }
+  if (booking.status !== "confirmed") {
+    throw new ApiError(409, "Only confirmed bookings can be marked");
+  }
+
+  booking.set("boarding.boardedAt", state === "boarded" ? new Date() : null);
+  booking.set("boarding.boardedBy", state === "boarded" ? vendorActor(req) : "");
+  booking.set("boarding.noShowAt", state === "no_show" ? new Date() : null);
+  await booking.save();
+  res.json({ success: true, data: serializeOwnerBusBooking(booking.toObject()) });
+};
+
+export const setOwnerBusCollection = async (req, res) => {
+  const booking = await findOwnerBusBooking(req);
+  const method = toCleanString(req.body?.method).toLowerCase();
+  if (!COUNTER_PAYMENT_METHODS.includes(method)) {
+    throw new ApiError(400, "method must be cash, upi or unpaid");
+  }
+
+  booking.set("counterPayment", { method, updatedAt: new Date(), updatedBy: vendorActor(req) });
+  await booking.save();
+  res.json({ success: true, data: serializeOwnerBusBooking(booking.toObject()) });
+};
+
+/// What a printed ticket needs, with the same QR the conductor's scanner reads.
+export const getOwnerBusBookingTicket = async (req, res) => {
+  const booking = (await findOwnerBusBooking(req)).toObject();
+  const serialized = serializeOwnerBusBooking(booking);
+  const pnr = booking.pnr || booking.bookingCode || "";
+  const seatLabels = (serialized.activeSeats || []).map((seat) => seat.seatLabel);
+  const qrText = ["ZIBUS", pnr, booking.travelDate, booking.scheduleId, seatLabels.join(".")].join("|");
+
+  res.json({
+    success: true,
+    data: {
+      ...serialized,
+      pnr,
+      boardingPoint: booking.boardingPoint || {},
+      droppingPoint: booking.droppingPoint || {},
+      qrDataUrl: await QRCode.toDataURL(qrText, { margin: 1, width: 240, errorCorrectionLevel: "M" }),
+    },
   });
 };
 

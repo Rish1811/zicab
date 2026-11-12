@@ -19,6 +19,11 @@ import {
   createOwnerBusReservation,
   createOwnerBusService,
   cancelOwnerBusBookingSeats,
+  blockOwnerBusSeats,
+  releaseOwnerBusSeatBlocks,
+  setOwnerBusBoarding,
+  setOwnerBusCollection,
+  getOwnerBusBookingTicket,
   createDriverPaymentQr,
   getDriverPaymentUpi,
   saveDriverPaymentUpi,
@@ -459,6 +464,32 @@ driverRouter.post(
   "/fleet/bus-bookings/:id/cancel",
   authenticate(["owner", "bus_driver"]),
   asyncHandler(cancelOwnerBusBookingSeats),
+);
+// The bus vendor panel: take seats off sale for a trip, and mark bookings.
+driverRouter.post(
+  "/fleet/bus-services/:id/seat-blocks",
+  authenticate(["owner", "bus_driver"]),
+  asyncHandler(blockOwnerBusSeats),
+);
+driverRouter.post(
+  "/fleet/bus-services/:id/seat-blocks/release",
+  authenticate(["owner", "bus_driver"]),
+  asyncHandler(releaseOwnerBusSeatBlocks),
+);
+driverRouter.patch(
+  "/fleet/bus-bookings/:id/boarding",
+  authenticate(["owner", "bus_driver"]),
+  asyncHandler(setOwnerBusBoarding),
+);
+driverRouter.patch(
+  "/fleet/bus-bookings/:id/collection",
+  authenticate(["owner", "bus_driver"]),
+  asyncHandler(setOwnerBusCollection),
+);
+driverRouter.get(
+  "/fleet/bus-bookings/:id/ticket",
+  authenticate(["owner", "bus_driver"]),
+  asyncHandler(getOwnerBusBookingTicket),
 );
 driverRouter.get(
   "/fleet/drivers",

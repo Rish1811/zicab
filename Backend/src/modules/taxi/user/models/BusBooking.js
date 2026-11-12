@@ -188,6 +188,15 @@ const busBookingSchema = new mongoose.Schema(
     boarding: {
       boardedAt: { type: Date, default: null },
       boardedBy: { type: String, default: '' },
+      // Marked by the bus vendor when the passenger did not turn up.
+      noShowAt: { type: Date, default: null },
+    },
+    // How a seat sold at the counter was paid, as the bus vendor records it.
+    // Separate from `payment`, which is the online payment.
+    counterPayment: {
+      method: { type: String, enum: ['', 'cash', 'upi', 'unpaid'], default: '' },
+      updatedAt: { type: Date, default: null },
+      updatedBy: { type: String, default: '' },
     },
     // Food pre-booked from partner dhabas. It is charged in the same payment
     // as the seats but kept out of `amount`, so the seat cancellation and

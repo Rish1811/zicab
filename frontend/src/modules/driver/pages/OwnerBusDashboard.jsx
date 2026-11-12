@@ -1,19 +1,31 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Bus, CheckCircle2, ClipboardList, LayoutGrid, Search, Settings2, Ticket } from 'lucide-react';
+import { ArrowLeft, Ban, Bus, CheckCircle2, ClipboardList, LayoutGrid, Printer, Search, Settings2, Ticket } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import HorizontalSeatMap from '../../admin/pages/bus-service/HorizontalSeatMap';
 import {
   clearDriverAuthState,
+  blockOwnerBusSeats,
   cancelOwnerBusBookingSeats,
   createOwnerBusReservation,
+  getOwnerBusBookingTicket,
   getOwnerBusBookings,
   getOwnerBusSeatLayout,
   getOwnerBusServices,
+  releaseOwnerBusSeatBlocks,
+  setOwnerBusBoarding,
+  setOwnerBusCollection,
 } from '../services/registrationService';
+import { boardingState, openPrintWindow, paymentLabel, printManifest, printTicket } from './busPrint';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const EMPTY_PASSENGER = { name: '', phone: '', age: '', gender: 'Male', email: '', notes: '' };
+const EMPTY_PASSENGER = { name: '', phone: '', age: '', gender: 'Male', email: '', notes: '', collection: 'cash' };
+const COUNTER_SOURCES = ['owner', 'bus_driver', 'admin'];
+const BOARDING_OPTIONS = [
+  { key: 'waiting', label: 'Waiting', on: 'bg-slate-700 text-white' },
+  { key: 'boarded', label: 'Boarded', on: 'bg-emerald-600 text-white' },
+  { key: 'no_show', label: 'No-show', on: 'bg-rose-600 text-white' },
+];
 const INPUT_CLASS = 'h-12 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-200';
 
 const STATUS_TONE = {
@@ -104,6 +116,11 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [search, setSearch] = useState('');
   const [cancellingKey, setCancellingKey] = useState('');
+  // Taking seats off sale for this trip.
+  const [blockMode, setBlockMode] = useState(false);
+  const [blockSeatIds, setBlockSeatIds] = useState([]);
+  const [blocking, setBlocking] = useState(false);
+  const [markingKey, setMarkingKey] = useState('');
 
   const bus = useMemo(() => buses.find((item) => item.id === busId) || null, [buses, busId]);
   const schedules = useMemo(() => (Array.isArray(bus?.schedules) ? bus.schedules : []), [bus]);
@@ -189,8 +206,46 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
     return { base, tax, total: roundMoney(base + tax) };
   }, [seatFare, selectedSeats, taxPercent]);
 
+  const tripBlocked = useMemo(() => new Set(layout?.tripBlockedSeatIds || []), [layout]);
+
+  const unblockSeat = async (cell) => {
+    if (!window.confirm(`Put seat ${cell.label || cell.id} back on sale for this trip?`)) return;
+    setBlocking(true);
+    try {
+      setLayout(unwrap(await releaseOwnerBusSeatBlocks(busId, { scheduleId, travelDate, seatIds: [cell.id] })));
+      toast.success(`Seat ${cell.label || cell.id} is on sale again`);
+    } catch (error) {
+      toast.error(error?.message || 'Could not unblock the seat');
+    } finally {
+      setBlocking(false);
+    }
+  };
+
+  const blockSelectedSeats = async () => {
+    if (!blockSeatIds.length) return;
+    setBlocking(true);
+    try {
+      setLayout(unwrap(await blockOwnerBusSeats(busId, { scheduleId, travelDate, seatIds: blockSeatIds })));
+      toast.success(`${blockSeatIds.length} seat${blockSeatIds.length > 1 ? 's' : ''} blocked for this trip`);
+      setBlockSeatIds([]);
+    } catch (error) {
+      toast.error(error?.message || 'Could not block the seats');
+      loadLayout();
+    } finally {
+      setBlocking(false);
+    }
+  };
+
   const toggleSeat = (cell) => {
+    if (tripBlocked.has(cell.id)) {
+      if (blockMode) unblockSeat(cell);
+      return;
+    }
     if (cell.status === 'booked') return;
+    if (blockMode) {
+      setBlockSeatIds((current) => (current.includes(cell.id) ? current.filter((id) => id !== cell.id) : [...current, cell.id]));
+      return;
+    }
     setConfirmation(null);
     setSelectedSeatIds((current) => (current.includes(cell.id) ? current.filter((id) => id !== cell.id) : [...current, cell.id]));
   };
@@ -217,6 +272,7 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
           email: passenger.email.trim(),
         },
         notes: passenger.notes.trim(),
+        collection: passenger.collection,
       }));
       setConfirmation(booking);
       setSelectedSeatIds([]);
@@ -249,6 +305,72 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
     } finally {
       setCancellingKey('');
     }
+  };
+
+  const markBoarding = async (booking, state) => {
+    setMarkingKey(`${booking.id}-boarding`);
+    try {
+      const updated = unwrap(await setOwnerBusBoarding(booking.id, state));
+      setBookings((current) => current.map((item) => (item.id === booking.id ? { ...item, ...updated } : item)));
+    } catch (error) {
+      toast.error(error?.message || 'Could not mark this passenger');
+    } finally {
+      setMarkingKey('');
+    }
+  };
+
+  const markPayment = async (booking, method) => {
+    setMarkingKey(`${booking.id}-payment`);
+    try {
+      const updated = unwrap(await setOwnerBusCollection(booking.id, method));
+      setBookings((current) => current.map((item) => (item.id === booking.id ? { ...item, ...updated } : item)));
+    } catch (error) {
+      toast.error(error?.message || 'Could not save the payment');
+    } finally {
+      setMarkingKey('');
+    }
+  };
+
+  const handlePrintTicket = async (bookingId) => {
+    const win = openPrintWindow('Ticket');
+    if (!win) {
+      toast.error('Allow pop-ups for this site to print tickets');
+      return;
+    }
+    try {
+      printTicket(win, unwrap(await getOwnerBusBookingTicket(bookingId)));
+    } catch (error) {
+      win.close();
+      toast.error(error?.message || 'Could not load the ticket');
+    }
+  };
+
+  const activeBookings = useMemo(
+    () => bookings.filter((booking) => booking.status === 'confirmed' && (booking.activeSeats || []).length),
+    [bookings],
+  );
+  const tripCounts = useMemo(() => {
+    const counts = { boarded: 0, waiting: 0, no_show: 0, cash: 0, upi: 0, unpaid: 0 };
+    activeBookings.forEach((booking) => {
+      counts[boardingState(booking)] += (booking.activeSeats || []).length;
+      const method = booking.counterPayment?.method;
+      if (method) counts[method] += Number(booking.amount || 0);
+    });
+    return counts;
+  }, [activeBookings]);
+
+  const handlePrintManifest = () => {
+    const win = openPrintWindow('Passenger list');
+    if (!win) {
+      toast.error('Allow pop-ups for this site to print the passenger list');
+      return;
+    }
+    const schedule = schedules.find((item) => item.id === scheduleId);
+    printManifest(win, {
+      title: `Passenger list: ${[bus?.busName, bus?.serviceNumber].filter(Boolean).join(' · ') || 'Bus'}`,
+      subtitle: [formatDate(travelDate), schedule ? scheduleLabel(schedule) : ''].filter(Boolean).join(' · '),
+      bookings: activeBookings,
+    });
   };
 
   const visibleBookings = useMemo(() => {
@@ -319,12 +441,41 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
   const bookTab = (
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
       <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-lg font-bold text-slate-900">
-            {layout?.bus?.fromCity && layout?.bus?.toCity ? `${layout.bus.fromCity} to ${layout.bus.toCity}` : 'Seats'}
-          </h2>
-          <p className="text-sm text-slate-500">{formatDate(travelDate)}</p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              {layout?.bus?.fromCity && layout?.bus?.toCity ? `${layout.bus.fromCity} to ${layout.bus.toCity}` : 'Seats'}
+            </h2>
+            <p className="text-sm text-slate-500">{formatDate(travelDate)}</p>
+          </div>
+          {layout ? (
+            <button
+              type="button"
+              onClick={() => {
+                setBlockMode((current) => !current);
+                setBlockSeatIds([]);
+                setSelectedSeatIds([]);
+              }}
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${blockMode ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+            >
+              <Ban size={16} />
+              {blockMode ? 'Done blocking' : 'Block seats'}
+            </button>
+          ) : null}
         </div>
+        {blockMode ? (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-900">
+            <p className="flex-1">Tap free seats to take them off sale for this trip only. Tap a blocked seat to put it back on sale.</p>
+            <button
+              type="button"
+              disabled={!blockSeatIds.length || blocking}
+              onClick={blockSelectedSeats}
+              className="rounded-lg bg-rose-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50"
+            >
+              {blocking ? 'Saving...' : `Block ${blockSeatIds.length || ''} seat${blockSeatIds.length === 1 ? '' : 's'}`}
+            </button>
+          </div>
+        ) : null}
         {layoutError ? (
           <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">{layoutError}. Try another date or schedule.</p>
         ) : loadingLayout && !layout ? (
@@ -337,9 +488,15 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
               blueprint={layout.blueprint}
               showPrices
               getSeat={(cell) => ({
-                status: cell.status === 'booked' ? 'booked' : selectedSeatIds.includes(cell.id) ? 'selected' : 'available',
+                status: tripBlocked.has(cell.id)
+                  ? 'blocked'
+                  : cell.status === 'booked'
+                    ? 'booked'
+                    : (blockMode ? blockSeatIds : selectedSeatIds).includes(cell.id) ? 'selected' : 'available',
                 price: seatPriceWithTax(cell),
+                title: tripBlocked.has(cell.id) ? `${cell.label || cell.id} · blocked for this trip` : undefined,
               })}
+              legend="booking"
               onSeatClick={toggleSeat}
             />
           </div>
@@ -360,6 +517,13 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
               <div><dt className="text-xs text-emerald-700">Collect</dt><dd className="font-bold">{formatMoney(confirmation.amount, confirmation.currency)}</dd></div>
               <div className="col-span-2"><dt className="text-xs text-emerald-700">Seats</dt><dd className="font-bold">{(confirmation.activeSeats || []).map((seat) => seat.seatLabel).join(', ')}</dd></div>
             </dl>
+            <button
+              type="button"
+              onClick={() => handlePrintTicket(confirmation.id)}
+              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-100"
+            >
+              <Printer size={15} /> Print ticket
+            </button>
           </div>
         ) : null}
 
@@ -398,6 +562,13 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
           </div>
           <Field label="Email (optional)">
             <input type="email" autoComplete="off" value={passenger.email} onChange={(event) => setPassenger((current) => ({ ...current, email: event.target.value }))} className={INPUT_CLASS} />
+          </Field>
+          <Field label="Payment">
+            <select value={passenger.collection} onChange={(event) => setPassenger((current) => ({ ...current, collection: event.target.value }))} className={INPUT_CLASS}>
+              <option value="cash">Cash</option>
+              <option value="upi">UPI</option>
+              <option value="unpaid">Not paid yet</option>
+            </select>
           </Field>
           <Field label="Notes (optional)">
             <input value={passenger.notes} onChange={(event) => setPassenger((current) => ({ ...current, notes: event.target.value }))} autoComplete="off" className={INPUT_CLASS} />
@@ -439,6 +610,14 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
     <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-slate-900">{formatDate(travelDate)}</h2>
+        <button
+          type="button"
+          onClick={handlePrintManifest}
+          disabled={!activeBookings.length}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 sm:ml-auto"
+        >
+          <Printer size={16} /> Print passenger list
+        </button>
         <div className="flex h-11 w-full items-center gap-2 rounded-xl border border-slate-300 px-3 sm:w-72">
           <Search size={16} className="shrink-0 text-slate-400" />
           <input
@@ -449,6 +628,24 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
           />
         </div>
       </div>
+
+      {activeBookings.length ? (
+        <div className="mt-4 grid grid-cols-3 gap-2 text-sm sm:grid-cols-6">
+          {[
+            ['Boarded', `${tripCounts.boarded} seats`, 'text-emerald-700'],
+            ['Waiting', `${tripCounts.waiting} seats`, 'text-slate-900'],
+            ['No-show', `${tripCounts.no_show} seats`, 'text-rose-700'],
+            ['Cash', formatMoney(tripCounts.cash, currency), 'text-slate-900'],
+            ['UPI', formatMoney(tripCounts.upi, currency), 'text-slate-900'],
+            ['Not paid yet', formatMoney(tripCounts.unpaid, currency), 'text-amber-700'],
+          ].map(([label, value, tone]) => (
+            <div key={label} className="rounded-xl bg-slate-50 px-3 py-2">
+              <p className="text-xs font-medium text-slate-500">{label}</p>
+              <p className={`font-bold tabular-nums ${tone}`}>{value}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {loadingBookings && !bookings.length ? (
         <p className="py-10 text-center text-sm text-slate-500">Loading bookings...</p>
@@ -501,6 +698,50 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
                     </button>
                   ) : null}
                 </div>
+                {canCancel ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <div className="inline-flex overflow-hidden rounded-lg border border-slate-300" role="group" aria-label="Boarding">
+                      {BOARDING_OPTIONS.map((option) => {
+                        const on = boardingState(booking) === option.key;
+                        return (
+                          <button
+                            key={option.key}
+                            type="button"
+                            aria-pressed={on}
+                            disabled={Boolean(markingKey) || on}
+                            onClick={() => markBoarding(booking, option.key)}
+                            className={`px-3 py-1.5 text-xs font-semibold ${on ? option.on : 'bg-white text-slate-600 hover:bg-slate-50'} disabled:cursor-default`}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {COUNTER_SOURCES.includes(booking.bookingSource) ? (
+                      <select
+                        aria-label="Payment"
+                        value={booking.counterPayment?.method || ''}
+                        disabled={Boolean(markingKey)}
+                        onChange={(event) => markPayment(booking, event.target.value)}
+                        className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700"
+                      >
+                        {booking.counterPayment?.method ? null : <option value="" disabled>Payment not recorded</option>}
+                        <option value="cash">Paid in cash</option>
+                        <option value="upi">Paid by UPI</option>
+                        <option value="unpaid">Not paid yet</option>
+                      </select>
+                    ) : (
+                      <span className="text-xs font-semibold text-slate-500">{paymentLabel(booking)}</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handlePrintTicket(booking.id)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:underline"
+                    >
+                      <Printer size={14} /> Print ticket
+                    </button>
+                  </div>
+                ) : null}
               </li>
             );
           })}
