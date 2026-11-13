@@ -253,6 +253,7 @@ const adminRoutes = (
       <Route path="users/create" element={<AdminUserCreate />} />
       <Route path="users/subscriptions" element={<AdminUserSubscriptions />} />
       <Route path="users/subscriptions/create" element={<AdminUserSubscriptionCreate />} />
+      <Route path="users/subscriptions/:planId/edit" element={<AdminUserSubscriptionCreate />} />
       <Route path="users/:id" element={<AdminUserDetails />} />
       <Route path="users/delete-requests" element={<AdminDeleteRequestUsers />} />
       <Route path="users/bulk-upload" element={<AdminUserBulkUpload />} />

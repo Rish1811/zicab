@@ -24,6 +24,9 @@ import {
   Ticket
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import ExpiryEditor from '../../components/ExpiryEditor';
+import { adminService } from '../../services/adminService';
 
 const UserDetails = () => {
   const { id } = useParams();
@@ -38,6 +41,7 @@ const UserDetails = () => {
   const [walletHistory, setWalletHistory] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
+  const [editingSub, setEditingSub] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -252,6 +256,23 @@ const UserDetails = () => {
 
   return (
     <div className="space-y-4 animate-in fade-in duration-700 text-gray-950 font-sans p-4 lg:p-8 bg-gray-50 min-h-screen">
+      {editingSub && (
+        <ExpiryEditor
+          title={`Change end date: ${editingSub.name || 'Plan'}`}
+          subtitle={`${editingSub.vehicle_type?.name || 'Vehicle plan'} · ${editingSub.rides_used || 0} ride(s) used`}
+          expiresAt={editingSub.expiresAt}
+          onClose={() => setEditingSub(null)}
+          onSave={async (body) => {
+            const response = await adminService.updateUserSubscriptionExpiry(editingSub.id, body);
+            const updated = response?.data || {};
+            setSubscriptions((list) => list.map((item) => (item.id === editingSub.id
+              ? { ...item, expiresAt: updated.expiresAt ?? item.expiresAt, status: updated.status || item.status }
+              : item)));
+            setEditingSub(null);
+            toast.success('End date changed');
+          }}
+        />
+      )}
       {/* HEADER & BREADCRUMBS */}
       <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
         <span>Users</span>
@@ -659,7 +680,16 @@ const UserDetails = () => {
                   </div>
                   
                   <div className="mt-4 pt-3 border-t border-gray-100 text-[11px] font-medium text-gray-400 flex items-center gap-1.5">
-                    <Clock size={12} /> Expires {item.expiresAt ? new Date(item.expiresAt).toLocaleDateString('en-IN') : 'Never'}
+                    <Clock size={12} /> Expires {item.expiresAt ? new Date(item.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Never'}
+                    {item.status !== 'cancelled' && item.active !== false && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingSub(item)}
+                        className="ml-auto rounded-md border border-gray-200 px-2 py-1 text-[11px] font-bold text-gray-700 hover:bg-gray-50"
+                      >
+                        Change end date
+                      </button>
+                    )}
                   </div>
                 </div>
               )) : (

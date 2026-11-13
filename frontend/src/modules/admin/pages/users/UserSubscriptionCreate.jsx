@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Car, ChevronRight, IndianRupee, Loader2, Plus, Ticket } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
 
@@ -8,6 +8,9 @@ const inputClass = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm f
 
 const UserSubscriptionCreate = () => {
   const navigate = useNavigate();
+  const { planId } = useParams();
+  const isEdit = Boolean(planId);
+  const [loadingPlan, setLoadingPlan] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [formData, setFormData] = useState({
@@ -36,6 +39,39 @@ const UserSubscriptionCreate = () => {
     loadVehicles();
   }, []);
 
+  // Editing: fill the form from the saved plan.
+  useEffect(() => {
+    if (!isEdit) return;
+    const loadPlan = async () => {
+      try {
+        const response = await adminService.getUserSubscriptionPlans();
+        const plans = Array.isArray(response?.data?.results) ? response.data.results : [];
+        const plan = plans.find((item) => String(item._id || item.id) === String(planId));
+        if (!plan) {
+          toast.error('Plan not found');
+          navigate('/admin/users/subscriptions');
+          return;
+        }
+        setFormData({
+          name: plan.name || '',
+          description: plan.description || '',
+          amount: plan.amount ?? '',
+          duration: plan.duration ?? '',
+          transport_type: plan.transport_type || 'taxi',
+          vehicle_type_id: String(plan.vehicle_type_id?._id || plan.vehicle_type_id || ''),
+          benefit_type: plan.benefit_type === 'unlimited' ? 'unlimited' : 'limited',
+          ride_limit: plan.ride_limit || '',
+          how_it_works: plan.how_it_works || '',
+        });
+      } catch (error) {
+        toast.error(error?.message || 'Failed to load plan');
+      } finally {
+        setLoadingPlan(false);
+      }
+    };
+    loadPlan();
+  }, [isEdit, planId, navigate]);
+
   const handleSave = async () => {
     if (!formData.name || !formData.amount || !formData.duration || !formData.vehicle_type_id) {
       toast.error('Please complete all required fields');
@@ -53,11 +89,20 @@ const UserSubscriptionCreate = () => {
         ...formData,
         ride_limit: formData.benefit_type === 'unlimited' ? 0 : Number(formData.ride_limit || 0),
       };
-      const response = await adminService.createUserSubscriptionPlan(payload);
-      toast.success(response?.message || 'Customer subscription created');
+      if (isEdit) {
+        await adminService.updateUserSubscriptionPlan(planId, {
+          ...payload,
+          amount: Number(payload.amount),
+          duration: Number(payload.duration),
+        });
+        toast.success('Plan updated');
+      } else {
+        const response = await adminService.createUserSubscriptionPlan(payload);
+        toast.success(response?.message || 'Customer subscription created');
+      }
       navigate('/admin/users/subscriptions');
     } catch (error) {
-      toast.error(error?.message || 'Failed to create subscription');
+      toast.error(error?.response?.data?.message || error?.message || 'Failed to save subscription');
     } finally {
       setSaving(false);
     }
@@ -72,9 +117,9 @@ const UserSubscriptionCreate = () => {
             <ChevronRight size={12} />
             <Link to="/admin/users/subscriptions" className="hover:text-gray-700">Subscription Management</Link>
             <ChevronRight size={12} />
-            <span className="text-gray-700">Create</span>
+            <span className="text-gray-700">{isEdit ? 'Edit' : 'Create'}</span>
           </div>
-          <h1 className="text-xl font-bold text-gray-900">Create Customer Subscription</h1>
+          <h1 className="text-xl font-bold text-gray-900">{isEdit ? 'Edit Customer Subscription' : 'Create Customer Subscription'}</h1>
         </div>
         <button
           type="button"
@@ -153,12 +198,18 @@ const UserSubscriptionCreate = () => {
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || loadingPlan}
             className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-yellow-400 px-4 py-3 text-sm font-bold text-black transition hover:bg-yellow-500 disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus size={16} />}
-            Save Subscription
+            {isEdit ? 'Save Changes' : 'Save Subscription'}
           </button>
+          {isEdit && (
+            <p className="mt-3 text-xs font-medium leading-5 text-gray-500">
+              Changes apply to people who buy this plan from now on. Plans already bought keep their end date; change those
+              from the customer's page, Subscriptions tab.
+            </p>
+          )}
           <div className="mt-6 rounded-xl bg-gray-50 p-4 border border-gray-100">
             <div className="flex items-center gap-2 text-sm font-bold text-gray-700">
               <Car size={15} />

@@ -42,6 +42,9 @@ import {
   deleteSubscriptionPlan,
   getDriverSubscriptionPayments,
   createCustomerSubscriptionPlan,
+  updateCustomerSubscriptionPlan,
+  updateDriverSubscriptionExpiry,
+  updateUserSubscriptionExpiry,
   createUser,
   createZone,
   bulkImportUsers,
@@ -366,6 +369,10 @@ adminRouter.get('/admin/driver-subscriptions/settings', getSubscriptionSettings)
 adminRouter.post('/admin/driver-subscriptions/settings', updateSubscriptionSettings);
 adminRouter.get('/admin/user-subscriptions/plans/list', getCustomerSubscriptionPlans);
 adminRouter.post('/admin/user-subscriptions/plans/create', createCustomerSubscriptionPlan);
+adminRouter.patch('/admin/user-subscriptions/plans/:id', updateCustomerSubscriptionPlan);
+// Change when a bought pass or plan ends (extend, shorten, end now).
+adminRouter.patch('/admin/driver-subscriptions/passes/:id/expiry', updateDriverSubscriptionExpiry);
+adminRouter.patch('/admin/user-subscriptions/:id/expiry', updateUserSubscriptionExpiry);
 
 adminRouter.get('/countries', getCountries);
 adminRouter.get('/admin/countries', getCountries);

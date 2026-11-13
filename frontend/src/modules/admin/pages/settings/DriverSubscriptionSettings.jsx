@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Plus, Save, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../../shared/api/axiosInstance';
+import ExpiryEditor from '../../components/ExpiryEditor';
 
 /**
  * The daily pass a driver buys instead of paying commission per trip.
@@ -75,6 +76,7 @@ const DriverSubscriptionSettings = () => {
   const [plans, setPlans] = useState([]);
   const [payments, setPayments] = useState({ results: [], total: 0, collected: 0 });
   const [newPlan, setNewPlan] = useState({ name: '', amount: '', vehicle_classes: [] });
+  const [editingPass, setEditingPass] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -377,12 +379,13 @@ const DriverSubscriptionSettings = () => {
                 <th className="text-left px-4 py-3 font-bold">Valid until</th>
                 <th className="text-left px-4 py-3 font-bold">Trips</th>
                 <th className="text-left px-4 py-3 font-bold">Status</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {payments.results.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500 text-sm">
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500 text-sm">
                     No subscription payments yet.
                   </td>
                 </tr>
@@ -407,12 +410,36 @@ const DriverSubscriptionSettings = () => {
                       {row.active ? 'Active' : 'Expired'}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setEditingPass(row)}
+                      className="whitespace-nowrap rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                    >
+                      Change end
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {editingPass && (
+        <ExpiryEditor
+          title={`Change end: ${editingPass.driverName}`}
+          subtitle={`${editingPass.planName || 'Pass'} · ${editingPass.driverPhone || ''}`}
+          expiresAt={editingPass.expiresAt}
+          onClose={() => setEditingPass(null)}
+          onSave={async (body) => {
+            await api.patch(`/admin/driver-subscriptions/passes/${editingPass.id}/expiry`, body);
+            setEditingPass(null);
+            toast.success('Pass end changed');
+            load();
+          }}
+        />
+      )}
     </div>
   );
 };

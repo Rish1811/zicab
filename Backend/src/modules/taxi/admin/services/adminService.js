@@ -61,6 +61,7 @@ import { comparePassword, hashPassword } from '../../driver/services/authService
 import { grantDriverJoiningBonus,
   applyDriverWalletAdjustment,
   serializeDriverWallet,
+  syncDriverWalletBlockedFlag,
 } from '../../driver/services/walletService.js';
 import { purchaseDriverSubscriptionFromJoiningBonus } from '../../driver/services/driverSubscriptionService.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS, VEHICLE_TYPES } from '../../constants/index.js';
@@ -6120,6 +6121,163 @@ export const listDriverSubscriptionPayments = async ({ page = 1, limit = 25, dri
     // question anyone opening this page has.
     collected: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
   };
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The new end of a pass an admin is changing:
+ *  - set:   an exact date and time
+ *  - shift: move it by whole days (negative shortens it)
+ *  - end:   now
+ */
+const resolveAdminExpiry = (current, payload = {}) => {
+  const mode = String(payload.mode || '').trim().toLowerCase();
+  const now = new Date();
+
+  if (mode === 'end') return now;
+
+  if (mode === 'set') {
+    const next = new Date(payload.expiresAt);
+    if (!payload.expiresAt || Number.isNaN(next.getTime())) {
+      throw new ApiError(400, 'Pick a valid expiry date');
+    }
+    if (next.getTime() > now.getTime() + 10 * 365 * DAY_MS) {
+      throw new ApiError(400, 'Expiry is too far in the future');
+    }
+    return next;
+  }
+
+  if (mode === 'shift') {
+    const days = Number(payload.days);
+    if (!Number.isInteger(days) || days === 0 || Math.abs(days) > 3650) {
+      throw new ApiError(400, 'Days must be a whole number, like 4 or -2');
+    }
+    // A pass with no end (or one already over) moves from now.
+    const base = current && new Date(current).getTime() > now.getTime() ? new Date(current) : now;
+    return new Date(base.getTime() + days * DAY_MS);
+  }
+
+  throw new ApiError(400, 'mode must be set, shift or end');
+};
+
+const adminEditEntry = (adminId, from, to, note) => ({
+  at: new Date(),
+  by: `admin:${String(adminId || '')}`,
+  from: from || null,
+  to,
+  note: String(note || '').trim().slice(0, 200),
+});
+
+/** Change when a driver's pass ends: extend it, shorten it, or end it now. */
+export const updateDriverSubscriptionExpiry = async (id, payload = {}, adminId = '') => {
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(404, 'Pass not found');
+  const pass = await DriverSubscription.findById(id);
+  if (!pass || !pass.paidAt) throw new ApiError(404, 'Pass not found');
+  if (pass.status !== 'active') {
+    throw new ApiError(409, `This pass was ${pass.status} and cannot be changed`);
+  }
+
+  const from = pass.expiresAt;
+  const to = resolveAdminExpiry(from, payload);
+  if (to.getTime() < new Date(pass.startsAt).getTime()) {
+    throw new ApiError(400, 'A pass cannot end before it started');
+  }
+
+  pass.expiresAt = to;
+  // Running again: the driver should hear when this new end comes. Ended:
+  // the expiry sweep sends the usual "your subscription has ended" notice.
+  pass.expiryNotifiedAt = null;
+  pass.adminExpiryEdits.push(adminEditEntry(adminId, from, to, payload.note));
+  await pass.save();
+
+  // The pass waives the wallet minimum, so the block flag follows it.
+  await syncDriverWalletBlockedFlag(pass.driverId).catch((error) =>
+    console.error('Wallet flag sync after pass edit failed', String(pass.driverId), error.message));
+
+  return {
+    id: String(pass._id),
+    expiresAt: pass.expiresAt,
+    active: pass.expiresAt.getTime() > Date.now(),
+  };
+};
+
+/** Change when a rider's plan ends: extend it, shorten it, or end it now. */
+export const updateUserSubscriptionExpiry = async (id, payload = {}, adminId = '') => {
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(404, 'Subscription not found');
+  const sub = await UserSubscription.findById(id);
+  if (!sub) throw new ApiError(404, 'Subscription not found');
+  if (sub.status === 'cancelled' || sub.active === false) {
+    throw new ApiError(409, 'This subscription was cancelled and cannot be changed');
+  }
+
+  const from = sub.expiresAt;
+  const to = resolveAdminExpiry(from, payload);
+  if (sub.startedAt && to.getTime() < new Date(sub.startedAt).getTime()) {
+    throw new ApiError(400, 'A plan cannot end before it started');
+  }
+
+  sub.expiresAt = to;
+  const running = to.getTime() > Date.now();
+  const ridesLeft = sub.benefit_type === 'unlimited'
+    || !(Number(sub.ride_limit || 0) > 0 && Number(sub.rides_used || 0) >= Number(sub.ride_limit || 0));
+  if (!running) {
+    sub.status = 'expired';
+  } else if (sub.status === 'expired' && ridesLeft) {
+    sub.status = 'active';
+  }
+  sub.adminExpiryEdits.push(adminEditEntry(adminId, from, to, payload.note));
+  await sub.save();
+
+  return { id: String(sub._id), expiresAt: sub.expiresAt, status: sub.status };
+};
+
+/**
+ * Edit a rider plan. Only people who buy it from now on get the new terms;
+ * plans already bought keep what they paid for (change those one by one).
+ */
+export const updateCustomerSubscriptionPlan = async (id, payload = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(404, 'Subscription plan not found');
+  const update = {};
+  if (payload.name !== undefined) {
+    if (!String(payload.name).trim()) throw new ApiError(400, 'Subscription name is required');
+    update.name = String(payload.name).trim();
+  }
+  if (payload.description !== undefined) update.description = String(payload.description || '');
+  if (payload.how_it_works !== undefined) update.how_it_works = String(payload.how_it_works || '');
+  if (payload.amount !== undefined) {
+    const amount = Number(payload.amount);
+    if (!Number.isFinite(amount) || amount < 0) throw new ApiError(400, 'Enter a valid price');
+    update.amount = amount;
+  }
+  if (payload.duration !== undefined) {
+    const duration = Number(payload.duration);
+    if (!Number.isInteger(duration) || duration < 1 || duration > 3650) {
+      throw new ApiError(400, 'Duration must be a whole number of days');
+    }
+    update.duration = duration;
+  }
+  if (payload.vehicle_type_id !== undefined) {
+    if (!mongoose.Types.ObjectId.isValid(payload.vehicle_type_id)) throw new ApiError(400, 'Valid vehicle type is required');
+    update.vehicle_type_id = payload.vehicle_type_id;
+  }
+  if (payload.benefit_type !== undefined) {
+    update.benefit_type = String(payload.benefit_type).trim().toLowerCase() === 'unlimited' ? 'unlimited' : 'limited';
+  }
+  if (update.benefit_type === 'unlimited') {
+    update.ride_limit = 0;
+  } else if (payload.ride_limit !== undefined) {
+    update.ride_limit = Math.max(1, Number(payload.ride_limit || 0));
+  }
+  if (payload.active !== undefined) update.active = Boolean(payload.active);
+
+  const plan = await SubscriptionPlan.findOneAndUpdate(
+    { _id: id, audience: 'user' },
+    { $set: update },
+    { returnDocument: 'after' },
+  ).lean();
+  if (!plan) throw new ApiError(404, 'Subscription plan not found');
+  return plan;
 };
 
 export const listCustomerSubscriptionPlans = async () =>

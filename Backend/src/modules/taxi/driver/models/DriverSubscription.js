@@ -61,6 +61,20 @@ const driverSubscriptionSchema = new mongoose.Schema(
     // "your subscription has ended" push is sent, so the four instances never
     // notify the same driver twice for the same pass.
     expiryNotifiedAt: { type: Date, default: null },
+    // Expiry changes made by an admin, oldest first.
+    adminExpiryEdits: {
+      type: [
+        {
+          _id: false,
+          at: { type: Date, default: Date.now },
+          by: { type: String, default: '' },
+          from: { type: Date, default: null },
+          to: { type: Date, default: null },
+          note: { type: String, default: '' },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true },
 );

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, Loader2, Plus, Search, Ticket } from 'lucide-react';
+import { ChevronRight, Loader2, Pencil, Plus, Search, Ticket } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { adminService } from '../../services/adminService';
@@ -27,7 +27,7 @@ const UserSubscriptions = () => {
   }, []);
 
   const filteredPlans = plans.filter((item) =>
-    `${item.name || ''} ${item.vehicle_type?.name || ''}`.toLowerCase().includes(searchTerm.toLowerCase()),
+    `${item.name || ''} ${item.vehicle_type?.name || item.vehicle_type_id?.name || ''}`.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -78,6 +78,7 @@ const UserSubscriptions = () => {
                   <th className="px-4 py-3">Benefit</th>
                   <th className="px-4 py-3">Duration</th>
                   <th className="px-4 py-3">Price</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
@@ -94,12 +95,21 @@ const UserSubscriptions = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-600">{item.vehicle_type?.name || 'N/A'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-600">{item.vehicle_type?.name || item.vehicle_type_id?.name || 'N/A'}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-600">
                       {item.benefit_type === 'unlimited' ? 'Unlimited rides' : `${item.ride_limit} rides`}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-600">{item.duration} days</td>
                     <td className="px-4 py-3 text-sm font-bold text-gray-900">₹{Number(item.amount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/admin/users/subscriptions/${item._id || item.id}/edit`)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+                      >
+                        <Pencil size={13} /> Edit
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
