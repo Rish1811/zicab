@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Ban, Bus, CheckCircle2, ClipboardList, LayoutGrid, Printer, Search, Settings2, Ticket } from 'lucide-react';
+import { ArrowLeft, Ban, Bus, CheckCircle2, ClipboardList, LayoutGrid, Printer, Search, Settings2, Ticket, Wallet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import HorizontalSeatMap from '../../admin/pages/bus-service/HorizontalSeatMap';
@@ -12,11 +12,15 @@ import {
   getOwnerBusBookings,
   getOwnerBusSeatLayout,
   getOwnerBusServices,
+  getOwnerBusWallet,
+  holdOwnerBusSeats,
   releaseOwnerBusSeatBlocks,
   setOwnerBusBoarding,
   setOwnerBusCollection,
 } from '../services/registrationService';
 import { boardingState, openPrintWindow, paymentLabel, printManifest, printTicket } from './busPrint';
+import BusVendorWalletPanel from './BusVendorWalletPanel';
+import HeldSeatsPanel from './HeldSeatsPanel';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const EMPTY_PASSENGER = { name: '', phone: '', age: '', gender: 'Male', email: '', notes: '', collection: 'cash' };
@@ -121,6 +125,21 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
   const [blockSeatIds, setBlockSeatIds] = useState([]);
   const [blocking, setBlocking] = useState(false);
   const [markingKey, setMarkingKey] = useState('');
+  // Prepaid counter seats: the vendor's wallet and the seats held while paying.
+  const [wallet, setWallet] = useState(null);
+  const [hold, setHold] = useState(null);
+
+  const loadWallet = useCallback(async () => {
+    try {
+      setWallet(unwrap(await getOwnerBusWallet()));
+    } catch {
+      // The panel still works without it; booking says what's wrong.
+    }
+  }, []);
+
+  useEffect(() => {
+    loadWallet();
+  }, [loadWallet]);
 
   const bus = useMemo(() => buses.find((item) => item.id === busId) || null, [buses, busId]);
   const schedules = useMemo(() => (Array.isArray(bus?.schedules) ? bus.schedules : []), [bus]);
@@ -259,6 +278,34 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
 
     setSubmitting(true);
     setFormError('');
+    if (wallet?.prepaidRequired) {
+      // Hold the seats for 10 minutes; they are booked once paid.
+      try {
+        const held = unwrap(await holdOwnerBusSeats(busId, {
+          scheduleId,
+          travelDate,
+          seatIds: selectedSeatIds,
+          passenger: {
+            name: passenger.name.trim(),
+            phone: passenger.phone,
+            age: Number(passenger.age),
+            gender: passenger.gender,
+            email: passenger.email.trim(),
+          },
+          notes: passenger.notes.trim(),
+          collection: passenger.collection,
+        }));
+        setHold(held);
+        setWallet((current) => (current ? { ...current, balance: held.walletBalance } : current));
+        setSelectedSeatIds([]);
+      } catch (error) {
+        setFormError(error?.message || 'Could not hold these seats');
+      } finally {
+        setSubmitting(false);
+        loadLayout();
+      }
+      return;
+    }
     try {
       const booking = unwrap(await createOwnerBusReservation(busId, {
         scheduleId,
@@ -387,6 +434,7 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
   const navItems = [
     { key: 'book', label: 'Book seats', icon: Ticket },
     { key: 'bookings', label: 'Bookings', icon: ClipboardList },
+    { key: 'wallet', label: 'Wallet', icon: Wallet },
   ];
 
   const picker = (
@@ -593,13 +641,48 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
 
           {formError ? <p role="alert" className="rounded-xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{formError}</p> : null}
 
-          <button
-            type="submit"
-            disabled={submitting || !layout || bus?.status !== 'active'}
-            className="flex h-12 w-full items-center justify-center rounded-xl bg-amber-400 text-base font-bold text-slate-950 transition-colors hover:bg-amber-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-          >
-            {submitting ? 'Booking...' : `Confirm booking${selectedSeats.length ? ` (${selectedSeats.length})` : ''}`}
-          </button>
+          {hold ? (
+            <HeldSeatsPanel
+              key={hold.booking.id}
+              hold={hold}
+              wallet={wallet}
+              onWalletChange={setWallet}
+              onPaid={(booking, walletBalance) => {
+                setHold(null);
+                setConfirmation(booking);
+                setPassenger(EMPTY_PASSENGER);
+                if (walletBalance !== null && walletBalance !== undefined) {
+                  setWallet((current) => (current ? { ...current, balance: walletBalance } : current));
+                }
+                toast.success('Seats paid and booked');
+                loadWallet();
+                loadLayout();
+                loadBookings();
+              }}
+              onGone={() => {
+                setHold(null);
+                loadLayout();
+              }}
+            />
+          ) : (
+            <>
+              {wallet?.prepaidRequired ? (
+                <p className="text-center text-xs text-slate-500">
+                  Wallet balance {formatMoney(wallet.balance, currency)} ·{' '}
+                  <button type="button" onClick={() => setTab('wallet')} className="font-semibold text-amber-700 hover:underline">Add money</button>
+                </p>
+              ) : null}
+              <button
+                type="submit"
+                disabled={submitting || !layout || bus?.status !== 'active'}
+                className="flex h-12 w-full items-center justify-center rounded-xl bg-amber-400 text-base font-bold text-slate-950 transition-colors hover:bg-amber-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                {submitting
+                  ? (wallet?.prepaidRequired ? 'Holding...' : 'Booking...')
+                  : `${wallet?.prepaidRequired ? 'Hold seats and pay' : 'Confirm booking'}${selectedSeats.length ? ` (${selectedSeats.length})` : ''}`}
+              </button>
+            </>
+          )}
           {bus && bus.status !== 'active' ? <p className="text-center text-xs text-slate-500">This bus isn't active, so its seats can't be booked yet.</p> : null}
         </form>
       </aside>
@@ -832,13 +915,13 @@ const OwnerBusDashboard = ({ portal = 'owner' }) => {
                 <Stat label="Confirmed bookings" value={summary.confirmedBookings ?? 0} />
                 <Stat label="Booking value" value={formatMoney(summary.totalAmount, currency)} />
               </div>
-              {tab === 'book' ? bookTab : bookingsTab}
+              {tab === 'book' ? bookTab : tab === 'wallet' ? <BusVendorWalletPanel wallet={wallet} onChange={setWallet} /> : bookingsTab}
             </>
           )}
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-2 border-t border-slate-200 bg-white lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-slate-200 bg-white lg:hidden">
         {navItems.map(({ key, label, icon }) => (
           <button
             key={key}

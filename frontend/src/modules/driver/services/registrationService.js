@@ -579,6 +579,31 @@ export const getOwnerBusSeatLayout = (busId, params = {}) =>
 export const createOwnerBusReservation = (busId, payload) =>
   api.post(`/drivers/fleet/bus-services/${busId}/reservations`, payload, withDriverAuth());
 
+// Prepaid counter seats and the vendor wallet.
+export const holdOwnerBusSeats = (busId, payload) =>
+  api.post(`/drivers/fleet/bus-services/${busId}/reservations/hold`, payload, withDriverAuth());
+
+export const payOwnerBusBookingFromWallet = (bookingId) =>
+  api.post(`/drivers/fleet/bus-bookings/${bookingId}/pay-wallet`, {}, withDriverAuth());
+
+export const createOwnerBusBookingPaymentOrder = (bookingId) =>
+  api.post(`/drivers/fleet/bus-bookings/${bookingId}/pay-order`, {}, withDriverAuth());
+
+export const verifyOwnerBusBookingPayment = (bookingId, payment) =>
+  api.post(`/drivers/fleet/bus-bookings/${bookingId}/pay-verify`, payment, withDriverAuth());
+
+export const releaseOwnerBusBookingHold = (bookingId) =>
+  api.post(`/drivers/fleet/bus-bookings/${bookingId}/release`, {}, withDriverAuth());
+
+export const getOwnerBusWallet = () =>
+  api.get("/drivers/fleet/bus-wallet", withDriverAuth());
+
+export const createOwnerBusWalletTopUp = (amount) =>
+  api.post("/drivers/fleet/bus-wallet/topup-order", { amount }, withDriverAuth());
+
+export const verifyOwnerBusWalletTopUp = (payment) =>
+  api.post("/drivers/fleet/bus-wallet/topup-verify", payment, withDriverAuth());
+
 export const getOwnerBusBookings = (params = {}) =>
   api.get("/drivers/fleet/bus-bookings", withDriverAuth({ params }));
 

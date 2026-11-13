@@ -15,7 +15,19 @@ import { BusBooking } from "../../user/models/BusBooking.js";
 import { BusSeatHold } from "../../user/models/BusSeatHold.js";
 import { clearExpiredHoldsForSeats, publishBusSeatChange } from "../../bus/services/busSeatSyncService.js";
 import { busTripBookingProblem, priceBusSeats } from "../../bus/utils/busTime.js";
-import { withBusCancellationClaim } from "../../bus/services/busPaymentService.js";
+import { finalizeBusBookingPayment, withBusCancellationClaim } from "../../bus/services/busPaymentService.js";
+import {
+  VENDOR_HOLD_MINUTES,
+  VENDOR_WALLET_PROVIDER,
+  createVendorTopUpOrder,
+  getVendorWallet,
+  isVendorPrepaidRequired,
+  payHeldBookingFromWallet,
+  refundSeatsToVendorWallet,
+  releaseHeldBooking,
+  vendorAccountFromAuth,
+  verifyVendorTopUp,
+} from "../../bus/services/busVendorWalletService.js";
 import { publishBusLiveLocation } from "../../bus/services/busTicketService.js";
 import { getLadiesNeighbourSeatIds } from "../../services/busFemaleTravellersService.js";
 import { resolveScheduleRoute } from "../../bus/utils/busRoutes.js";
@@ -714,6 +726,8 @@ const serializeOwnerBusBooking = (booking = {}) => {
     },
     cancellation: booking.cancellation || {},
     pnr: booking.pnr || "",
+    expiresAt: booking.status === "pending" ? booking.expiresAt || null : null,
+    paidFromWallet: booking.payment?.provider === VENDOR_WALLET_PROVIDER && booking.status !== "pending",
     boarding: {
       boardedAt: booking.boarding?.boardedAt || null,
       noShowAt: booking.boarding?.noShowAt || null,
@@ -5825,7 +5839,13 @@ export const createBusDriverReservation = async (req, res) => {
 /// A confirmed seat booking taken at the counter (cash, settled outside the
 /// app), by a conductor or the bus's owner. The seat locks are the same ones the
 /// rider app takes, so nobody can book a seat that was just sold.
-const createManualBusReservation = async ({ busService, body, bookedBy, rejectDepartedTrips = false }) => {
+const createManualBusReservation = async ({ busService, body, bookedBy, rejectDepartedTrips = false, hold = false }) => {
+  // With prepaid counter seats switched on, seats are held first and booked
+  // only once paid (wallet or online); straight booking is refused.
+  if (!hold && (await isVendorPrepaidRequired())) {
+    throw new ApiError(409, "Seats must be paid for first. Hold the seats, then pay from your wallet or online.");
+  }
+
   const scheduleId = toCleanString(body?.scheduleId);
   const travelDate = normalizeBusTravelDate(body?.travelDate || body?.date);
   const seatIds = Array.isArray(body?.seatIds)
@@ -5903,8 +5923,8 @@ const createManualBusReservation = async ({ busService, body, bookedBy, rejectDe
     bookingSource: bookedBy.bookingSource,
     reservedByDriverId: bookedBy.reservedByDriverId || null,
     currency: busService.fareCurrency || "INR",
-    status: "confirmed",
-    expiresAt: null,
+    status: hold ? "pending" : "confirmed",
+    expiresAt: hold ? new Date(Date.now() + VENDOR_HOLD_MINUTES * 60 * 1000) : null,
     routeSnapshot: {
       originCity: resolveScheduleRoute(busService, schedule).originCity || "",
       destinationCity: resolveScheduleRoute(busService, schedule).destinationCity || "",
@@ -5920,14 +5940,23 @@ const createManualBusReservation = async ({ busService, body, bookedBy, rejectDe
       serviceTaxAmount: pricing.serviceTaxAmount,
       totalAmount: pricing.amount,
     },
-    payment: {
-      provider: "manual",
-      orderId: "",
-      paymentId: "",
-      signature: "",
-      status: "manual_reserved",
-      paidAt: new Date(),
-    },
+    payment: hold
+      ? {
+          provider: VENDOR_WALLET_PROVIDER,
+          orderId: "",
+          paymentId: "",
+          signature: "",
+          status: "awaiting_payment",
+          paidAt: null,
+        }
+      : {
+          provider: "manual",
+          orderId: "",
+          paymentId: "",
+          signature: "",
+          status: "manual_reserved",
+          paidAt: new Date(),
+        },
     notes,
     ...(COUNTER_PAYMENT_METHODS.includes(toCleanString(body?.collection).toLowerCase())
       ? {
@@ -5951,8 +5980,8 @@ const createManualBusReservation = async ({ busService, body, bookedBy, rejectDe
         travelDate,
         seatId,
         holdToken: booking.bookingCode,
-        status: "booked",
-        expiresAt: null,
+        status: hold ? "held" : "booked",
+        expiresAt: hold ? booking.expiresAt : null,
       })),
       { ordered: true },
     );
@@ -5969,7 +5998,7 @@ const createManualBusReservation = async ({ busService, body, bookedBy, rejectDe
     busServiceId: busService._id,
     scheduleId,
     travelDate,
-    change: "booked",
+    change: hold ? "held" : "booked",
     seatIds,
     bookingId: booking._id,
   });
@@ -9253,6 +9282,129 @@ export const createOwnerBusReservation = async (req, res) => {
   });
 };
 
+// ---- prepaid counter seats: hold, then pay from the wallet or online --------
+
+export const holdOwnerBusSeats = async (req, res) => {
+  const { scope, busService } = await findOwnerBus(req);
+  if (String(busService.status || "") !== "active") {
+    throw new ApiError(409, "This bus is not active, so its seats can't be booked");
+  }
+  const account = vendorAccountFromAuth(req.auth);
+  const booking = await createManualBusReservation({
+    busService,
+    body: req.body,
+    rejectDepartedTrips: true,
+    bookedBy: scope.bookedBy,
+    hold: true,
+  });
+  const wallet = await getVendorWallet(account, { limit: 1 });
+  res.status(201).json({
+    success: true,
+    data: {
+      booking: serializeOwnerBusBooking(booking.toObject()),
+      amount: Number(booking.amount || 0),
+      expiresAt: booking.expiresAt,
+      walletBalance: wallet.balance,
+    },
+  });
+};
+
+export const payOwnerBusBookingFromWallet = async (req, res) => {
+  const owned = await findOwnerBusBooking(req);
+  const account = vendorAccountFromAuth(req.auth);
+  const { balance, booking } = await payHeldBookingFromWallet(account, owned._id, {
+    actor: `${req.auth?.role || "vendor"}:${String(req.auth?.sub || "")}`,
+  });
+  res.json({
+    success: true,
+    data: { booking: { ...serializeOwnerBusBooking(booking), pnr: booking.pnr || "" }, walletBalance: balance },
+  });
+};
+
+export const createOwnerBusBookingPaymentOrder = async (req, res) => {
+  const owned = await findOwnerBusBooking(req);
+  if (owned.status !== "pending" || !owned.expiresAt || owned.expiresAt <= new Date()) {
+    throw new ApiError(409, "The 10 minutes are over and the seats were released. Pick them again.");
+  }
+  const { keyId } = await resolveRazorpayCredentials();
+  if (owned.payment?.provider === "razorpay" && owned.payment?.orderId) {
+    return res.json({
+      success: true,
+      data: { keyId, orderId: owned.payment.orderId, amount: Math.round(Number(owned.amount || 0) * 100), currency: owned.currency || "INR", expiresAt: owned.expiresAt },
+    });
+  }
+  const order = await razorpayRequest({
+    method: "POST",
+    path: "/orders",
+    body: {
+      amount: Math.round(Number(owned.amount || 0) * 100),
+      currency: owned.currency || "INR",
+      receipt: `vbus_${String(owned._id).slice(-10)}_${Date.now().toString(36)}`,
+      notes: { purpose: "bus_vendor_seats", bookingCode: owned.bookingCode || "", seats: (owned.seatLabels || []).join(",") },
+    },
+  });
+  // Only a hold nobody has started paying for (wallet or another order).
+  const updated = await BusBooking.findOneAndUpdate(
+    { _id: owned._id, status: "pending", "payment.orderId": "", "payment.claimedAt": null },
+    { $set: { "payment.provider": "razorpay", "payment.orderId": order.id, "payment.status": "created" } },
+    { returnDocument: "after" },
+  );
+  if (!updated) {
+    throw new ApiError(409, "These seats are already being paid for. Refresh and try again.");
+  }
+  res.json({
+    success: true,
+    data: { keyId, orderId: order.id, amount: order.amount, currency: order.currency || "INR", expiresAt: updated.expiresAt },
+  });
+};
+
+export const verifyOwnerBusBookingPayment = async (req, res) => {
+  const owned = await findOwnerBusBooking(req);
+  const orderId = toCleanString(req.body?.razorpay_order_id);
+  const paymentId = toCleanString(req.body?.razorpay_payment_id);
+  const signature = toCleanString(req.body?.razorpay_signature);
+  if (!orderId || !paymentId || !signature || orderId !== owned.payment?.orderId) {
+    throw new ApiError(400, "Payment verification fields are required");
+  }
+  const { keySecret } = await resolveRazorpayCredentials();
+  const expected = crypto.createHmac("sha256", keySecret).update(`${orderId}|${paymentId}`).digest("hex");
+  if (expected !== signature) {
+    throw new ApiError(400, "Invalid payment signature");
+  }
+  const result = await finalizeBusBookingPayment({ bookingId: owned._id, paymentId, signature });
+  if (result.outcome === "confirmed" || result.outcome === "already_confirmed") {
+    const booking = result.booking.toObject ? result.booking.toObject() : result.booking;
+    return res.json({ success: true, data: { booking: { ...serializeOwnerBusBooking(booking), pnr: booking.pnr || "" } } });
+  }
+  if (result.outcome === "refunded") {
+    throw new ApiError(409, `${result.message || "The seats could not be booked."} The payment will be refunded.`);
+  }
+  throw new ApiError(409, "The payment is still being confirmed. Check the bookings in a minute.");
+};
+
+export const releaseOwnerBusBookingHold = async (req, res) => {
+  const owned = await findOwnerBusBooking(req);
+  if (owned.status !== "pending") {
+    return res.json({ success: true, data: { released: false } });
+  }
+  res.json({ success: true, data: { released: await releaseHeldBooking(owned._id) } });
+};
+
+export const getOwnerBusWallet = async (req, res) => {
+  await resolveBusAccountScope(req);
+  res.json({ success: true, data: await getVendorWallet(vendorAccountFromAuth(req.auth), { limit: req.query?.limit }) });
+};
+
+export const createOwnerBusWalletTopUp = async (req, res) => {
+  await resolveBusAccountScope(req);
+  res.json({ success: true, data: await createVendorTopUpOrder(vendorAccountFromAuth(req.auth), req.body?.amount) });
+};
+
+export const verifyOwnerBusWalletTopUp = async (req, res) => {
+  await resolveBusAccountScope(req);
+  res.json({ success: true, data: await verifyVendorTopUp(vendorAccountFromAuth(req.auth), req.body) });
+};
+
 // ---- marks and blocks for the bus vendor panel -----------------------------
 
 // A seat lock with no booking behind it: the vendor took the seat off sale for
@@ -9441,6 +9593,9 @@ export const getOwnerBusBookings = async (req, res) => {
   }
   if (status && status !== "all") {
     query.status = status;
+  } else {
+    // Seats a vendor held but never paid for are not bookings.
+    query.$nor = [{ status: { $in: ["pending", "expired", "failed"] }, bookingSource: { $in: ["owner", "bus_driver"] } }];
   }
 
   const rawBookings = await BusBooking.find(query)
@@ -9811,7 +9966,30 @@ const cancelOwnerBusBookingSeatsClaimed = async (req, res) => {
   if (!booking.notes?.includes(ownerNote)) {
     booking.notes = [booking.notes, ownerNote].filter(Boolean).join(" | ");
   }
+  // Paid from the vendor's wallet: the whole price of each cancelled seat goes
+  // back to that wallet.
+  const walletPaid = String(booking.payment?.provider || "") === VENDOR_WALLET_PROVIDER;
+  let walletRefund = 0;
+  if (walletPaid) {
+    const seatPrice = new Map((booking.seatPrices || []).map((item) => [String(item.seatId), Number(item.amount || 0)]));
+    const fallback = originalSeatIds.length ? Number(booking.amount || 0) / originalSeatIds.length : 0;
+    for (const entry of booking.cancelledSeats.slice(-seatsToCancel.length)) {
+      const price = Math.round((seatPrice.get(String(entry.seatId)) ?? fallback) * 100) / 100;
+      entry.refundAmount = price;
+      entry.chargeAmount = 0;
+      entry.refundStatus = "wallet";
+      walletRefund += price;
+    }
+  }
   await booking.save();
+  if (walletPaid && walletRefund > 0) {
+    await refundSeatsToVendorWallet({
+      booking,
+      amount: walletRefund,
+      seatLabels: seatsToCancel.map((item) => item.seatLabel || item.seatId),
+      actor: `${req.auth?.role || "vendor"}:${String(req.auth?.sub || "")}`,
+    });
+  }
 
   await BusSeatHold.deleteMany({
     bookingId: booking._id,

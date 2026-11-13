@@ -45,6 +45,9 @@ import {
   updateCustomerSubscriptionPlan,
   updateDriverSubscriptionExpiry,
   updateUserSubscriptionExpiry,
+  getBusVendorWallets,
+  getBusVendorWalletTransactions,
+  adjustBusVendorWallet,
   createUser,
   createZone,
   bulkImportUsers,
@@ -373,6 +376,10 @@ adminRouter.patch('/admin/user-subscriptions/plans/:id', updateCustomerSubscript
 // Change when a bought pass or plan ends (extend, shorten, end now).
 adminRouter.patch('/admin/driver-subscriptions/passes/:id/expiry', updateDriverSubscriptionExpiry);
 adminRouter.patch('/admin/user-subscriptions/:id/expiry', updateUserSubscriptionExpiry);
+// Bus vendors' prepaid wallets.
+adminRouter.get('/admin/bus-vendor-wallets', getBusVendorWallets);
+adminRouter.get('/admin/bus-vendor-wallets/:type/:id/transactions', getBusVendorWalletTransactions);
+adminRouter.post('/admin/bus-vendor-wallets/:type/:id/adjust', adjustBusVendorWallet);
 
 adminRouter.get('/countries', getCountries);
 adminRouter.get('/admin/countries', getCountries);

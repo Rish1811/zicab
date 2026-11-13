@@ -10,6 +10,7 @@ import {
   AdminDriverSubscriptionSettings,
   AdminBlockedFleetDrivers,
   AdminBusBookingManager,
+  AdminBusVendorWallets,
   AdminChat,
   AdminBusCommissionManager,
   AdminZibusBookingChannels,
@@ -225,6 +226,7 @@ const adminRoutes = (
       <Route path="bus-service/edit/:id" element={<AdminBusServiceManager mode="edit" />} />
       <Route path="bus-service/commission" element={<AdminBusCommissionManager />} />
       <Route path="bus-service/bookings" element={<AdminBusBookingManager />} />
+      <Route path="bus-service/vendor-wallets" element={<AdminBusVendorWallets />} />
       <Route path="bus-service/inventory" element={<AdminZibusSeatInventory />} />
       <Route path="bus-service/operators" element={<AdminZibusBusOperators />} />
       <Route path="bus-service/channels" element={<AdminZibusBookingChannels />} />

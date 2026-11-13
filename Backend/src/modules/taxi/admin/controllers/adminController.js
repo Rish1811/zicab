@@ -645,6 +645,24 @@ export const updateDriverSubscriptionExpiry = asyncHandler(async (req, res) =>
 export const updateUserSubscriptionExpiry = asyncHandler(async (req, res) =>
   ok(res, await adminService.updateUserSubscriptionExpiry(req.params.id, req.body, req.auth?.sub)),
 );
+export const getBusVendorWallets = asyncHandler(async (_req, res) => {
+  const { listVendorWallets } = await import('../../bus/services/busVendorWalletService.js');
+  ok(res, { results: await listVendorWallets() });
+});
+export const getBusVendorWalletTransactions = asyncHandler(async (req, res) => {
+  const { listVendorWalletTransactions } = await import('../../bus/services/busVendorWalletService.js');
+  ok(res, { results: await listVendorWalletTransactions({ accountType: req.params.type, accountId: req.params.id }) });
+});
+export const adjustBusVendorWallet = asyncHandler(async (req, res) => {
+  const { adjustVendorWallet } = await import('../../bus/services/busVendorWalletService.js');
+  ok(res, await adjustVendorWallet({
+    accountType: req.params.type,
+    accountId: req.params.id,
+    amount: req.body?.amount,
+    note: req.body?.note,
+    adminId: req.auth?.sub,
+  }));
+});
 export const getUserSubscriptions = asyncHandler(async (req, res) =>
   ok(res, await adminService.listUserSubscriptionsByUserId(req.params.id)),
 );

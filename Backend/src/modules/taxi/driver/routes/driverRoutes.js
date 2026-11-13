@@ -24,6 +24,14 @@ import {
   setOwnerBusBoarding,
   setOwnerBusCollection,
   getOwnerBusBookingTicket,
+  holdOwnerBusSeats,
+  payOwnerBusBookingFromWallet,
+  createOwnerBusBookingPaymentOrder,
+  verifyOwnerBusBookingPayment,
+  releaseOwnerBusBookingHold,
+  getOwnerBusWallet,
+  createOwnerBusWalletTopUp,
+  verifyOwnerBusWalletTopUp,
   createDriverPaymentQr,
   getDriverPaymentUpi,
   saveDriverPaymentUpi,
@@ -465,6 +473,19 @@ driverRouter.post(
   authenticate(["owner", "bus_driver"]),
   asyncHandler(cancelOwnerBusBookingSeats),
 );
+// Prepaid counter seats: hold for 10 minutes, pay from the wallet or online.
+for (const [method, path, handler] of [
+  ["post", "/fleet/bus-services/:id/reservations/hold", holdOwnerBusSeats],
+  ["post", "/fleet/bus-bookings/:id/pay-wallet", payOwnerBusBookingFromWallet],
+  ["post", "/fleet/bus-bookings/:id/pay-order", createOwnerBusBookingPaymentOrder],
+  ["post", "/fleet/bus-bookings/:id/pay-verify", verifyOwnerBusBookingPayment],
+  ["post", "/fleet/bus-bookings/:id/release", releaseOwnerBusBookingHold],
+  ["get", "/fleet/bus-wallet", getOwnerBusWallet],
+  ["post", "/fleet/bus-wallet/topup-order", createOwnerBusWalletTopUp],
+  ["post", "/fleet/bus-wallet/topup-verify", verifyOwnerBusWalletTopUp],
+]) {
+  driverRouter[method](path, authenticate(["owner", "bus_driver"]), asyncHandler(handler));
+}
 // The bus vendor panel: take seats off sale for a trip, and mark bookings.
 driverRouter.post(
   "/fleet/bus-services/:id/seat-blocks",

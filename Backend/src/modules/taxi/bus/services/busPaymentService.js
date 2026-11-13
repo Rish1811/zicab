@@ -241,6 +241,14 @@ export const reconcileBusPayments = async () => {
     await releaseClaim(booking);
   }
 
+  // 3. Bus vendors' wallet top-ups paid but never reported back.
+  try {
+    const { reconcileVendorTopUps } = await import('./busVendorWalletService.js');
+    summary.topUpsCredited = (await reconcileVendorTopUps()).credited;
+  } catch (error) {
+    console.error('[bus-reconcile] vendor top-ups failed', error.message);
+  }
+
   return summary;
 };
 
@@ -251,7 +259,7 @@ export const startBusPaymentReconciler = (intervalMs = 2 * 60_000) => {
   const run = () =>
     reconcileBusPayments()
       .then((summary) => {
-        if (summary.confirmed || summary.refunded) console.log('[bus-reconcile]', JSON.stringify(summary));
+        if (summary.confirmed || summary.refunded || summary.topUpsCredited) console.log('[bus-reconcile]', JSON.stringify(summary));
       })
       .catch((error) => console.error('[bus-reconcile] failed', error.message));
   // Spread the four processes out a little.
