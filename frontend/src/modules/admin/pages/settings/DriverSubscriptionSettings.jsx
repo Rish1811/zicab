@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { Loader2, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../../../shared/api/axiosInstance';
 import ExpiryEditor from '../../components/ExpiryEditor';
@@ -68,6 +68,191 @@ const money = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
 const when = (value) => (value ? new Date(value).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '-');
 
 const VEHICLE_CLASSES = ['bike', 'auto', 'car'];
+const METHOD_LABELS = { trial: 'Free trial', bonus: 'Joining bonus', wallet: 'Wallet', razorpay: 'Online', phonepe: 'Online', admin: 'Admin' };
+
+const inputClass = 'bg-white border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-yellow-400';
+
+/**
+ * One plan: shown as a line, or as a small form while being edited. The free
+ * trial lives here because it belongs to the plan - a car plan can give a
+ * week free while the bike plan gives none.
+ */
+const PlanRow = ({ plan, onSaved, onRemove }) => {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState(null);
+
+  const startEdit = () => {
+    setDraft({
+      name: plan.name || '',
+      amount: String(plan.amount ?? ''),
+      vehicle_classes: [...(plan.vehicle_classes || [])],
+      free_trial_enabled: Boolean(plan.free_trial_enabled),
+      free_trial_days: String(plan.free_trial_days || 7),
+    });
+    setEditing(true);
+  };
+
+  const toggleClass = (value) =>
+    setDraft((previous) => ({
+      ...previous,
+      vehicle_classes: previous.vehicle_classes.includes(value)
+        ? previous.vehicle_classes.filter((item) => item !== value)
+        : [...previous.vehicle_classes, value],
+    }));
+
+  const save = async () => {
+    if (!draft.name.trim() || !Number(draft.amount)) {
+      toast.error('Give the plan a name and a price');
+      return;
+    }
+    const days = Math.floor(Number(draft.free_trial_days));
+    if (draft.free_trial_enabled && !(days >= 1)) {
+      toast.error('Give the free trial at least 1 day');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await api.patch(`/admin/driver-subscriptions/plans/${plan._id}`, {
+        name: draft.name.trim(),
+        amount: Number(draft.amount),
+        vehicle_classes: draft.vehicle_classes,
+        free_trial_enabled: draft.free_trial_enabled,
+        free_trial_days: draft.free_trial_enabled ? days : Math.max(0, days || 0),
+      });
+      toast.success('Plan saved');
+      setEditing(false);
+      onSaved();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Could not save plan');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    const trialDays = plan.free_trial_enabled ? Number(plan.free_trial_days || 0) : 0;
+    return (
+      <div className="flex items-center justify-between gap-4 border border-gray-100 rounded-lg px-4 py-3">
+        <div>
+          <p className="text-sm font-bold text-gray-900 flex items-center gap-2 flex-wrap">
+            {plan.name}
+            {trialDays > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                {trialDays}-day free trial
+              </span>
+            )}
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {money(plan.amount)} per day ·{' '}
+            {(plan.vehicle_classes || []).length ? plan.vehicle_classes.join(', ') : 'all vehicle types'}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={startEdit}
+            className="text-gray-700 hover:bg-gray-50 p-2 rounded-lg transition-colors"
+            aria-label={`Edit ${plan.name}`}
+          >
+            <Pencil size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(plan._id)}
+            className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-colors"
+            aria-label={`Remove ${plan.name}`}
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-yellow-300 bg-yellow-50/30 rounded-lg px-4 py-4 space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Plan name</label>
+          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} className={inputClass} />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Price per day</label>
+          <input
+            type="number"
+            min="0"
+            value={draft.amount}
+            onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
+            className={`w-28 ${inputClass}`}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1">Covers</label>
+          <div className="flex gap-2">
+            {VEHICLE_CLASSES.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => toggleClass(value)}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold border capitalize transition-colors ${
+                  draft.vehicle_classes.includes(value)
+                    ? 'bg-yellow-400 border-yellow-400 text-black'
+                    : 'bg-white border-gray-200 text-gray-600'
+                }`}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-lg px-4">
+        <ToggleRow
+          label="Free trial for new drivers"
+          hint="Every new driver on this plan gets these days free, once, as soon as they are approved. Drivers who have already had a pass do not get it. Their joining bonus stays in the wallet as cash."
+          checked={draft.free_trial_enabled}
+          onChange={(value) => setDraft({ ...draft, free_trial_enabled: value })}
+        />
+        {draft.free_trial_enabled && (
+          <div className="py-4 flex items-center gap-2">
+            <input
+              type="number"
+              min="1"
+              max="365"
+              value={draft.free_trial_days}
+              onChange={(event) => setDraft({ ...draft, free_trial_days: event.target.value })}
+              className={`w-20 ${inputClass}`}
+              aria-label="Free trial days"
+            />
+            <span className="text-sm text-gray-600">days free</span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 bg-yellow-400 hover:bg-yellow-500 disabled:opacity-60 text-black text-xs font-bold px-4 py-2.5 rounded-lg transition-colors"
+        >
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save plan
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 border border-gray-200 bg-white text-gray-700 text-xs font-bold px-4 py-2.5 rounded-lg hover:bg-gray-50"
+        >
+          <X size={14} /> Cancel
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const DriverSubscriptionSettings = () => {
   const [loading, setLoading] = useState(true);
@@ -294,23 +479,7 @@ const DriverSubscriptionSettings = () => {
           {plans.length === 0 && <p className="text-sm text-gray-500">No plans yet. Add one below.</p>}
 
           {plans.map((plan) => (
-            <div key={plan._id} className="flex items-center justify-between gap-4 border border-gray-100 rounded-lg px-4 py-3">
-              <div>
-                <p className="text-sm font-bold text-gray-900">{plan.name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {money(plan.amount)} per day ·{' '}
-                  {(plan.vehicle_classes || []).length ? plan.vehicle_classes.join(', ') : 'all vehicle types'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => removePlan(plan._id)}
-                className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-colors"
-                aria-label={`Remove ${plan.name}`}
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
+            <PlanRow key={plan._id} plan={plan} onSaved={load} onRemove={removePlan} />
           ))}
 
           <div className="border-t border-gray-100 pt-4 flex flex-wrap items-end gap-3">
@@ -398,7 +567,7 @@ const DriverSubscriptionSettings = () => {
                   </td>
                   <td className="px-4 py-3 text-gray-700">{row.planName}</td>
                   <td className="px-4 py-3 font-bold text-gray-900">{money(row.amount)}</td>
-                  <td className="px-4 py-3 text-gray-600 capitalize">{row.paymentMethod}</td>
+                  <td className="px-4 py-3 text-gray-600 capitalize">{METHOD_LABELS[row.paymentMethod] || row.paymentMethod}</td>
                   <td className="px-4 py-3 text-gray-600">{when(row.expiresAt)}</td>
                   <td className="px-4 py-3 text-gray-600">{row.tripsCovered || 0}</td>
                   <td className="px-4 py-3">

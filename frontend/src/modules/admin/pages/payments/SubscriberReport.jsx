@@ -13,7 +13,7 @@ import api from '../../../../shared/api/axiosInstance';
  */
 
 const CLASS_LABELS = { auto: 'Auto', bike: 'Bike', car: 'Car', other: 'Other' };
-const METHOD_LABELS = { wallet: 'Wallet', bonus: 'Joining bonus', razorpay: 'Online', online: 'Online', gateway: 'Online' };
+const METHOD_LABELS = { wallet: 'Wallet', bonus: 'Joining bonus', trial: 'Free trial', razorpay: 'Online', online: 'Online', gateway: 'Online' };
 
 const inputClass =
   'border border-gray-200 rounded-md px-2.5 py-1.5 text-xs text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none';
@@ -37,7 +37,7 @@ const SummaryTable = ({ title, note, rows, labelOf }) => (
           <th className="px-3 py-1.5">{title.split('-')[0].trim()}</th>
           <th className="px-3 py-1.5 text-right">₹29 plans</th>
           <th className="px-3 py-1.5 text-right">₹49 plans</th>
-          <th className="px-3 py-1.5 text-right">Free (bonus)</th>
+          <th className="px-3 py-1.5 text-right">Free (bonus / trial)</th>
           <th className="px-3 py-1.5 text-right">Subscribers</th>
           <th className="px-3 py-1.5 text-right">Collection</th>
         </tr>
@@ -187,7 +187,7 @@ const SubscriberReport = () => {
               <p className="text-[10px] text-gray-400">Money received for passes</p>
             </div>
             <div className="bg-white border border-gray-100 rounded-lg p-3 shadow-sm">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Free (joining bonus)</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Free (bonus / trial)</p>
               <p className="text-lg font-bold text-gray-900 mt-1">{totals.free || 0}</p>
               <p className="text-[10px] text-gray-400">Subscribers, not collection</p>
             </div>
@@ -233,7 +233,7 @@ const SubscriberReport = () => {
                 ) : report.by_plan.map((plan) => (
                   <tr key={`${plan.plan_name}-${plan.amount}-${plan.free}`} className="border-b border-gray-50">
                     <td className="px-3 py-1.5 font-semibold text-gray-800">
-                      {plan.plan_name}{plan.free ? <span className="ml-1 text-[10px] font-normal text-gray-400">(joining bonus)</span> : null}
+                      {plan.plan_name}{plan.free ? <span className="ml-1 text-[10px] font-normal text-gray-400">(free)</span> : null}
                     </td>
                     <td className="px-3 py-1.5 text-right">{rupees(plan.amount)}</td>
                     <td className="px-3 py-1.5 text-right font-semibold">{plan.subscribers}</td>

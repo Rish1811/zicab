@@ -28,6 +28,11 @@ const subscriptionPlanSchema = new mongoose.Schema({
     min: 0,
   },
   how_it_works: String,
+  // Driver plans only: a new driver this plan covers gets this many days
+  // free, once, the first time they are able to drive. Turning it off stops
+  // new trials; trials already given run to their end.
+  free_trial_enabled: { type: Boolean, default: false },
+  free_trial_days: { type: Number, default: 0, min: 0 },
   active: { type: Boolean, default: true }
 }, { timestamps: true });
 

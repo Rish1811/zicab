@@ -63,7 +63,10 @@ import { grantDriverJoiningBonus,
   serializeDriverWallet,
   syncDriverWalletBlockedFlag,
 } from '../../driver/services/walletService.js';
-import { purchaseDriverSubscriptionFromJoiningBonus } from '../../driver/services/driverSubscriptionService.js';
+import {
+  grantFreeTrialIfEligible,
+  purchaseDriverSubscriptionFromJoiningBonus,
+} from '../../driver/services/driverSubscriptionService.js';
 import { RIDE_LIVE_STATUS, RIDE_STATUS, VEHICLE_TYPES } from '../../constants/index.js';
 import {
   cancelRideByAdmin,
@@ -5668,6 +5671,12 @@ export const updateDriver = async (id, payload, currentAdmin = null) => {
   // failed when it did not. grantDriverJoiningBonus releases its claim on error,
   // so the credit is retried the next time approval is saved.
   if (update.approve === true) {
+    // The plan's free trial comes first. With a trial pass active, the bonus
+    // purchase below finds a pass already running and leaves the bonus in the
+    // wallet as cash - the trial replaces the bonus-bought first pass.
+    await grantFreeTrialIfEligible(driver._id)
+      .catch((error) => console.error('Driver free trial on approval failed', driver._id, error.message));
+
     const bonusResult = await grantDriverJoiningBonus({ driverId: driver._id, grantedBy: currentAdmin?._id || null })
       .catch((error) => {
         console.error('Driver joining bonus failed', driver._id, error.message);
@@ -6031,6 +6040,28 @@ const normalizeVehicleClasses = (value) => {
   return [...new Set(list.map((item) => String(item).trim().toLowerCase()).filter(Boolean))];
 };
 
+const MAX_FREE_TRIAL_DAYS = 365;
+const toFlag = (value) => value === true || ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase());
+
+/**
+ * The free-trial switch and its days, checked. A trial that is on must give
+ * at least one whole day; when it is off the days are kept so switching it
+ * back on remembers the last number.
+ */
+const normalizeFreeTrial = (payload, current = {}) => {
+  const enabled = payload.free_trial_enabled !== undefined
+    ? toFlag(payload.free_trial_enabled)
+    : Boolean(current.free_trial_enabled);
+  const rawDays = payload.free_trial_days !== undefined ? payload.free_trial_days : current.free_trial_days;
+  const days = Math.floor(Number(rawDays || 0));
+
+  if (!Number.isFinite(days) || days < 0) throw new ApiError(400, 'Free trial days must be 0 or more');
+  if (days > MAX_FREE_TRIAL_DAYS) throw new ApiError(400, `A free trial can be at most ${MAX_FREE_TRIAL_DAYS} days`);
+  if (enabled && days < 1) throw new ApiError(400, 'Give the free trial at least 1 day');
+
+  return { free_trial_enabled: enabled, free_trial_days: days };
+};
+
 export const createSubscriptionPlan = async (payload) => {
   if (!String(payload?.name || '').trim()) {
     throw new ApiError(400, 'Subscription name is required');
@@ -6038,6 +6069,7 @@ export const createSubscriptionPlan = async (payload) => {
 
   const plan = await SubscriptionPlan.create({
     ...payload,
+    ...normalizeFreeTrial(payload),
     audience: 'driver',
     amount: Number(payload.amount || 0),
     // A daily pass is one day. Anything else the admin types is respected,
@@ -6051,11 +6083,31 @@ export const createSubscriptionPlan = async (payload) => {
   return plan.toObject();
 };
 
+// What an admin may change on a driver plan. Anything else in the request
+// (audience, _id, timestamps) is ignored rather than written.
+const EDITABLE_DRIVER_PLAN_FIELDS = [
+  'name', 'description', 'amount', 'duration', 'transport_type', 'vehicle_type_id',
+  'vehicle_classes', 'how_it_works', 'active',
+];
+
 export const updateSubscriptionPlan = async (id, payload = {}) => {
-  const update = { ...payload };
+  const current = await SubscriptionPlan.findOne({ _id: id, audience: 'driver' }).lean();
+  if (!current) throw new ApiError(404, 'Subscription plan not found');
+
+  const update = {};
+  for (const field of EDITABLE_DRIVER_PLAN_FIELDS) {
+    if (payload[field] !== undefined) update[field] = payload[field];
+  }
+  if (update.name !== undefined && !String(update.name || '').trim()) {
+    throw new ApiError(400, 'Subscription name is required');
+  }
   if (payload.amount !== undefined) update.amount = Number(payload.amount || 0);
   if (payload.duration !== undefined) update.duration = Number(payload.duration || 1);
   if (payload.vehicle_classes !== undefined) update.vehicle_classes = normalizeVehicleClasses(payload.vehicle_classes);
+  if (payload.active !== undefined) update.active = toFlag(payload.active);
+  if (payload.free_trial_enabled !== undefined || payload.free_trial_days !== undefined) {
+    Object.assign(update, normalizeFreeTrial(payload, current));
+  }
 
   const plan = await SubscriptionPlan.findOneAndUpdate(
     { _id: id, audience: 'driver' },

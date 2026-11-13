@@ -15,7 +15,7 @@ import api from '../../../../shared/api/axiosInstance';
 
 const CLASS_COLORS = { auto: '#f59e0b', bike: '#10b981', car: '#3b82f6', truck: '#f97316', other: '#9ca3af' };
 const CLASS_ICONS = { auto: Car, bike: Bike, car: Car, truck: Truck, other: Users };
-const METHOD_LABELS = { wallet: 'Wallet', bonus: 'Joining bonus', razorpay: 'Online', online: 'Online', gateway: 'Online', upi: 'UPI' };
+const METHOD_LABELS = { wallet: 'Wallet', bonus: 'Joining bonus', trial: 'Free trial', razorpay: 'Online', online: 'Online', gateway: 'Online', upi: 'UPI' };
 const TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'list', label: 'Subscription List' },
@@ -225,7 +225,7 @@ const SubscriptionTable = ({ rows, empty }) => (
             </td>
             <td className="px-3 py-2 text-right font-bold text-gray-900">
               {rupees(r.amount)}
-              {r.free ? <div className="text-[10px] font-semibold text-amber-600">free (bonus)</div> : null}
+              {r.free ? <div className="text-[10px] font-semibold text-amber-600">free</div> : null}
             </td>
             <td className="px-3 py-2 text-gray-700">{methodLabel(r.payment_method)}</td>
             <td className="px-3 py-2"><StatusBadge value={r.payment_status} /></td>
@@ -455,7 +455,7 @@ const DriverSubscriptionAnalytics = () => {
           {tab === 'payments' && (
             <div className="space-y-2">
               <p className="text-xs text-gray-500">
-                {paidRows.length} paid passes, {rupees(totals.revenue)} collected. Passes taken with the joining bonus are left out, as no money was received for them.
+                {paidRows.length} paid passes, {rupees(totals.revenue)} collected. Passes taken with the joining bonus or a free trial are left out, as no money was received for them.
               </p>
               <SubscriptionTable rows={paidRows} empty="No paid passes in this range" />
             </div>

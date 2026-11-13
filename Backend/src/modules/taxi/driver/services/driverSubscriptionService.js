@@ -173,6 +173,14 @@ export const getDriverSubscriptionStatus = async (driverId) => {
   const driver = await Driver.findById(driverId).lean();
   if (!driver) throw new ApiError(404, 'Driver not found');
 
+  // A new driver opening the app gets their plan's free trial here if the
+  // admin approval never gave it (e.g. approved at sign-up). Never fails the
+  // status itself.
+  if (!driver.freeTrialGrantedAt) {
+    await grantFreeTrialIfEligible(driverId).catch((error) =>
+      console.error('Driver free trial failed', String(driverId), error.message));
+  }
+
   const [{ settings, plans }, active] = await Promise.all([
     listPlansForDriver(driver),
     getActiveDriverSubscription(driverId),
@@ -199,8 +207,12 @@ export const getDriverSubscriptionStatus = async (driverId) => {
           expiresAt: active.expiresAt,
           paymentMethod: active.paymentMethod,
           vehicleClasses: active.vehicleClasses,
+          isTrial: active.paymentMethod === 'trial',
         }
       : null,
+    // Lets the app say "Free trial, ends ..." without reading paymentMethod.
+    isTrial: Boolean(active && active.paymentMethod === 'trial'),
+    trialEndsAt: active && active.paymentMethod === 'trial' ? active.expiresAt : null,
     plans: plans.map((plan) => ({
       id: String(plan._id),
       name: plan.name || 'Daily Subscription',
@@ -399,6 +411,77 @@ export const purchaseDriverSubscriptionFromJoiningBonus = async ({ driverId, bon
     return created ? { subscription: created.toObject(), days, amount: spend } : null;
   } finally {
     await session.endSession();
+  }
+};
+
+/**
+ * Gives a new driver the free trial of their plan, if that plan has one.
+ *
+ * "New" means approved and never had a paid or free pass of any kind, so
+ * switching a trial on does not hand days to drivers who already pay. Each
+ * driver gets one trial ever: freeTrialGrantedAt is claimed in a single write
+ * before the pass is made, so two admins approving at once or four server
+ * processes answering the app at once still give one.
+ *
+ * Runs on approval (before the joining bonus, which then stays in the wallet
+ * as cash because a pass is already active) and whenever an approved driver
+ * without a pass asks for their status or tries to go online, which catches
+ * drivers approved at sign-up who never pass through the admin.
+ *
+ * Returns { subscription, days } when a trial was given, otherwise null.
+ */
+export const grantFreeTrialIfEligible = async (driverId) => {
+  if (!driverId) return null;
+
+  const driver = await Driver.findById(driverId).lean();
+  if (!driver || driver.freeTrialGrantedAt || driver.approve !== true || driver.deletedAt) return null;
+
+  // Cheapest check first: most drivers asking already have had a pass.
+  if (await DriverSubscription.exists({ driverId: driver._id, paidAt: { $ne: null } })) return null;
+
+  const settings = await resolveDriverSubscriptionSettings();
+  if (!isSubscriptionEnabled(settings)) return null;
+
+  const { plans } = await listPlansForDriver(driver);
+  const trialPlans = plans.filter((plan) => plan.free_trial_enabled && Math.floor(Number(plan.free_trial_days || 0)) >= 1);
+  if (trialPlans.length === 0) return null;
+
+  // A driver whose vehicles match more than one plan gets the longest trial.
+  const plan = trialPlans.reduce((best, item) =>
+    Number(item.free_trial_days) > Number(best.free_trial_days) ? item : best);
+  const days = Math.floor(Number(plan.free_trial_days));
+
+  const claim = await Driver.updateOne(
+    { _id: driver._id, freeTrialGrantedAt: null },
+    { $set: { freeTrialGrantedAt: new Date() } },
+  );
+  if (!claim.modifiedCount) return null;
+
+  try {
+    const { startsAt } = getCycleWindow(settings);
+    const created = await DriverSubscription.create({
+      driverId: driver._id,
+      planId: plan._id,
+      planName: plan.name || 'Daily Subscription',
+      amount: 0,
+      vehicleClasses: (plan.vehicle_classes || []).map((value) => String(value).toLowerCase()),
+      startsAt,
+      // Whole pass days, ending at a cycle hour like every other pass.
+      expiresAt: new Date(startsAt.getTime() + days * 24 * 60 * 60 * 1000),
+      paymentMethod: 'trial',
+      paymentReference: `free-trial-${days}d`,
+      paidAt: new Date(),
+    });
+
+    const { syncDriverWalletBlockedFlag } = await import('./walletService.js');
+    await syncDriverWalletBlockedFlag(driver._id).catch(() => null);
+
+    return { subscription: created.toObject(), days };
+  } catch (error) {
+    // Release the claim so a later attempt can still give the trial; leaving
+    // it set would mark a trial as given when no pass exists.
+    await Driver.updateOne({ _id: driver._id }, { $set: { freeTrialGrantedAt: null } }).catch(() => null);
+    throw error;
   }
 };
 

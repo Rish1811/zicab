@@ -234,6 +234,13 @@ const driverSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Set the moment a free-trial pass is given and never cleared, so a
+    // driver gets one trial ever, however often they are approved or open
+    // the app. Same idea as joiningBonusGrantedAt.
+    freeTrialGrantedAt: {
+      type: Date,
+      default: null,
+    },
     approve: {
       type: Boolean,
       default: true,

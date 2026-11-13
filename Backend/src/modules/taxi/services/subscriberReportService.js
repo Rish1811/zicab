@@ -17,7 +17,7 @@ import { getCycleWindow, resolveDriverSubscriptionSettings } from '../driver/ser
 
 const CLASSES = ['auto', 'bike', 'car'];
 const CLOSING_HOUR = 18;
-const FREE_METHODS = new Set(['bonus']);
+const FREE_METHODS = new Set(['bonus', 'trial']);
 
 const round = (value) => Math.round(Number(value || 0) * 100) / 100;
 

@@ -29,7 +29,7 @@ export const sweepExpiredDriverSubscriptions = async () => {
     expiresAt: { $lte: now, $gt: new Date(now.getTime() - LOOKBACK_MS) },
     expiryNotifiedAt: null,
   })
-    .select('_id driverId')
+    .select('_id driverId paymentMethod')
     .limit(BATCH_SIZE)
     .lean();
 
@@ -47,11 +47,12 @@ export const sweepExpiredDriverSubscriptions = async () => {
       // The pass was waiving the wallet minimum; now it counts again.
       await syncDriverWalletBlockedFlag(row.driverId);
 
+      const wasTrial = row.paymentMethod === 'trial';
       await sendPushNotificationToEntities({
         driverIds: [String(row.driverId)],
-        title: 'Your subscription has ended',
+        title: wasTrial ? 'Your free trial has ended' : 'Your subscription has ended',
         body: 'Activate your Daily Subscription to keep receiving ride requests.',
-        data: { type: 'subscription_expired' },
+        data: { type: 'subscription_expired', ...(wasTrial ? { trial: 'true' } : {}) },
       });
     } catch (error) {
       console.error('Driver subscription expiry notice failed', row.driverId, error.message);

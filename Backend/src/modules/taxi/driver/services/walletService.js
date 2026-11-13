@@ -11,6 +11,7 @@ import { getWalletSettings } from '../../services/appSettingsService.js';
 import {
   getActiveDriverSubscription,
   getDriverVehicleClasses,
+  grantFreeTrialIfEligible,
   resolveDriverSubscriptionSettings,
 } from './driverSubscriptionService.js';
 
@@ -217,6 +218,17 @@ export const ensureDriverWalletCanAcceptRide = async (driverOrId, { session } = 
   const balanceWaived = Boolean(subscription);
 
   const isBlocked = wallet.isBlocked || !wallet.rules.isWalletEnabled || (isBelowMinimumBalance && !balanceWaived);
+
+  // A new driver going online for the first time with no pass gets their
+  // plan's free trial, then is checked again from fresh. Not inside a
+  // transaction: the trial is its own write and must not roll back with a ride.
+  if (isBlocked && !session && !subscription && !driver.freeTrialGrantedAt) {
+    const trial = await grantFreeTrialIfEligible(driver._id).catch((error) => {
+      console.error('Driver free trial failed', String(driver._id), error.message);
+      return null;
+    });
+    if (trial) return ensureDriverWalletCanAcceptRide(driver._id);
+  }
 
   if (isBlocked) {
     await Driver.findByIdAndUpdate(driver._id, {
