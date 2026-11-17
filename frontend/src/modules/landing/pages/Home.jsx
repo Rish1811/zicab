@@ -169,6 +169,8 @@ const fallbackVehicles = [
   // All page content comes from the CMS, falling back to the bundled copy so the
   // page is never blank while the request is in flight or if it fails.
   const { services, valueProps, drivers, partners, launchCities, contact, brand, hero } = useLanding();
+  // The site's name, from the brand wordmark in the website content ("ZI CAB" by default).
+  const brandName = [brand.wordmarkPrimary, brand.wordmarkSecondary].filter(Boolean).join(' ') || 'ZI CAB';
   // The app's own module list is the source of truth for what ZI CAB sells;
   // the CMS list is only a fallback for when it cannot be reached.
   const appModules = useAppModules();
@@ -379,7 +381,7 @@ const fallbackVehicles = [
         <div className="container">
           <div className="why-head">
             <span className="eyebrow"><span className="eyebrow-num">02</span> The Difference</span>
-            <h2 className="section-title light mb-10" data-reveal-mask><span>Why Choose ZI CAB?</span></h2>
+            <h2 className="section-title light mb-10" data-reveal-mask><span>Why Choose {brandName}?</span></h2>
           </div>
 
           <div className="why-us-grid" data-reveal-stagger>
@@ -464,7 +466,7 @@ const fallbackVehicles = [
             <div>
               <span className="eyebrow"><span className="eyebrow-num">04</span> Who Drives You</span>
               <h2 className="section-title light" data-reveal-mask><span>Meet Our Drivers</span></h2>
-              <p className="section-sub">Every ZI CAB captain is background-verified, police-checked and rated by real riders.</p>
+              <p className="section-sub">Every {brandName} captain is background-verified, police-checked and rated by real riders.</p>
             </div>
             <button className="section-link" onClick={() => setActiveTab('driver')}>
               Become a Driver <ChevronRight size={16} />
@@ -539,7 +541,7 @@ const fallbackVehicles = [
         <div className="container advertise-teaser-inner" data-reveal>
           <div>
             <span className="at-tag"><Megaphone size={14} /> For Businesses</span>
-            <h2 className="at-title">Advertise with ZI CAB</h2>
+            <h2 className="at-title">Advertise with {brandName}</h2>
             <p className="at-desc">
               Put your brand in front of thousands of daily riders — across our mobile app, website,
               driver app, home banners, booking screens and push notifications.
@@ -576,7 +578,7 @@ const fallbackVehicles = [
           {/* App Download Banner */}
           <div className="app-download-banner" data-reveal>
             <div className="app-banner-left">
-              <h2 className="app-banner-title">Download ZI CAB App</h2>
+              <h2 className="app-banner-title">Download {brandName} App</h2>
               <p className="app-banner-desc">Book rides on the go, anytime, anywhere.</p>
 
               <div className="app-store-btns flex gap-4 mt-6">
@@ -614,7 +616,7 @@ const fallbackVehicles = [
               <div className="mockup-phone" data-parallax="-70">
                 <div className="mockup-screen">
                   <div className="m-header">
-                    <span className="m-logo">ZI CAB</span>
+                    <span className="m-logo">{brandName}</span>
                   </div>
                   <div className="m-body">
                     <p className="m-tag">Your Ride. Our Priority.</p>

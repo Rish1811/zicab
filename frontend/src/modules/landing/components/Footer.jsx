@@ -70,7 +70,7 @@ const Footer = ({ setActiveTab }) => {
               <li><button onClick={() => handleNavClick('corporate')}>Corporate Travel</button></li>
               <li><button onClick={() => handleNavClick('partner')}>Partner With Us</button></li>
               <li><button onClick={() => handleNavClick('driver')}>Attach Driver/Cab</button></li>
-              <li><button onClick={() => handleNavClick('advertise')}>Advertise with ZI CAB</button></li>
+              <li><button onClick={() => handleNavClick('advertise')}>Advertise with {[brand.wordmarkPrimary, brand.wordmarkSecondary].filter(Boolean).join(' ') || 'ZI CAB'}</button></li>
               <li><button onClick={() => handleNavClick('contact')}>Contact Us</button></li>
             </ul>
           </div>
