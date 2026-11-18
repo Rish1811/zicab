@@ -1414,12 +1414,12 @@ const scheduleNextAttempt = (rideId, nextAttemptIndex, retryDelayMs) => {
   saveDispatchState(rideId, { timer });
 };
 
-const getAttemptRadiusMeters = (baseDistanceMeters, attemptIndex) => {
-  const safeBaseDistance = Math.max(1000, Number(baseDistanceMeters) || 0);
-  const growthMultiplier = Math.min(1 + (Math.max(0, attemptIndex) * 0.5), 3);
-
-  return Math.round(safeBaseDistance * growthMultiplier);
-};
+// The admin's "driver search radius" is the furthest a ride is ever offered.
+// Retries search again within it (drivers come online and move closer), but
+// never further out - it used to grow by half each retry, up to 3x, so a 5 km
+// setting reached drivers 8-15 km away.
+const getAttemptRadiusMeters = (baseDistanceMeters) =>
+  Math.round(Math.max(1000, Number(baseDistanceMeters) || 0));
 
 const dispatchAttempt = async (rideId, attemptIndex = 0) => {
   const ownsDispatch = await ensureDispatchLease(rideId);
