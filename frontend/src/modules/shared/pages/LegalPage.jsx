@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, FileText, IndianRupee, Mail, Phone, ReceiptText, Scale, ScrollText, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, FileText, IndianRupee, Mail, Phone, ReceiptText, Scale, ScrollText, ShieldCheck, Trash2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSupportInfo } from '../content/supportInfo';
 import useLegalContent from '../content/useLegalContent';
@@ -131,6 +131,41 @@ const legalContent = {
       },
     ],
   },
+  // Public, no login needed: the "User Data Deletion Instructions URL" app
+  // stores and Meta ask for. Same terms as section J of the privacy policy.
+  deletion: {
+    label: 'Data Deletion',
+    title: 'Delete Your Account and Data',
+    icon: Trash2,
+    intro:
+      'You can ask ZI CAB to delete your account and the personal information linked to it at any time. This applies to riders, drivers, vehicle owners and bus partners.',
+    sections: [
+      {
+        title: 'Delete from the app',
+        bullets: [
+          'Riders: open the ZI CAB app, go to Profile, tap Delete Account and confirm.',
+          'Drivers and vehicle owners: open the ZI CAB Driver app or your partner panel on zicab.in, go to your profile and choose Delete Account.',
+        ],
+      },
+      {
+        title: 'Or ask us to delete it',
+        bullets: [
+          'Email zicabofficial@gmail.com from any address, with the subject "Delete my account" and your registered mobile number.',
+          'Or call +91 8904343123 from your registered mobile number.',
+          'We confirm the request with you and respond within 30 days.',
+        ],
+      },
+      {
+        title: 'What is deleted and what is kept',
+        bullets: [
+          'Your profile, contact details, saved places and app login are removed.',
+          'Trip, payment and tax records are kept only for the period the law requires, and for resolving disputes and preventing fraud.',
+          'Driver verification documents are kept for the period required by law after the account is closed.',
+          'If you signed in with Facebook, deleting your ZI CAB account also removes the information we received from Facebook.',
+        ],
+      },
+    ],
+  },
 };
 
 const getDocumentType = (pathname = '') => {
@@ -139,6 +174,7 @@ const getDocumentType = (pathname = '') => {
   if (value.includes('terms-and-conditions') || value.includes('terms')) return 'terms';
   if (value.includes('refund')) return 'refund';
   if (value.includes('cancellation')) return 'cancellation';
+  if (value.includes('deletion') || value.includes('delete-data')) return 'deletion';
   return 'terms';
 };
 

@@ -22,6 +22,7 @@ const MainLayout = ({ children }) => {
     '/terms-and-conditions',
     '/refund',
     '/cancellation',
+    '/data-deletion',
     '/blog',
     '/links',
     '/careers',

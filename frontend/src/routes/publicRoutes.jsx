@@ -93,6 +93,7 @@ const publicRoutes = (
     <Route path="/privacy-policy" element={<LegalPage />} />
     <Route path="/refund" element={<LegalPage />} />
     <Route path="/cancellation" element={<LegalPage />} />
+    <Route path="/data-deletion" element={<LegalPage />} />
     <Route path="/phonepe/status" element={<PhonePeStatusPage />} />
     <Route path="/razorpay/launch" element={<RazorpayLaunchPage />} />
     <Route path="/razorpay/status" element={<RazorpayStatusPage />} />
