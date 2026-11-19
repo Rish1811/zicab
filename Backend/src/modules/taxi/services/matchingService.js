@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { ApiError } from '../../../utils/ApiError.js';
 import { normalizePoint } from '../../../utils/geo.js';
 import { DISPATCH_TOP_DRIVERS } from '../constants/index.js';
@@ -363,7 +364,20 @@ const findDriversForZone = async ({
   normalizedVehicleTypeIds,
   vehicleTypeKeys,
   strictZoneOnly = false,
+  excludeDriverIds = [],
 }) => {
+  // When a daily pass is required - either as the only model, or because an
+  // expired pass is set to stop rides - drivers without one are not offered
+  // work. Off entirely unless an admin has switched it on, and the id list
+  // is small: it is one day's paying drivers.
+  const passFilter = await buildSubscriptionDriverFilter();
+  // Drivers this ride was already offered to (or who said no) are left out in
+  // the query itself; filtering them after the limit returned the same few
+  // nearest drivers on every retry and never reached anyone further away.
+  const idFilter = {
+    ...(passFilter._id || {}),
+    ...(excludeDriverIds.length ? { $nin: excludeDriverIds } : {}),
+  };
   const commonFilters = {
     ...buildDriverMatchFilters({
       zoneId,
@@ -371,11 +385,7 @@ const findDriversForZone = async ({
       vehicleTypeIds: normalizedVehicleTypeIds,
       vehicleTypeKeys,
     }),
-    // When a daily pass is required - either as the only model, or because an
-    // expired pass is set to stop rides - drivers without one are not offered
-    // work. Off entirely unless an admin has switched it on, and the id list
-    // is small: it is one day's paying drivers.
-    ...(await buildSubscriptionDriverFilter()),
+    ...(Object.keys(idFilter).length ? { _id: idFilter } : {}),
   };
   const selectedFields =
     'name phone socketId vehicleTypeId vehicleTypeIds vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId service_location_id isOnline isOnRide routeBooking';
@@ -417,7 +427,12 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
     serviceLocationId = null,
     allowCrossZoneFallback = true,
     strictZoneOnly = false,
+    excludeDriverIds = [],
   } = options;
+  const excluded = [...new Set((excludeDriverIds || []).map((id) => String(id || '')).filter((id) => mongoose.Types.ObjectId.isValid(id)))];
+  // Ask for more than needed: the zone and scheduled-ride checks below drop
+  // some, and only `limit` are returned.
+  const poolSize = Math.max(limit * 4, 20);
   const normalizedVehicleTypeIds = normalizeVehicleTypeIds(vehicleTypeIds, vehicleTypeId);
   const allowedVehicles = normalizedVehicleTypeIds.length
     ? await Vehicle.find({ _id: { $in: normalizedVehicleTypeIds } }).select('name vehicle_type icon_types').lean()
@@ -426,19 +441,22 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
 
   const zone = await findZoneByPickup(coordinates, { serviceLocationId });
   const zoneBoundaryCapMeters = zone ? getZoneBoundaryCapMeters(zone, coordinates) : null;
-  const effectiveMaxDistance = Number.isFinite(zoneBoundaryCapMeters) && zoneBoundaryCapMeters >= 0
-    ? Math.min(Math.max(1, Math.round(maxDistance)), Math.max(1, zoneBoundaryCapMeters))
-    : Math.max(1, Math.round(maxDistance));
+  // The admin's radius, as set. It used to be cut to the distance from the
+  // pickup to the zone edge, so a pickup near a boundary searched only a few
+  // hundred metres. Drivers outside the zone are still dropped by
+  // filterDriversForMatchedZone below.
+  const effectiveMaxDistance = Math.max(1, Math.round(maxDistance));
 
   let drivers = await findDriversForZone({
     zoneId: zone?._id || null,
     serviceLocationId,
     coordinates,
     effectiveMaxDistance,
-    limit,
+    limit: poolSize,
     normalizedVehicleTypeIds,
     vehicleTypeKeys,
     strictZoneOnly,
+    excludeDriverIds: excluded,
   });
   drivers = filterDriversForMatchedZone({
     drivers,
@@ -458,10 +476,11 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
       serviceLocationId,
       coordinates,
       effectiveMaxDistance,
-      limit,
+      limit: poolSize,
       normalizedVehicleTypeIds,
       vehicleTypeKeys,
       strictZoneOnly,
+      excludeDriverIds: excluded,
     });
     drivers = filterDriversForMatchedZone({
       drivers,
@@ -478,7 +497,7 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
 
   return {
     zone,
-    drivers,
+    drivers: drivers.slice(0, limit),
     searchRadiusMeters: effectiveMaxDistance,
     zoneBoundaryCapMeters,
   };

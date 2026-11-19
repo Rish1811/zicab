@@ -259,11 +259,13 @@ const matchDispatchDrivers = async ({
   ride,
   radius,
   dispatchVehicleTypeIds,
+  excludeDriverIds = [],
 }) => {
   const sharedOptions = {
     maxDistance: radius,
     vehicleTypeId: ride.vehicleTypeId,
     vehicleTypeIds: dispatchVehicleTypeIds,
+    excludeDriverIds,
   };
 
   let result = await matchDrivers(ride.pickupLocation.coordinates, {
@@ -1453,6 +1455,7 @@ const dispatchAttempt = async (rideId, attemptIndex = 0) => {
       ride,
       radius,
       dispatchVehicleTypeIds,
+      excludeDriverIds: [...dispatchState.notifiedDriverIds, ...dispatchState.rejectedDriverIds],
     });
     const effectiveRadius = Number.isFinite(searchRadiusMeters) && searchRadiusMeters > 0
       ? searchRadiusMeters
@@ -1668,6 +1671,7 @@ export const notifyLateAvailableDriver = async (driverId) => {
         ride,
         radius,
         dispatchVehicleTypeIds,
+        excludeDriverIds: [...dispatchState.notifiedDriverIds, ...dispatchState.rejectedDriverIds],
       });
 
       const matchedDriver = drivers.find((item) => String(item._id) === driverKey);
