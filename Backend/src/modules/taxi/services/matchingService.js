@@ -81,16 +81,22 @@ const buildDriverMatchFilters = ({ zoneId, serviceLocationId, vehicleTypeId, veh
       ? { $or: vehicleTypeClauses }
       : vehicleTypeClauses[0] || {};
 
-  return {
-    isOnline: true,
-    isOnRide: false,
+  // Both conditions are `$or`s, so they go under `$and`: spreading the vehicle
+  // filter into the same object used to overwrite the wallet check, and drivers
+  // with a blocked wallet were offered any ride that named a vehicle type.
+  const walletFilter = {
     $or: [
       { owner_id: { $ne: null } },
       { 'wallet.isBlocked': { $ne: true } },
     ],
+  };
+
+  return {
+    isOnline: true,
+    isOnRide: false,
+    $and: [walletFilter, ...(Object.keys(vehicleTypeFilter).length ? [vehicleTypeFilter] : [])],
     ...(zoneId ? { zoneId } : {}),
     ...(serviceLocationId ? { service_location_id: serviceLocationId } : {}),
-    ...vehicleTypeFilter,
   };
 };
 
@@ -241,20 +247,38 @@ const getDistanceBetweenMeters = (origin, target) => {
   return Math.round(2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
+/// Where the driver actually is. The admin's search radius and the zone are
+/// always measured from here. Route-booking drivers used to be measured from
+/// their saved route pin instead, so a driver 10 km away whose pin sat near
+/// the pickup was offered the ride (and their card showed the real 10 km).
 const getDriverMatchCoordinates = (driver = {}) => {
+  if (Array.isArray(driver?.location?.coordinates) && driver.location.coordinates.length === 2) {
+    try {
+      return normalizePoint(driver.location.coordinates, 'driver.location.coordinates');
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+/// A route-booking driver only wants rides near their saved pin; that is an
+/// extra condition on top of being within range, never a substitute for it.
+const getRouteBookingAnchorCoordinates = (driver = {}) => {
   const anchorCoordinates = Array.isArray(driver?.routeBooking?.anchorLocation?.coordinates)
     ? driver.routeBooking.anchorLocation.coordinates
     : [];
 
-  if (driver?.routeBooking?.enabled && anchorCoordinates.length === 2) {
+  if (!driver?.routeBooking?.enabled || anchorCoordinates.length !== 2) {
+    return null;
+  }
+
+  try {
     return normalizePoint(anchorCoordinates, 'driver.routeBooking.anchorLocation.coordinates');
+  } catch {
+    return null;
   }
-
-  if (Array.isArray(driver?.location?.coordinates) && driver.location.coordinates.length === 2) {
-    return normalizePoint(driver.location.coordinates, 'driver.location.coordinates');
-  }
-
-  return null;
 };
 
 const isPointInsidePolygonRing = (point, ring = []) => {
@@ -310,7 +334,14 @@ const filterDriversForMatchedZone = ({ drivers = [], zone = null, pickupCoords, 
     }
 
     if (Number.isFinite(maxDistance) && maxDistance > 0) {
-      return getDistanceBetweenMeters(pickupCoords, coordinates) <= maxDistance;
+      if (getDistanceBetweenMeters(pickupCoords, coordinates) > maxDistance) {
+        return false;
+      }
+
+      const anchor = getRouteBookingAnchorCoordinates(driver);
+      if (driver?.routeBooking?.enabled) {
+        return Boolean(anchor) && getDistanceBetweenMeters(pickupCoords, anchor) <= maxDistance;
+      }
     }
 
     return true;
@@ -328,17 +359,19 @@ const buildGeoNearFilter = (field, coordinates, maxDistance) => ({
   },
 });
 
-const getDispatchAnchorCoordinates = (driver = {}) => {
-  const routeCoordinates = Array.isArray(driver?.routeBooking?.anchorLocation?.coordinates)
-    ? driver.routeBooking.anchorLocation.coordinates
-    : [];
+// Nearest first by where drivers really are, route-booking or not.
+const getDispatchAnchorCoordinates = (driver = {}) =>
+  Array.isArray(driver?.location?.coordinates) ? driver.location.coordinates : [];
 
-  if (driver?.routeBooking?.enabled && routeCoordinates.length === 2) {
-    return routeCoordinates;
-  }
-
-  return Array.isArray(driver?.location?.coordinates) ? driver.location.coordinates : [];
-};
+// Radius check on a field that already has a `$near` elsewhere in the query
+// (MongoDB allows only one `$near` per query).
+const buildGeoWithinFilter = (field, coordinates, maxDistance) => ({
+  [field]: {
+    $geoWithin: {
+      $centerSphere: [coordinates, maxDistance / EARTH_RADIUS_METERS],
+    },
+  },
+});
 
 const sortDriversByDispatchAnchorDistance = (drivers = [], pickupCoords) =>
   [...drivers]
@@ -403,7 +436,14 @@ const findDriversForZone = async ({
       'routeBooking.enabled': true,
       'routeBooking.anchorLocation': { $ne: null },
       'routeBooking.anchorLocation.coordinates.1': { $exists: true },
-      ...(strictZoneOnly ? {} : buildGeoNearFilter('routeBooking.anchorLocation', coordinates, effectiveMaxDistance)),
+      // Within range of the pickup where they are now, and their route pin
+      // also near the pickup.
+      ...(strictZoneOnly
+        ? {}
+        : {
+            ...buildGeoNearFilter('location', coordinates, effectiveMaxDistance),
+            ...buildGeoWithinFilter('routeBooking.anchorLocation', coordinates, effectiveMaxDistance),
+          }),
     })
       .limit(limit)
       .select(selectedFields),
