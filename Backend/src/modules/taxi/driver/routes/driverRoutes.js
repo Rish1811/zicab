@@ -356,11 +356,9 @@ driverRouter.post(
   authenticate(["driver"]),
   asyncHandler(claimDriverIncentiveReward),
 );
-driverRouter.post(
-  "/wallet/top-up",
-  authenticate(["driver"]),
-  asyncHandler(topUpMyWallet),
-);
+// No "POST /wallet/top-up": it credited whatever amount the driver sent, with
+// no payment behind it. Top-ups go through the Razorpay / PhonePe routes below,
+// which credit only a verified payment.
 driverRouter.post(
   "/wallet/top-up/razorpay/callback",
   asyncHandler(handleDriverRazorpayWalletTopupCallback),
