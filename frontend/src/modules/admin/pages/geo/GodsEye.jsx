@@ -1,19 +1,22 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   GoogleMap, 
   MarkerF, 
   MarkerClustererF, 
   TrafficLayer, 
-  HeatmapLayerF 
+  HeatmapLayerF,
+  PolylineF
 } from '@react-google-maps/api';
 import { 
   Search, Filter, Activity, Users, Car, AlertTriangle, IndianRupee, Clock,
   Map as MapIcon, X, Maximize, Minimize, Crosshair, Layers, Flame, Navigation, ArrowLeft, RefreshCw,
-  Battery, Gauge, MapPin, Phone, User as UserIcon, ShieldAlert, CheckCircle2, XCircle
+  Battery, Gauge, MapPin, Phone, User as UserIcon, ShieldAlert, CheckCircle2, XCircle,
+  LocateFixed, Radio, Send
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useBaseGoogleMapsLoader, HAS_VALID_GOOGLE_MAPS_KEY } from '../../utils/googleMaps';
 import { adminService } from '../../services/adminService';
+import { computeDrivingRoute, sumComputedRouteLegs } from '@/shared/utils/googleRoutes';
 
 import CarIcon from '@/assets/icons/car.png';
 import BikeIcon from '@/assets/icons/bike.png';
@@ -89,6 +92,61 @@ const headingArrow = (heading) => ({
   anchor: new window.google.maps.Point(0, 0),
 });
 
+/// Straight-line distance in metres, used when no road route can be computed.
+const haversineMeters = (a, b) => {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+
+const formatDistance = (meters) => {
+  if (!Number.isFinite(meters)) return '—';
+  return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
+};
+
+const formatDuration = (seconds) => {
+  if (!Number.isFinite(seconds)) return '—';
+  const mins = Math.max(1, Math.round(seconds / 60));
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)} h ${mins % 60} min`;
+};
+
+/// Rounded (~10 m) so the route is only recomputed when someone has actually
+/// moved, not on every GPS jitter or refresh.
+const pointKey = (p) => (p ? `${p.lat.toFixed(4)},${p.lng.toFixed(4)}` : '');
+
+const driverPoint = (d) =>
+  d && hasUsableCoordinates(d.latitude, d.longitude) ? { lat: Number(d.latitude), lng: Number(d.longitude) } : null;
+
+// Straight-line fallback ETA assumes city traffic (~25 km/h on a road ~1.3x longer).
+const CITY_SPEED_KMH = 25;
+const ROAD_FACTOR = 1.3;
+
+const myLocationIcon = () => ({
+  path: window.google.maps.SymbolPath.CIRCLE,
+  scale: 8,
+  fillColor: '#2563EB',
+  fillOpacity: 1,
+  strokeColor: '#FFFFFF',
+  strokeWeight: 3,
+});
+
+const reverseGeocode = (point) =>
+  new Promise((resolve) => {
+    try {
+      new window.google.maps.Geocoder().geocode({ location: point }, (results, status) => {
+        resolve(status === 'OK' && results?.[0] ? results[0].formatted_address : null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+
+const formatPoint = (p) => (p ? `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : '—');
+
 const GodsEye = () => {
   const navigate = useNavigate();
   const { isLoaded, loadError } = useBaseGoogleMapsLoader();
@@ -125,6 +183,14 @@ const GodsEye = () => {
 
   // Selection
   const [selectedDriver, setSelectedDriver] = useState(null);
+
+  // Live tracking: admin's own location -> selected driver
+  const [liveTracking, setLiveTracking] = useState(false);
+  const [myLocation, setMyLocation] = useState(null);
+  const [myLocationError, setMyLocationError] = useState('');
+  const [route, setRoute] = useState(null); // { path, distanceMeters, durationSeconds, approximate }
+  const [addresses, setAddresses] = useState({ me: null, driver: null });
+  const routeFittedFor = useRef('');
 
   // Fetch Logic
   const fetchMapData = useCallback(async () => {
@@ -254,6 +320,121 @@ const GodsEye = () => {
     tripsToday: dashboardData?.totalTripsToday || 0
   };
 
+  // The drawer shows the driver from the latest refresh, not the stale copy
+  // captured on click, so position and telemetry keep moving.
+  const liveSelectedDriver = useMemo(() => {
+    if (!selectedDriver) return null;
+    const id = selectedDriver._id || selectedDriver.id;
+    return drivers.find(d => (d._id || d.id) === id) || selectedDriver;
+  }, [drivers, selectedDriver]);
+
+  const selectedKey = pointKey(driverPoint(liveSelectedDriver));
+  const selectedPoint = useMemo(() => driverPoint(liveSelectedDriver), [selectedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const myKey = pointKey(myLocation);
+  const selectedId = liveSelectedDriver ? (liveSelectedDriver._id || liveSelectedDriver.id) : null;
+
+  // Watch the admin's browser location while live tracking is on.
+  useEffect(() => {
+    if (!liveTracking) return undefined;
+    if (!navigator.geolocation) {
+      setMyLocationError('This browser cannot share its location.');
+      setLiveTracking(false);
+      return undefined;
+    }
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setMyLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => {
+        setMyLocationError(err.code === 1
+          ? 'Location permission denied. Allow location for this site and try again.'
+          : 'Could not get your location.');
+        setLiveTracking(false);
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [liveTracking]);
+
+  // Road route (falls back to a straight line) from me to the selected driver.
+  useEffect(() => {
+    if (!liveTracking || !myLocation || !selectedPoint || !isLoaded) {
+      setRoute(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const origin = myLocation;
+    const destination = selectedPoint;
+    (async () => {
+      const result = await computeDrivingRoute({ origin, destination, region: 'in' });
+      if (cancelled) return;
+      if (result.status === 'OK' && result.path.length) {
+        let { distanceMeters, durationSeconds } = sumComputedRouteLegs(result.legs);
+        if (!distanceMeters) distanceMeters = haversineMeters(origin, destination) * ROAD_FACTOR;
+        if (!durationSeconds) durationSeconds = (distanceMeters / 1000 / CITY_SPEED_KMH) * 3600;
+        setRoute({ path: result.path, distanceMeters, durationSeconds, approximate: false });
+      } else {
+        const distanceMeters = haversineMeters(origin, destination);
+        setRoute({
+          path: [origin, destination],
+          distanceMeters,
+          durationSeconds: ((distanceMeters * ROAD_FACTOR) / 1000 / CITY_SPEED_KMH) * 3600,
+          approximate: true,
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTracking, myKey, selectedKey, isLoaded]);
+
+  // Frame both ends once per driver, then leave the map alone so the admin can pan.
+  useEffect(() => {
+    if (!liveTracking) { routeFittedFor.current = ''; return; }
+    if (!mapInstance || !route || !myLocation || !selectedPoint || !selectedId) return;
+    if (routeFittedFor.current === selectedId) return;
+    routeFittedFor.current = selectedId;
+    const bounds = new window.google.maps.LatLngBounds();
+    route.path.forEach(p => bounds.extend(p));
+    bounds.extend(myLocation);
+    bounds.extend(selectedPoint);
+    mapInstance.fitBounds(bounds, { top: 90, right: 60, bottom: 90, left: 80 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapInstance, route, liveTracking]);
+
+  // Human-readable places for the drawer.
+  useEffect(() => {
+    if (!liveTracking || !isLoaded || !myLocation) return undefined;
+    let cancelled = false;
+    reverseGeocode(myLocation).then(a => { if (!cancelled) setAddresses(prev => ({ ...prev, me: a })); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTracking, isLoaded, myKey]);
+
+  useEffect(() => {
+    setAddresses(prev => ({ ...prev, driver: null }));
+    if (!liveTracking || !isLoaded || !selectedPoint) return undefined;
+    let cancelled = false;
+    reverseGeocode(selectedPoint).then(a => { if (!cancelled) setAddresses(prev => ({ ...prev, driver: a })); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTracking, isLoaded, selectedKey]);
+
+  const toggleLiveTracking = () => {
+    setMyLocationError('');
+    setLiveTracking(v => !v);
+  };
+
+  const openNavigation = () => {
+    if (!selectedPoint) return;
+    const params = new URLSearchParams({ api: '1', destination: `${selectedPoint.lat},${selectedPoint.lng}`, travelmode: 'driving' });
+    if (myLocation) params.set('origin', `${myLocation.lat},${myLocation.lng}`);
+    window.open(`https://www.google.com/maps/dir/?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const locateSelected = () => {
+    if (!mapInstance || !selectedPoint) return;
+    mapInstance.panTo(selectedPoint);
+    mapInstance.setZoom(16);
+  };
+
   const handleMarkerClick = useCallback((driver) => {
     setSelectedDriver(driver);
     if (mapInstance && controls.autoFollow) {
@@ -268,9 +449,16 @@ const GodsEye = () => {
     }
   };
 
-  const mapCenter = filteredDrivers.length > 0 && controls.autoFollow && selectedDriver
-    ? { lat: Number(selectedDriver.latitude), lng: Number(selectedDriver.longitude) }
+  // GoogleMap re-centres whenever the `center` object changes identity, so it
+  // is memoised on its coordinates; otherwise every render (each GPS update)
+  // would snap the map back and undo the live-tracking route framing.
+  const rawCenter = filteredDrivers.length > 0 && controls.autoFollow && selectedPoint
+    ? selectedPoint
     : (filteredDrivers.length > 0 ? { lat: Number(filteredDrivers[0].latitude), lng: Number(filteredDrivers[0].longitude) } : INDIA_CENTER);
+  const hasInitialCenter = useRef(false);
+  const centerKey = liveTracking && hasInitialCenter.current && !controls.autoFollow ? 'hold' : pointKey(rawCenter);
+  const mapCenter = useMemo(() => rawCenter, [centerKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (filteredDrivers.length > 0) hasInitialCenter.current = true;
 
   return (
     <div className={`flex flex-col h-screen bg-gray-50 font-sans ${controls.fullscreen ? 'fixed inset-0 z-50' : ''}`}>
@@ -426,7 +614,45 @@ const GodsEye = () => {
                >
                   <Crosshair size={18} />
                </button>
+               <button
+                  onClick={toggleLiveTracking}
+                  className={`p-2.5 rounded-lg shadow-md transition-colors ${liveTracking ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  title={liveTracking ? 'Stop Live Tracking' : 'Live Tracking from My Location'}
+               >
+                  <LocateFixed size={18} />
+               </button>
             </div>
+
+            {/* LIVE TRACKING BANNER */}
+            {(liveTracking || myLocationError) && (
+               <div className="absolute top-4 left-20 z-10 bg-slate-900/90 text-white rounded-xl shadow-lg px-3 py-2 flex items-center gap-2 max-w-xs">
+                  <Radio size={18} className={myLocationError ? 'text-red-400' : 'text-green-400 animate-pulse'} />
+                  <div className="min-w-0">
+                     <p className="text-xs font-black">{myLocationError ? 'Live Tracking Off' : 'Live Tracking'}</p>
+                     <p className="text-[10px] text-slate-300 font-medium leading-tight">
+                        {myLocationError
+                           || (!myLocation ? 'Getting your location…'
+                           : !liveSelectedDriver ? 'Select a driver on the map'
+                           : `Tracking from My Location to ${liveSelectedDriver.name || 'Driver'}`)}
+                     </p>
+                  </div>
+                  {myLocationError && (
+                     <button onClick={() => setMyLocationError('')} className="p-0.5 text-slate-400 hover:text-white"><X size={14} /></button>
+                  )}
+               </div>
+            )}
+
+            {/* DISTANCE / ETA CHIP */}
+            {liveTracking && route && (
+               <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10 bg-white border-2 border-blue-500 rounded-xl shadow-lg px-3 py-1.5 flex items-center gap-4 whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-600 font-semibold">
+                     <Car size={14} /> Distance: <span className="font-black text-black">{formatDistance(route.distanceMeters)}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-600 font-semibold">
+                     <Clock size={14} /> ETA: <span className="font-black text-black">{route.approximate ? '~' : ''}{formatDuration(route.durationSeconds)}</span>
+                  </div>
+               </div>
+            )}
 
             <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
                <button 
@@ -511,6 +737,34 @@ const GodsEye = () => {
                         ))
                      ) : null}
 
+                     {liveTracking && route && (
+                        <PolylineF
+                           path={route.path}
+                           options={{
+                              strokeColor: '#2563EB',
+                              strokeOpacity: route.approximate ? 0 : 0.9,
+                              strokeWeight: 5,
+                              zIndex: 50,
+                              icons: route.approximate
+                                 ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeColor: '#2563EB', scale: 4 }, offset: '0', repeat: '16px' }]
+                                 : [{ icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.5, strokeColor: '#FFFFFF', fillColor: '#FFFFFF', fillOpacity: 1 }, offset: '10%', repeat: '90px' }],
+                           }}
+                        />
+                     )}
+
+                     {liveTracking && myLocation && (
+                        <MarkerF position={myLocation} icon={myLocationIcon()} zIndex={1000} title="My Location" />
+                     )}
+
+                     {liveTracking && selectedPoint && (
+                        <MarkerF
+                           position={selectedPoint}
+                           zIndex={1001}
+                           title={`Driver Location (${liveSelectedDriver?.name || 'Driver'})`}
+                           onClick={() => handleMarkerClick(liveSelectedDriver)}
+                        />
+                     )}
+
                   </GoogleMap>
                ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50">
@@ -564,7 +818,7 @@ const GodsEye = () => {
          </div>
 
          {/* RIGHT DRAWER - SELECTED MARKER */}
-         {selectedDriver && (
+         {liveSelectedDriver && (
             <div className="w-72 bg-white border-l border-gray-200 flex flex-col z-20 shadow-2xl flex-shrink-0 absolute right-0 top-0 bottom-0 lg:relative slide-in-from-right animate-in duration-300">
                {/* Drawer Header */}
                <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between bg-yellow-400 text-black">
@@ -579,27 +833,27 @@ const GodsEye = () => {
                   {/* Driver Profile Summary */}
                   <div className="flex items-center gap-3">
                      <div className="w-14 h-14 bg-gray-100 rounded-full border-2 border-gray-200 overflow-hidden flex items-center justify-center text-gray-400 flex-shrink-0">
-                        {selectedDriver.profile_image ? (
-                           <img src={selectedDriver.profile_image} alt={selectedDriver.name} className="w-full h-full object-cover" />
+                        {liveSelectedDriver.profile_image ? (
+                           <img src={liveSelectedDriver.profile_image} alt={liveSelectedDriver.name} className="w-full h-full object-cover" />
                         ) : (
                            <UserIcon size={24} />
                         )}
                      </div>
                      <div>
-                        <h3 className="text-base font-black text-black leading-tight">{selectedDriver.name || 'Unknown Driver'}</h3>
-                        <p className="text-xs text-gray-500 font-medium">{selectedDriver.phone || 'No Phone'}</p>
-                        {compassFromHeading(selectedDriver.heading) && (
+                        <h3 className="text-base font-black text-black leading-tight">{liveSelectedDriver.name || 'Unknown Driver'}</h3>
+                        <p className="text-xs text-gray-500 font-medium">{liveSelectedDriver.phone || 'No Phone'}</p>
+                        {compassFromHeading(liveSelectedDriver.heading) && (
                            <p className="text-xs text-gray-600 font-semibold mt-0.5">
-                              Heading {compassFromHeading(selectedDriver.heading)} &middot; {Math.round(Number(selectedDriver.heading))}&deg;
+                              Heading {compassFromHeading(liveSelectedDriver.heading)} &middot; {Math.round(Number(liveSelectedDriver.heading))}&deg;
                            </p>
                         )}
                         <div className="flex items-center gap-1 mt-1">
-                           {selectedDriver.isOnline ? (
+                           {liveSelectedDriver.isOnline ? (
                               <><CheckCircle2 size={12} className="text-green-500" /><span className="text-[10px] font-bold text-green-600">ONLINE</span></>
                            ) : (
                               <><XCircle size={12} className="text-gray-400" /><span className="text-[10px] font-bold text-gray-500">OFFLINE</span></>
                            )}
-                           {selectedDriver.isOnRide && <span className="text-[10px] font-bold text-yellow-600 ml-1">• ON TRIP</span>}
+                           {liveSelectedDriver.isOnRide && <span className="text-[10px] font-bold text-yellow-600 ml-1">• ON TRIP</span>}
                         </div>
                      </div>
                   </div>
@@ -612,15 +866,15 @@ const GodsEye = () => {
                      <div className="bg-gray-50 rounded-lg p-2.5 flex flex-col gap-1.5 border border-gray-100">
                         <div className="flex justify-between items-center">
                            <span className="text-xs text-gray-500 font-medium">Model</span>
-                           <span className="text-xs font-black text-black">{selectedDriver.vehicle_model || selectedDriver.vehicle_type || 'N/A'}</span>
+                           <span className="text-xs font-black text-black">{liveSelectedDriver.vehicle_model || liveSelectedDriver.vehicle_type || 'N/A'}</span>
                         </div>
                         <div className="flex justify-between items-center">
                            <span className="text-xs text-gray-500 font-medium">Number Plate</span>
-                           <span className="text-xs font-black text-black bg-yellow-100 px-1.5 py-0.5 rounded">{selectedDriver.vehicle_number || 'N/A'}</span>
+                           <span className="text-xs font-black text-black bg-yellow-100 px-1.5 py-0.5 rounded">{liveSelectedDriver.vehicle_number || 'N/A'}</span>
                         </div>
                         <div className="flex justify-between items-center">
                            <span className="text-xs text-gray-500 font-medium">City / Zone</span>
-                           <span className="text-xs font-bold text-gray-700">{selectedDriver.city || selectedDriver.service_location_name || 'N/A'}</span>
+                           <span className="text-xs font-bold text-gray-700">{liveSelectedDriver.city || liveSelectedDriver.service_location_name || 'N/A'}</span>
                         </div>
                      </div>
                   </div>
@@ -633,41 +887,99 @@ const GodsEye = () => {
                            <div className="text-gray-400"><Gauge size={16} /></div>
                            <div>
                               <p className="text-[9px] font-bold text-gray-400 uppercase">Speed</p>
-                              <p className="text-sm font-black text-black">{selectedDriver.speed || '0'} <span className="text-[10px]">km/h</span></p>
+                              <p className="text-sm font-black text-black">{liveSelectedDriver.speed || '0'} <span className="text-[10px]">km/h</span></p>
                            </div>
                         </div>
                         <div className="bg-white border border-gray-200 rounded-lg p-2.5 flex items-center gap-2 shadow-sm">
                            <div className="text-gray-400"><Navigation size={16} /></div>
                            <div>
                               <p className="text-[9px] font-bold text-gray-400 uppercase">Heading</p>
-                              <p className="text-sm font-black text-black">{selectedDriver.heading || 'N/A'}°</p>
+                              <p className="text-sm font-black text-black">{liveSelectedDriver.heading || 'N/A'}°</p>
                            </div>
                         </div>
                         <div className="bg-white border border-gray-200 rounded-lg p-2.5 flex items-center gap-2 shadow-sm">
                            <div className="text-gray-400"><MapPin size={16} /></div>
                            <div>
                               <p className="text-[9px] font-bold text-gray-400 uppercase">Accuracy</p>
-                              <p className="text-sm font-black text-black">± {selectedDriver.accuracy || '5'}m</p>
+                              <p className="text-sm font-black text-black">± {liveSelectedDriver.accuracy || '5'}m</p>
                            </div>
                         </div>
                         <div className="bg-white border border-gray-200 rounded-lg p-2.5 flex items-center gap-2 shadow-sm">
                            <div className="text-gray-400"><Battery size={16} /></div>
                            <div>
                               <p className="text-[9px] font-bold text-gray-400 uppercase">Battery</p>
-                              <p className="text-sm font-black text-black">{selectedDriver.battery || 'N/A'}</p>
+                              <p className="text-sm font-black text-black">{liveSelectedDriver.battery || 'N/A'}</p>
                            </div>
                         </div>
                      </div>
                   </div>
 
+                  {/* Live Tracking: Me -> Driver */}
+                  <div className="rounded-xl border-2 border-yellow-400 overflow-hidden">
+                     <div className="px-2.5 py-1.5 bg-slate-900 text-white flex items-center justify-between">
+                        <h4 className="text-[10px] font-black uppercase tracking-wider">Live Tracking (Me → Driver)</h4>
+                        {liveTracking && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
+                     </div>
+                     {!liveTracking ? (
+                        <div className="p-2.5 space-y-2">
+                           <p className="text-[11px] text-gray-500 font-medium">See the road route, distance and ETA from where you are to this driver.</p>
+                           {myLocationError && <p className="text-[11px] text-red-500 font-semibold">{myLocationError}</p>}
+                           <button onClick={toggleLiveTracking} className={btnSecondary + " w-full"}>
+                              <LocateFixed size={14} /> Track from My Location
+                           </button>
+                        </div>
+                     ) : (
+                        <div className="p-2.5 space-y-2">
+                           <div className="relative pl-5 space-y-2">
+                              <div className="absolute left-[5px] top-2 bottom-2 border-l-2 border-dashed border-gray-300" />
+                              <div className="relative">
+                                 <span className="absolute -left-5 top-0.5 w-3 h-3 rounded-full bg-blue-600 border-2 border-white shadow" />
+                                 <p className="text-xs font-black text-black">My Location</p>
+                                 <p className="text-[10px] text-gray-500 font-medium leading-tight">{myLocation ? (addresses.me || formatPoint(myLocation)) : 'Getting your location…'}</p>
+                              </div>
+                              <div className="relative">
+                                 <MapPin size={14} className="absolute -left-[22px] top-0 text-red-500" />
+                                 <p className="text-xs font-black text-black">Driver Location ({liveSelectedDriver.name || 'Driver'})</p>
+                                 <p className="text-[10px] text-gray-500 font-medium leading-tight">{selectedPoint ? (addresses.driver || formatPoint(selectedPoint)) : 'No GPS fix'}</p>
+                              </div>
+                           </div>
+                           <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 flex items-center gap-2">
+                                 <Car size={16} className="text-gray-500" />
+                                 <div>
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase">Distance</p>
+                                    <p className="text-sm font-black text-black">{route ? formatDistance(route.distanceMeters) : '—'}</p>
+                                 </div>
+                              </div>
+                              <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 flex items-center gap-2">
+                                 <Clock size={16} className="text-gray-500" />
+                                 <div>
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase">ETA</p>
+                                    <p className="text-sm font-black text-black">{route ? `${route.approximate ? '~' : ''}${formatDuration(route.durationSeconds)}` : '—'}</p>
+                                 </div>
+                              </div>
+                           </div>
+                           {route?.approximate && <p className="text-[10px] text-gray-400 font-medium">Road route unavailable — showing straight-line estimate.</p>}
+                           <div className="flex gap-2">
+                              <button onClick={openNavigation} disabled={!selectedPoint} className={btnPrimary + " flex-1 disabled:opacity-50"}>
+                                 <Send size={14} /> Navigate Route
+                              </button>
+                              <button onClick={toggleLiveTracking} className={btnSecondary + " px-2"} title="Stop Live Tracking">
+                                 <X size={14} />
+                              </button>
+                           </div>
+                        </div>
+                     )}
+                  </div>
+
                   {/* Trip Info if on trip */}
-                  {selectedDriver.isOnRide && (
+                  {liveSelectedDriver.isOnRide && (
                      <div className="space-y-2">
                         <h4 className="text-[9px] font-bold text-gray-400 uppercase tracking-widest text-yellow-600">Active Trip</h4>
                         <div className="bg-yellow-50 rounded-lg p-2.5 flex flex-col gap-1.5 border border-yellow-100">
                            <div className="flex justify-between items-center">
                               <span className="text-xs text-yellow-700 font-medium">Passenger</span>
-                              <span className="text-xs font-black text-black">{selectedDriver.passenger_name || 'N/A'}</span>
+                              <span className="text-xs font-black text-black">{liveSelectedDriver.passenger_name || 'N/A'}</span>
                            </div>
                            <div className="flex justify-between items-center">
                               <span className="text-xs text-yellow-700 font-medium">Started</span>
@@ -680,10 +992,10 @@ const GodsEye = () => {
 
                {/* Drawer Footer Actions */}
                <div className="p-3 border-t border-gray-100 bg-gray-50 flex flex-col gap-2 mt-auto">
-                  <button className={btnPrimary + " w-full"}>
+                  <button onClick={locateSelected} className={btnPrimary + " w-full"}>
                      <Search size={14} /> Locate Vehicle
                   </button>
-                  <button onClick={() => navigate(`/admin/owner-management/manage-owners/${selectedDriver._id || selectedDriver.id}`)} className={btnSecondary + " w-full"}>
+                  <button onClick={() => navigate(`/admin/owner-management/manage-owners/${liveSelectedDriver._id || liveSelectedDriver.id}`)} className={btnSecondary + " w-full"}>
                      <UserIcon size={14} /> View Driver Profile
                   </button>
                </div>
