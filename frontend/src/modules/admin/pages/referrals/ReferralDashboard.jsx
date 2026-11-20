@@ -101,8 +101,8 @@ const LineChartMock = ({ color, data }) => {
     return (
       <div className="flex flex-col items-center justify-center h-full flex-1 text-center py-10">
         <div className="flex items-end gap-2 h-24 mb-4 opacity-50">
-           {[1,2,3,4,5].map(i => (
-             <div key={i} className="w-4 bg-gray-100 rounded-t-sm" style={{ height: `${Math.random() * 40 + 10}%` }}></div>
+           {[30, 45, 20, 40, 25].map((height, i) => (
+             <div key={i} className="w-4 bg-gray-100 rounded-t-sm" style={{ height: `${height}%` }}></div>
            ))}
         </div>
         <p className="text-sm font-medium text-gray-500">No monthly data available.</p>
@@ -146,6 +146,108 @@ const LineChartMock = ({ color, data }) => {
     </div>
   );
 };
+
+const formatDate = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const formatMoney = (value) => `₹ ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+const MiniStats = ({ items }) => (
+  <div className="grid grid-cols-3 gap-2 mt-4">
+    {items.map(({ label, value }) => (
+      <div key={label} className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+        <p className="text-[11px] font-bold text-gray-500">{label}</p>
+        <p className="text-sm font-black text-gray-900">{value}</p>
+      </div>
+    ))}
+  </div>
+);
+
+const PersonCell = ({ name, phone }) => (
+  <div className="min-w-0">
+    <p className="text-sm font-bold text-gray-900 truncate">{name || 'Unnamed'}</p>
+    <p className="text-xs text-gray-500">{phone || '—'}</p>
+  </div>
+);
+
+const TopReferrersTable = ({ rows = [], emptyLabel }) => (
+  rows.length === 0 ? (
+    <div className="flex-1 flex items-center justify-center text-sm font-medium text-gray-500 py-10">{emptyLabel}</div>
+  ) : (
+    <div className="overflow-x-auto -mx-2">
+      <table className="w-full text-left">
+        <thead>
+          <tr className="text-[11px] font-bold text-gray-500 uppercase">
+            <th className="px-2 py-2">Referrer</th>
+            <th className="px-2 py-2">Code</th>
+            <th className="px-2 py-2 text-right">Invited</th>
+            <th className="px-2 py-2 text-right">Rewarded</th>
+            <th className="px-2 py-2 text-right">Last invite</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className="border-t border-gray-100">
+              <td className="px-2 py-2"><PersonCell name={row.name} phone={row.phone} /></td>
+              <td className="px-2 py-2 text-xs font-bold text-gray-700">{row.referral_code || '—'}</td>
+              <td className="px-2 py-2 text-right text-sm font-black text-gray-900">{row.referred}</td>
+              <td className="px-2 py-2 text-right text-sm font-bold text-emerald-600">{row.rewarded}</td>
+              <td className="px-2 py-2 text-right text-xs text-gray-500 whitespace-nowrap">{formatDate(row.last_referred_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+);
+
+const RecentReferralsTable = ({ rows = [] }) => (
+  rows.length === 0 ? (
+    <div className="flex-1 flex items-center justify-center text-sm font-medium text-gray-500 py-10">No one has joined with a referral code yet.</div>
+  ) : (
+    <div className="overflow-x-auto -mx-2">
+      <table className="w-full text-left">
+        <thead>
+          <tr className="text-[11px] font-bold text-gray-500 uppercase">
+            <th className="px-2 py-2">Joined</th>
+            <th className="px-2 py-2">Type</th>
+            <th className="px-2 py-2">New member</th>
+            <th className="px-2 py-2">Invited by</th>
+            <th className="px-2 py-2 text-right">Rides</th>
+            <th className="px-2 py-2 text-right">Reward</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${row.type}-${row.id}`} className="border-t border-gray-100">
+              <td className="px-2 py-2 text-xs text-gray-500 whitespace-nowrap">{formatDate(row.joined_at)}</td>
+              <td className="px-2 py-2">
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${row.type === 'driver' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-50 text-blue-700'}`}>
+                  {row.type === 'driver' ? 'Driver' : 'Rider'}
+                </span>
+              </td>
+              <td className="px-2 py-2"><PersonCell name={row.name} phone={row.phone} /></td>
+              <td className="px-2 py-2">
+                {row.referrer ? <PersonCell name={row.referrer.name} phone={row.referrer.phone} /> : <span className="text-xs text-gray-400">Account deleted</span>}
+              </td>
+              <td className="px-2 py-2 text-right text-sm font-bold text-gray-900">{row.completed_rides}</td>
+              <td className="px-2 py-2 text-right whitespace-nowrap">
+                {row.reward_granted_at
+                  ? <span className="text-xs font-bold text-emerald-600">Paid {formatDate(row.reward_granted_at)}</span>
+                  : <span className="text-xs font-bold text-gray-400">Pending</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+);
 
 const ReferralDashboard = () => {
   const { settings } = useSettings();
@@ -199,15 +301,15 @@ const ReferralDashboard = () => {
           value={data?.total_users || "0"} 
           icon={UserCheck} 
         />
-        <StatCard 
-          title="Active Referrals" 
-          value={data?.active_referrals || "0"} 
-          icon={Zap} 
+        <StatCard
+          title="Joined With A Referral"
+          value={data?.active_referrals || "0"}
+          icon={Zap}
         />
-        <StatCard 
-          title="Referral Earning" 
-          value={data?.referral_earning ? `₹ ${data.referral_earning}` : "₹ 0"} 
-          icon={IndianRupee} 
+        <StatCard
+          title="Referral Rewards Paid"
+          value={formatMoney(data?.referral_earning)}
+          icon={IndianRupee}
         />
       </div>
 
@@ -223,8 +325,13 @@ const ReferralDashboard = () => {
                  val1={data?.user_referrals?.referral_user || 0}
                  val2={data?.user_referrals?.normal_user || 0}
                />
+               <MiniStats items={[
+                 { label: 'Rewarded', value: data?.user_referrals?.rewarded || 0 },
+                 { label: 'Pending', value: data?.user_referrals?.pending || 0 },
+                 { label: 'Paid out', value: formatMoney(data?.user_referrals?.earning) },
+               ]} />
             </ChartContainer>
-            <ChartContainer title="User Monthly Referrals">
+            <ChartContainer title={`User Monthly Referrals${data?.year ? ` (${data.year})` : ''}`}>
                <LineChartMock 
                  color="#FBBF24" /* yellow-400 */
                  data={data?.user_referrals?.monthly || emptyMonthly} 
@@ -245,14 +352,38 @@ const ReferralDashboard = () => {
                  val1={data?.driver_referrals?.referral_driver || 0}
                  val2={data?.driver_referrals?.normal_driver || 0}
                />
+               <MiniStats items={[
+                 { label: 'Rewarded', value: data?.driver_referrals?.rewarded || 0 },
+                 { label: 'Pending', value: data?.driver_referrals?.pending || 0 },
+                 { label: 'Paid out', value: formatMoney(data?.driver_referrals?.earning) },
+               ]} />
             </ChartContainer>
-            <ChartContainer title="Driver Monthly Referrals">
-               <LineChartMock 
+            <ChartContainer title={`Driver Monthly Referrals${data?.year ? ` (${data.year})` : ''}`}>
+               <LineChartMock
                  color="#FACC15" /* yellow-400 */
-                 data={data?.driver_referrals?.monthly || emptyMonthly} 
+                 data={data?.driver_referrals?.monthly || emptyMonthly}
                />
             </ChartContainer>
          </div>
+      </div>
+
+      {/* TOP REFERRERS */}
+      <div className="mt-5">
+         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartContainer title="Top User Referrers">
+               <TopReferrersTable rows={data?.user_referrals?.top_referrers} emptyLabel="No user has invited anyone yet." />
+            </ChartContainer>
+            <ChartContainer title="Top Driver Referrers">
+               <TopReferrersTable rows={data?.driver_referrals?.top_referrers} emptyLabel="No driver has invited anyone yet." />
+            </ChartContainer>
+         </div>
+      </div>
+
+      {/* RECENT REFERRALS */}
+      <div className="mt-5 grid grid-cols-12">
+         <ChartContainer title="Recent Referrals" fullWidth>
+            <RecentReferralsTable rows={data?.recent_referrals} />
+         </ChartContainer>
       </div>
 
       {/* FOOTER */}

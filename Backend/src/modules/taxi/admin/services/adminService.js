@@ -6008,28 +6008,164 @@ export const updateReferralSettings = async (type, payload) => {
   return setting.referral[type];
 };
 
+const REFERRAL_IST_OFFSET_MS = 330 * 60 * 1000;
+
+// Referral sign-ups per calendar month of `year` (Jan..Dec), in IST so a
+// sign-up just after midnight lands in the right month.
+const referralMonthlyCounts = async (Model, year) => {
+  const start = new Date(Date.UTC(year, 0, 1) - REFERRAL_IST_OFFSET_MS);
+  const end = new Date(Date.UTC(year + 1, 0, 1) - REFERRAL_IST_OFFSET_MS);
+  const rows = await Model.aggregate([
+    { $match: { referredBy: { $ne: null }, createdAt: { $gte: start, $lt: end } } },
+    { $group: { _id: { $month: { date: '$createdAt', timezone: '+05:30' } }, count: { $sum: 1 } } },
+  ]);
+  const monthly = Array(12).fill(0);
+  rows.forEach((row) => {
+    if (row._id >= 1 && row._id <= 12) monthly[row._id - 1] = row.count;
+  });
+  return monthly;
+};
+
+// The people who invited the most, with how many of their invitees went on
+// to earn the referral reward.
+const topReferrers = async (Model, limit = 10) => {
+  const rows = await Model.aggregate([
+    { $match: { referredBy: { $ne: null } } },
+    {
+      $group: {
+        _id: '$referredBy',
+        referred: { $sum: 1 },
+        rewarded: { $sum: { $cond: [{ $ifNull: ['$referralRewardGrantedAt', false] }, 1, 0] } },
+        lastReferredAt: { $max: '$createdAt' },
+      },
+    },
+    { $sort: { referred: -1, lastReferredAt: -1 } },
+    { $limit: limit },
+  ]);
+  const people = await Model.find({ _id: { $in: rows.map((row) => row._id) } })
+    .select('name phone referralCode')
+    .lean();
+  const byId = new Map(people.map((person) => [String(person._id), person]));
+
+  return rows.map((row) => {
+    const person = byId.get(String(row._id)) || {};
+    return {
+      id: String(row._id),
+      name: person.name || '',
+      phone: person.phone || '',
+      referral_code: person.referralCode || '',
+      referred: row.referred,
+      rewarded: row.rewarded,
+      last_referred_at: row.lastReferredAt || null,
+    };
+  });
+};
+
+// The latest people who joined with a referral code, and who invited them.
+const recentReferrals = async (Model, kind, limit = 25) => {
+  const referred = await Model.find({ referredBy: { $ne: null } })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .select('name phone referredBy referredRideCompletionCount referralRewardGrantedAt createdAt')
+    .populate('referredBy', 'name phone referralCode')
+    .lean();
+
+  return referred.map((person) => ({
+    id: String(person._id),
+    type: kind,
+    name: person.name || '',
+    phone: person.phone || '',
+    joined_at: person.createdAt || null,
+    completed_rides: Number(person.referredRideCompletionCount || 0),
+    reward_granted_at: person.referralRewardGrantedAt || null,
+    referrer: person.referredBy
+      ? {
+          id: String(person.referredBy._id),
+          name: person.referredBy.name || '',
+          phone: person.referredBy.phone || '',
+          referral_code: person.referredBy.referralCode || '',
+        }
+      : null,
+  }));
+};
+
 export const getReferralDashboard = async () => {
-  const [totalDrivers, totalUsers] = await Promise.all([
+  const year = new Date(Date.now() + REFERRAL_IST_OFFSET_MS).getUTCFullYear();
+
+  const [
+    totalDrivers,
+    totalUsers,
+    referredUsers,
+    referredDrivers,
+    rewardedUsers,
+    rewardedDrivers,
+    userMonthly,
+    driverMonthly,
+    driverEarningRows,
+    userEarningRows,
+    userTopReferrers,
+    driverTopReferrers,
+    recentUserReferrals,
+    recentDriverReferrals,
+  ] = await Promise.all([
     Driver.countDocuments(),
     User.countDocuments(),
+    User.countDocuments({ referredBy: { $ne: null } }),
+    Driver.countDocuments({ referredBy: { $ne: null } }),
+    User.countDocuments({ referredBy: { $ne: null }, referralRewardGrantedAt: { $ne: null } }),
+    Driver.countDocuments({ referredBy: { $ne: null }, referralRewardGrantedAt: { $ne: null } }),
+    referralMonthlyCounts(User, year),
+    referralMonthlyCounts(Driver, year),
+    // Every driver referral credit is its own wallet transaction.
+    WalletTransaction.aggregate([
+      { $match: { 'metadata.source': 'driver_referral' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+    // A rider wallet keeps its last 50 transactions, so very old rider
+    // referral credits can have rolled off; this is a floor, not exact.
+    UserWallet.aggregate([
+      { $unwind: '$transactions' },
+      { $match: { 'transactions.referenceKey': { $regex: '^user-referral:' } } },
+      { $group: { _id: null, total: { $sum: '$transactions.amount' } } },
+    ]),
+    topReferrers(User),
+    topReferrers(Driver),
+    recentReferrals(User, 'user'),
+    recentReferrals(Driver, 'driver'),
   ]);
 
-  // Mocking some parts for the dashboard view
+  const driverEarning = Number(driverEarningRows?.[0]?.total || 0);
+  const userEarning = Number(userEarningRows?.[0]?.total || 0);
+  const round2 = (value) => Math.round(value * 100) / 100;
+
   return {
+    year,
     total_drivers: totalDrivers,
     total_users: totalUsers,
-    active_referrals: 0,
-    referral_earning: 0,
+    // Everyone who joined with a referral code, riders and drivers.
+    active_referrals: referredUsers + referredDrivers,
+    referral_earning: round2(driverEarning + userEarning),
     user_referrals: {
-      normal_user: totalUsers,
-      referral_user: 0,
-      monthly: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      normal_user: Math.max(0, totalUsers - referredUsers),
+      referral_user: referredUsers,
+      rewarded: rewardedUsers,
+      pending: Math.max(0, referredUsers - rewardedUsers),
+      earning: round2(userEarning),
+      monthly: userMonthly,
+      top_referrers: userTopReferrers,
     },
     driver_referrals: {
-      normal_driver: totalDrivers,
-      referral_driver: 0,
-      monthly: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    }
+      normal_driver: Math.max(0, totalDrivers - referredDrivers),
+      referral_driver: referredDrivers,
+      rewarded: rewardedDrivers,
+      pending: Math.max(0, referredDrivers - rewardedDrivers),
+      earning: round2(driverEarning),
+      monthly: driverMonthly,
+      top_referrers: driverTopReferrers,
+    },
+    recent_referrals: [...recentUserReferrals, ...recentDriverReferrals]
+      .sort((a, b) => new Date(b.joined_at || 0) - new Date(a.joined_at || 0))
+      .slice(0, 30),
   };
 };
 
