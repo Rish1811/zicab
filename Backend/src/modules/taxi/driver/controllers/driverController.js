@@ -2844,6 +2844,7 @@ export const goOnline = async (req, res) => {
       zoneId: zone?._id || null,
       ...(existingDriver.owner_id ? { 'wallet.isBlocked': false } : {}),
       location: toPoint(coordinates, "location"),
+      locationUpdatedAt: new Date(),
       onlineSelfie: nextOnlineSelfie,
       incentiveTracking: {
         ...trackingBeforeOnline,

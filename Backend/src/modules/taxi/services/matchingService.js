@@ -11,6 +11,13 @@ import { getDriverIdsBlockedByUpcomingScheduledRides } from './rideService.js';
 
 const EARTH_RADIUS_METERS = 6371000;
 
+// A driver is only offered rides while their phone is reporting GPS. The app
+// sends a fix at least every 30 s while online (a heartbeat when parked), so
+// three minutes leaves room for a dropped connection. Older than that, the
+// stored point is wherever the app was killed - drivers 8 km from a pickup were
+// being matched as if they were still next to it.
+export const DRIVER_LOCATION_FRESH_MS = 3 * 60 * 1000;
+
 const normalizeVehicleKey = (value = '') => String(value || '').trim().toLowerCase();
 
 const normalizeVehicleKeys = (vehicles = []) => {
@@ -94,6 +101,7 @@ const buildDriverMatchFilters = ({ zoneId, serviceLocationId, vehicleTypeId, veh
   return {
     isOnline: true,
     isOnRide: false,
+    locationUpdatedAt: { $gte: new Date(Date.now() - DRIVER_LOCATION_FRESH_MS) },
     $and: [walletFilter, ...(Object.keys(vehicleTypeFilter).length ? [vehicleTypeFilter] : [])],
     ...(zoneId ? { zoneId } : {}),
     ...(serviceLocationId ? { service_location_id: serviceLocationId } : {}),

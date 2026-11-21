@@ -462,6 +462,14 @@ const driverSchema = new mongoose.Schema(
         default: [0, 0],
       },
     },
+    // When `location` was last written from the driver's phone. Matching only
+    // trusts a fresh fix: a driver whose app was killed stays "online" with the
+    // last point it sent, and was offered rides from wherever they had been.
+    locationUpdatedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
     routeBooking: {
       enabled: {
         type: Boolean,
