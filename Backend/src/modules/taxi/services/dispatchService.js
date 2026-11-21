@@ -1716,6 +1716,18 @@ export const notifyLateAvailableDriver = async (driverId) => {
 
 export const notifyRideAccepted = async (ride) => {
   const state = getDispatchState(ride._id);
+  // Everyone this ride was offered to. The in-memory list only exists on the
+  // API process that ran the dispatch, and an accept can land on any of them,
+  // so it was usually empty and the other drivers kept the offer on screen
+  // after someone else took the ride. The ride's own record is complete; it
+  // is read here, before the reset below clears it.
+  const tracked = await Ride.findById(ride._id).select('dispatchTracking').lean().catch(() => null);
+  const offeredDriverIds = [
+    ...new Set([
+      ...(state.notifiedDriverIds || []),
+      ...getPersistedDispatchTracking(tracked || {}).notifiedDriverIds,
+    ].map(String)),
+  ];
   stopDispatchFlow(ride._id);
   await persistDispatchTrackingProgress({ rideId: ride._id, reset: true }).catch(() => null);
 
@@ -1799,17 +1811,22 @@ export const notifyRideAccepted = async (ride) => {
   emitToRoom(getRideRoom(populatedRide._id), 'rideRequestClosed', {
     rideId: String(populatedRide._id),
         acceptedDriverId: String(populatedRide.driverId._id),
-        notifiedDriverIds: state.notifiedDriverIds,
+        notifiedDriverIds: offeredDriverIds,
         reason: 'accepted-by-another-driver',
   });
 
-  for (const driverId of state.notifiedDriverIds) {
+  const acceptedDriverId = String(populatedRide.driverId._id);
+  const otherDriverIds = offeredDriverIds.filter((driverId) => driverId !== acceptedDriverId);
+  for (const driverId of otherDriverIds) {
     emitToDriver(driverId, 'rideRequestClosed', {
       rideId: String(populatedRide._id),
-      acceptedDriverId: String(populatedRide.driverId._id),
+      acceptedDriverId,
       reason: 'accepted-by-another-driver',
     });
   }
+  // The socket only reaches an app that is awake; the full-screen offer card
+  // on a backgrounded phone closes on this push.
+  sendRideOfferClosedPush(otherDriverIds, populatedRide._id);
 
   sendPushNotificationToEntities({
     userIds: [String(populatedRide.userId)],
