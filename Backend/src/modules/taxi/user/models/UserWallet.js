@@ -64,6 +64,13 @@ const userWalletSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Portion of `balance` earned as cashback/rewards. Spendable on rides
+    // only - transfers and other purchases must leave it in place.
+    cashbackBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     transactions: {
       type: [walletTransactionSchema],
       default: [],

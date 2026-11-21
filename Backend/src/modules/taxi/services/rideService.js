@@ -19,6 +19,7 @@ import { User } from '../user/models/User.js';
 import { UserWallet } from '../user/models/UserWallet.js';
 import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
+import { consumeRideCashbackRedemption, resolveCashbackForBooking } from '../rewards/services/cashbackRedemptionService.js';
 import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, getSurgeProfiles, surgeForVehicle } from './surgeService.js';
 import { estimateTolls, isRoundTripValue } from './tollService.js';
 import { classifyTrip } from './tripCategoryService.js';
@@ -1136,6 +1137,7 @@ export const createRideRecord = async ({
   platformFee,
   surgeMultiplier,
   tollAmount,
+  useCashback = true,
 }) => {
   const user = await User.findById(userId);
 
@@ -1461,6 +1463,20 @@ export const createRideRecord = async ({
       }
     : undefined;
 
+  // The rider's ride cashback comes off a fixed-fare ride's fare; it leaves
+  // their wallet only when this ride completes.
+  const cashbackRedemption = await resolveCashbackForBooking({
+    userId,
+    fare: effectiveStartingFare,
+    useCashback: useCashback !== false && String(useCashback).toLowerCase() !== 'false',
+    pricingNegotiationMode,
+    hasPromo: Boolean(promoCode),
+    isSubscriptionCovered,
+  }).catch(() => null);
+  const fareAfterCashback = cashbackRedemption
+    ? Math.round((effectiveStartingFare - cashbackRedemption.amount) * 100) / 100
+    : effectiveStartingFare;
+
   if (!promoCode) {
     const ride = await Ride.create({
       userId,
@@ -1474,8 +1490,9 @@ export const createRideRecord = async ({
       pickupAddress: normalizeAddress(pickupAddress),
       dropLocation: toPoint(dropCoords, 'drop'),
       dropAddress: normalizeAddress(dropAddress),
-      fare: effectiveStartingFare,
+      fare: fareAfterCashback,
       baseFare: safeFare,
+      ...(cashbackRedemption ? { cashbackRedemption } : {}),
       bookingMode: effectiveBookingMode,
       pricingNegotiationMode,
       biddingStatus: pricingNegotiationMode === 'driver_bid' ? 'open' : 'none',
@@ -2267,6 +2284,16 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
       driverEarnings: settledRide?.driverEarnings,
       distanceMeters: settledRide?.estimatedDistanceMeters,
     });
+
+    // The cashback this ride was discounted by leaves the rider's wallet now.
+    // Never blocks a completion.
+    if (Number(ride.cashbackRedemption?.amount) > 0) {
+      await consumeRideCashbackRedemption(ride)
+        .then(() => Ride.updateOne({ _id: ride._id }, { $set: { 'cashbackRedemption.consumedAt': new Date() } }))
+        .catch((error) => {
+          console.warn('[cashback] could not take used cashback for ride', String(ride._id), '-', error?.message);
+        });
+    }
 
     await processCompletedRideReferralReward(ride);
     await processCompletedDriverReferralReward(ride);

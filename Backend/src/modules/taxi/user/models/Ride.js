@@ -698,6 +698,15 @@ const rideSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Ride cashback spent as a discount on this ride (see
+    // rewards/services/cashbackRedemptionService.js). `fare` is already net of
+    // it; ZI CAB pays it, so settlement adds it back for the driver.
+    cashbackRedemption: {
+      amount: { type: Number, default: 0, min: 0 },
+      fareBeforeCashback: { type: Number, default: 0, min: 0 },
+      appliedAt: { type: Date, default: null },
+      consumedAt: { type: Date, default: null },
+    },
     promo: {
       code: {
         type: String,

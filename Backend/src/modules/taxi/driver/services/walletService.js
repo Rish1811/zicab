@@ -457,13 +457,18 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
       return null;
     }
 
+    // What the rider paid. Ride cashback they spent on this ride came off it,
+    // and ZI CAB pays that part: commission and the driver's earnings are
+    // worked out on the fare before cashback (`grossFare`).
     const fare = normalizeAmount(ride.fare || 0, 'fare');
+    const cashbackPaid = Math.max(0, Math.round((Number(ride.cashbackRedemption?.amount) || 0) * 100) / 100);
+    const grossFare = Math.round((fare + cashbackPaid) * 100) / 100;
     // Tolls in the fare are the driver's: they paid them at the plaza, so no
     // commission is taken on them.
-    const tolls = Math.min(Math.max(0, Number(ride.tollCharges?.total) || 0), fare);
+    const tolls = Math.min(Math.max(0, Number(ride.tollCharges?.total) || 0), grossFare);
     const commissionConfig = await resolveCommissionConfigForRide(ride, session);
     const tripCommission = computeCommissionAmount({
-      fare: Math.round((fare - tolls) * 100) / 100,
+      fare: Math.round((grossFare - tolls) * 100) / 100,
       type: commissionConfig.type,
       value: commissionConfig.value,
     });
@@ -471,7 +476,7 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
     // never the driver's money: it goes to admin with the commission. Zero on
     // every ride booked by an app that doesn't charge one, so those settle
     // exactly as before. Read here, before the snapshot is replaced below.
-    const platformFee = Math.min(Math.max(0, Number(ride.pricingSnapshot?.rider_platform_fee) || 0), fare);
+    const platformFee = Math.min(Math.max(0, Number(ride.pricingSnapshot?.rider_platform_fee) || 0), grossFare);
 
     // A driver on a daily pass keeps the fare: the pass is what ZI CAB earned
     // from them today. The rider's platform fee is still not theirs, so it is
@@ -493,11 +498,16 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
 
     const waivedCommission = coveringSubscription ? tripCommission : 0;
     const chargeableCommission = coveringSubscription ? 0 : tripCommission;
-    const commissionAmount = Math.min(Math.round((chargeableCommission + platformFee) * 100) / 100, fare);
+    const commissionAmount = Math.min(Math.round((chargeableCommission + platformFee) * 100) / 100, grossFare);
     const paymentMethod = normalizePaymentMethod(ride.paymentMethod);
-    const driverEarnings = Math.max(Math.round((fare - commissionAmount) * 100) / 100, 0);
-    const amount = paymentMethod === 'cash' ? -commissionAmount : driverEarnings;
-    const type = paymentMethod === 'cash' ? 'commission_deduction' : 'ride_earning';
+    const driverEarnings = Math.max(Math.round((grossFare - commissionAmount) * 100) / 100, 0);
+    // Cash: the driver already holds what the rider paid, owes the commission
+    // and is owed the cashback ZI CAB covered. Online: ZI CAB holds the money
+    // and pays the driver their full earnings.
+    const amount = paymentMethod === 'cash'
+      ? Math.round((cashbackPaid - commissionAmount) * 100) / 100
+      : driverEarnings;
+    const type = paymentMethod === 'cash' && amount < 0 ? 'commission_deduction' : 'ride_earning';
 
     ride.paymentMethod = paymentMethod;
     ride.commissionAmount = commissionAmount;
@@ -532,10 +542,14 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
       amount,
       type,
       description: paymentMethod === 'cash'
-        ? (platformFee > 0 ? 'Commission and platform fee deducted for cash ride' : 'Commission deducted for cash ride')
+        ? (cashbackPaid > 0
+          ? `Rider cashback Rs ${cashbackPaid} paid by ZI CAB, less commission, for cash ride`
+          : (platformFee > 0 ? 'Commission and platform fee deducted for cash ride' : 'Commission deducted for cash ride'))
         : 'Driver earning credited for online ride',
       metadata: {
-        fare,
+        fare: grossFare,
+        fareCollected: fare,
+        cashbackPaid,
         commissionAmount,
         driverEarnings,
         paymentMethod,
