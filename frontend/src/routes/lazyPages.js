@@ -176,6 +176,8 @@ export const AdminReferralDashboard = lazy(() => import('../modules/admin/pages/
 export const AdminUserReferralSettings = lazy(() => import('../modules/admin/pages/referrals/UserReferralSettings'));
 export const AdminDriverReferralSettings = lazy(() => import('../modules/admin/pages/referrals/DriverReferralSettings'));
 export const AdminReferralTranslation = lazy(() => import('../modules/admin/pages/referrals/ReferralTranslation'));
+export const AdminRewardSettings = lazy(() => import('../modules/admin/pages/referrals/RewardSettings'));
+export const AdminRewardClaims = lazy(() => import('../modules/admin/pages/referrals/RewardClaims'));
 export const AdminPromoCodes = lazy(() => import('../modules/admin/pages/promotions/PromoCodes'));
 export const AdminSendNotification = lazy(() => import('../modules/admin/pages/promotions/SendNotification'));
 export const AdminBannerImage = lazy(() => import('../modules/admin/pages/promotions/BannerImage'));

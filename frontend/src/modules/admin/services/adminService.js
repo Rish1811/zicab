@@ -104,6 +104,15 @@ export const adminService = {
   getOwnerWalletHistory: (id) => api.get(`/admin/wallet/owners/${id}/history`),
 
   getReferralDashboard: () => api.get('/admin/referral/dashboard'),
+  getRewardSettings: () => api.get('/admin/rewards/settings'),
+  updateRewardSettings: (data) => api.patch('/admin/rewards/settings', data),
+  getRewardLevels: (params = {}) => api.get('/admin/rewards/levels', { params }),
+  createRewardLevel: (data) => api.post('/admin/rewards/levels', data),
+  updateRewardLevel: (id, data) => api.patch(`/admin/rewards/levels/${id}`, data),
+  deleteRewardLevel: (id) => api.delete(`/admin/rewards/levels/${id}`),
+  uploadRewardImage: (image) => api.post('/admin/rewards/upload-image', { image }),
+  getRewardClaims: (params = {}) => api.get('/admin/rewards/claims', { params }),
+  updateRewardClaim: (id, data) => api.patch(`/admin/rewards/claims/${id}`, data),
 
   /**
    * Subscription Management

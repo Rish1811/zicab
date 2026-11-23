@@ -20,6 +20,7 @@ import { UserWallet } from '../user/models/UserWallet.js';
 import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
 import { consumeRideCashbackRedemption, resolveCashbackForBooking } from '../rewards/services/cashbackRedemptionService.js';
+import { processRideCashback } from '../rewards/services/rewardService.js';
 import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, getSurgeProfiles, surgeForVehicle } from './surgeService.js';
 import { estimateTolls, isRoundTripValue } from './tollService.js';
 import { classifyTrip } from './tripCategoryService.js';
@@ -2343,6 +2344,10 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
 
     await processCompletedRideReferralReward(ride);
     await processCompletedDriverReferralReward(ride);
+    // Cashback must never block a completion.
+    await processRideCashback(ride).catch((error) => {
+      console.warn('[cashback] failed for ride', String(ride._id), '-', error?.message);
+    });
 
     // Deliberately not awaited: the driver's "complete ride" tap should not wait
     // on an SMTP round trip, and a mail failure must not fail the completion.

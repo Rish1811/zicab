@@ -6,6 +6,7 @@ import { asyncHandler } from '../../../../utils/asyncHandler.js';
 import { User } from '../models/User.js';
 import { createWebsiteBookingRequest } from '../services/websiteBookingService.js';
 import { UserWallet } from '../models/UserWallet.js';
+import { consumeCashbackForRide, getLockedCashback, getWithdrawableBalance } from '../../rewards/services/rewardService.js';
 import { AdminBusinessSetting } from '../../admin/models/AdminBusinessSetting.js';
 import { Notification } from '../../admin/promotions/models/Notification.js';
 import { BusService } from '../../admin/models/BusService.js';
@@ -149,7 +150,8 @@ const buildUserWalletPayload = (wallet) => {
     refundWallet: Number(wallet?.refundWallet || 0),
     // The part of the balance that is ride cashback (spendable on rides only),
     // never more than the balance itself. The app showed 0 without it.
-    cashbackBalance: Math.round(Math.max(0, Math.min(Number(wallet?.cashbackBalance || 0), balance)) * 100) / 100,
+    cashbackBalance: getLockedCashback(wallet),
+    withdrawableBalance: getWithdrawableBalance(wallet),
     currency: 'INR',
     recentTransactions,
     // Same list under the name the rider app reads; it showed an empty history.
@@ -2214,12 +2216,16 @@ export const transferUserWallet = async (req, res) => {
   };
 
   const senderUpdate = await UserWallet.updateOne(
-    { userId: senderId, balance: { $gte: amount } },
+    {
+      userId: senderId,
+      // Cashback sits inside the balance but may only pay for rides.
+      $expr: { $gte: [{ $subtract: ['$balance', { $min: [{ $ifNull: ['$cashbackBalance', 0] }, '$balance'] }] }, amount] },
+    },
     { $inc: { balance: -amount }, $push: { transactions: { $each: [debitTx], $slice: -50 } } },
   );
 
   if (!senderUpdate?.modifiedCount) {
-    throw new ApiError(400, 'Insufficient wallet balance');
+    throw new ApiError(400, 'Insufficient wallet balance (cashback can only be used to pay for rides)');
   }
 
   const recipientUpdate = await UserWallet.updateOne(
@@ -2290,6 +2296,9 @@ export const transferUserWalletToDriver = async (req, res) => {
 
     if (Number(senderWallet.balance || 0) < amount) {
       throw new ApiError(400, 'Insufficient wallet balance');
+    }
+    if (getWithdrawableBalance(senderWallet) < amount) {
+      throw new ApiError(400, 'Cashback balance can only be used to pay for rides');
     }
 
     senderWallet.balance = Math.round((Number(senderWallet.balance || 0) - amount) * 100) / 100;
@@ -2748,6 +2757,7 @@ export const payRentalAdvanceWithWallet = async (req, res) => {
       throw new ApiError(400, 'Insufficient wallet balance');
     }
 
+    consumeCashbackForRide(wallet, amount);
     wallet.balance = Math.round((Number(wallet.balance || 0) - amount) * 100) / 100;
     wallet.transactions.push({
       kind: 'debit',

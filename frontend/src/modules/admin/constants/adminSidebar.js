@@ -200,6 +200,8 @@ export const ADMIN_SIDEBAR_SECTIONS = [
           { label: 'User Referral Settings', path: '/admin/referrals/user-settings', permission: 'referrals.view' },
           { label: 'Driver Referral Settings', path: '/admin/referrals/driver-settings', permission: 'referrals.view' },
           { label: 'Referral Translation', path: '/admin/referrals/translation', permission: 'referrals.view' },
+          { label: 'Rewards & Cashback', path: '/admin/referrals/rewards', permission: 'referrals.view' },
+          { label: 'Reward Claims', path: '/admin/referrals/reward-claims', permission: 'referrals.view' },
         ],
       },
       {

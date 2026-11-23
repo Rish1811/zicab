@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
 import { SubscriptionPlan } from '../../admin/models/SubscriptionPlan.js';
 import { UserWallet } from '../models/UserWallet.js';
+import { getWithdrawableBalance } from '../../rewards/services/rewardService.js';
 import { UserSubscription } from '../models/UserSubscription.js';
 
 const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
@@ -202,6 +203,9 @@ export const purchaseUserSubscription = async ({ userId, planId, paymentSource =
 
   if (Number(wallet.balance || 0) < amount) {
     throw new ApiError(400, 'Insufficient wallet balance');
+  }
+  if (getWithdrawableBalance(wallet) < amount) {
+    throw new ApiError(400, 'Cashback balance can only be used to pay for rides');
   }
 
   const now = new Date();

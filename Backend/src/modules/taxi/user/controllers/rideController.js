@@ -40,6 +40,7 @@ import { normalizeStops, QUOTE_TTL_MS, quoteRideFares, signFareQuote } from '../
 import { isRoundTripValue } from '../../services/tollService.js';
 import { Ride } from '../models/Ride.js';
 import { UserWallet } from '../models/UserWallet.js';
+import { consumeCashbackForRide } from '../../rewards/services/rewardService.js';
 
 const EARTH_RADIUS_METERS = 6371000;
 const AVERAGE_CITY_SPEED_KMPH = 24;
@@ -819,6 +820,7 @@ export const payRideCompletionWithWallet = async (req, res) => {
     }
 
     const transferId = crypto.randomUUID();
+    consumeCashbackForRide(userWallet, paymentAmounts.totalCharge);
     userWallet.balance = roundMoney(Number(userWallet.balance || 0) - paymentAmounts.totalCharge);
     userWallet.transactions.push({
       kind: 'debit',
