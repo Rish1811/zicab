@@ -23,6 +23,19 @@ const driverActivityDaySchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Part of activeSeconds spent on an accepted or ongoing trip; the rest
+    // was waiting for one.
+    onTripSeconds: { type: Number, default: 0, min: 0 },
+    // Marked online but sending no location (GPS off, app killed): never
+    // active time. Measured once a minute by the ghost sweep.
+    ghostSeconds: { type: Number, default: 0, min: 0 },
+    // Seconds per India-time hour, keyed '0'..'23'. Hourly detail starts
+    // with the Driver Hours page (Nov 2026); older days only have totals.
+    // No default: an upsert that increments 'hourlyActive.5' must not also
+    // set hourlyActive to {} (a path conflict).
+    hourlyActive: { type: mongoose.Schema.Types.Mixed },
+    hourlyTrip: { type: mongoose.Schema.Types.Mixed },
+    hourlyGhost: { type: mongoose.Schema.Types.Mixed },
     firstActiveAt: {
       type: Date,
       default: null,

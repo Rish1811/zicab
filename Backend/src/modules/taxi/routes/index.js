@@ -9,6 +9,7 @@ import { careerRouter } from '../career/routes/careerRoutes.js';
 import { busModuleRouter } from '../bus/routes/index.js';
 import { rewardRouter } from '../rewards/routes/rewardRoutes.js';
 import { challengeRouter } from '../challenges/routes/challengeRoutes.js';
+import { driverHoursRouter } from '../driverHours/routes/driverHoursRoutes.js';
 
 export const taxiRouter = Router();
 
@@ -22,3 +23,4 @@ taxiRouter.use(careerRouter);
 taxiRouter.use(busModuleRouter);
 taxiRouter.use(rewardRouter);
 taxiRouter.use(challengeRouter);
+taxiRouter.use(driverHoursRouter);

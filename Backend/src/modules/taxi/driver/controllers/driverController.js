@@ -10359,6 +10359,39 @@ export const getOnboardingSession = async (req, res) => {
   res.json({ success: true, data: result });
 };
 
+/// Takes a driver offline exactly as their own Offline tap does (closes the
+/// online session, stops the activity clock), for admin's "Force offline" on
+/// a driver who shows online with their GPS off. Returns the updated driver,
+/// or null when there is none or they were already offline.
+export const forceDriverOffline = async (driverId) => {
+  const existingDriver = await Driver.findById(driverId);
+  if (!existingDriver || !existingDriver.isOnline) return null;
+
+  const finalizedTracking = mergeOnlineSessionIntoTracking(
+    existingDriver.incentiveTracking || {},
+    existingDriver.incentiveTracking?.currentOnlineStartedAt,
+    new Date(),
+  );
+  const finalizedTodaySummary = buildDriverTodaySummaryFromDocument(existingDriver);
+
+  const driver = await Driver.findByIdAndUpdate(
+    driverId,
+    {
+      isOnline: false,
+      socketId: null,
+      incentiveTracking: {
+        ...finalizedTracking,
+        currentOnlineStartedAt: null,
+        claimedRewards: pruneClaimedRewards(finalizedTracking?.claimedRewards),
+      },
+      todaySummary: finalizedTodaySummary,
+    },
+    { returnDocument: 'after' },
+  );
+  markDriverOnlineState(driverId, false);
+  return driver;
+};
+
 export const goOffline = async (req, res) => {
   const existingDriver = await Driver.findById(req.auth.sub);
 
