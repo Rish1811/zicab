@@ -19,7 +19,7 @@ import { User } from '../user/models/User.js';
 import { UserWallet } from '../user/models/UserWallet.js';
 import { consumeUserSubscriptionRide, resolveApplicableUserSubscription } from '../user/services/subscriptionService.js';
 import { applyPromoToRideInTransaction } from './promoService.js';
-import { consumeRideCashbackRedemption, resolveCashbackForBooking } from '../rewards/services/cashbackRedemptionService.js';
+import { consumeRideCashbackRedemption } from '../rewards/services/cashbackRedemptionService.js';
 import { processRideCashback } from '../rewards/services/rewardService.js';
 import { ABSOLUTE_MAX_MULTIPLIER, getSurgeAt, getSurgeProfiles, surgeForVehicle } from './surgeService.js';
 import { estimateTolls, isRoundTripValue } from './tollService.js';
@@ -1508,19 +1508,13 @@ export const createRideRecord = async ({
       }
     : undefined;
 
-  // The rider's ride cashback comes off a fixed-fare ride's fare; it leaves
-  // their wallet only when this ride completes.
-  const cashbackRedemption = await resolveCashbackForBooking({
-    userId,
-    fare: effectiveStartingFare,
-    useCashback: useCashback !== false && String(useCashback).toLowerCase() !== 'false',
-    pricingNegotiationMode,
-    hasPromo: Boolean(promoCode),
-    isSubscriptionCovered,
-  }).catch(() => null);
-  const fareAfterCashback = cashbackRedemption
-    ? Math.round((effectiveStartingFare - cashbackRedemption.amount) * 100) / 100
-    : effectiveStartingFare;
+  // Cashback is never taken off a ride's fare: the rider always pays the full
+  // fare, and their cashback is credited to the wallet when a ride completes
+  // (rewardService.processRideCashback). It used to come off the next ride
+  // automatically. `useCashback` from older app builds is ignored. Rides
+  // already booked with a discount (cashbackRedemption) still settle as before.
+  const cashbackRedemption = null;
+  const fareAfterCashback = effectiveStartingFare;
 
   if (!promoCode) {
     const ride = await Ride.create({
@@ -1810,6 +1804,14 @@ export const serializeRideRealtime = (ride) => ({
   commissionAmount: ride.commissionAmount,
   driverEarnings: ride.driverEarnings,
   promo: ride.promo?.code ? ride.promo : null,
+  // Cashback this ride put in the rider's wallet ("Rs 12 cashback added").
+  cashbackEarned: Number(ride.cashbackEarned?.amount) > 0
+    ? {
+        amount: Number(ride.cashbackEarned.amount),
+        percent: Number(ride.cashbackEarned.percent || 0),
+        creditedAt: ride.cashbackEarned.creditedAt || null,
+      }
+    : null,
   pricingSnapshot: ride.pricingSnapshot
     ? {
         setPriceId: ride.pricingSnapshot.setPriceId || null,

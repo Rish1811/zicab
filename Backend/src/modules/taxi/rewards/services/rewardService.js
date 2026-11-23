@@ -5,6 +5,7 @@ import { Ride } from '../../user/models/Ride.js';
 import { User } from '../../user/models/User.js';
 import { Driver } from '../../driver/models/Driver.js';
 import { UserWallet } from '../../user/models/UserWallet.js';
+import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
 import { RewardClaim, REWARD_CLAIM_STATUS } from '../models/RewardClaim.js';
 import { RewardLevel } from '../models/RewardLevel.js';
 import { RewardSetting } from '../models/RewardSetting.js';
@@ -109,18 +110,43 @@ export const computeRideCashback = (fare, settings) => {
   return roundMoney(amount);
 };
 
+/// Credits a completed ride's cashback to the rider's wallet, once.
+///
+/// Worked out on what the rider paid for the ride (the full fare, after any
+/// coupon). A ride covered by the rider's pass earns none: they paid for the
+/// pass, not the ride. Recorded on the ride so the apps and receipts can say
+/// "Rs 12 cashback added to your wallet", and announced with a push.
 export const processRideCashback = async (ride) => {
   if (!ride?.userId || !ride?._id) return 'skipped';
+  if (String(ride.status || '') !== RIDE_STATUS.COMPLETED) return 'skipped';
+  if (ride.subscriptionUsage?.covered) return 'skipped';
   const settings = await getRewardSettings();
   const amount = computeRideCashback(ride.fare, settings);
   if (amount <= 0) return 'skipped';
 
-  return creditCashback({
+  const outcome = await creditCashback({
     userId: ride.userId,
     amount,
     title: `Cashback ${settings.cashbackPercent}% on ride ${String(ride._id).slice(-6)}`,
     referenceKey: `ride-cashback:${String(ride._id)}`,
   });
+
+  if (outcome === 'credited') {
+    await Ride.updateOne(
+      { _id: ride._id },
+      { $set: { cashbackEarned: { amount, percent: settings.cashbackPercent, creditedAt: new Date() } } },
+    );
+    if (ride.cashbackEarned) {
+      ride.cashbackEarned = { amount, percent: settings.cashbackPercent, creditedAt: new Date() };
+    }
+    sendPushNotificationToEntities({
+      userIds: [String(ride.userId)],
+      title: 'Cashback added 🎉',
+      body: `Rs ${amount} cashback from your ride is in your ZI CAB wallet.`,
+      data: { type: 'wallet_cashback', rideId: String(ride._id) },
+    }).catch(() => {});
+  }
+  return outcome;
 };
 
 /* ---------------- rider view ---------------- */
