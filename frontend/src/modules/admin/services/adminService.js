@@ -121,6 +121,7 @@ export const adminService = {
   decideDriverChallengeReward: (id, progressId, data) => api.patch(`/admin/driver-challenges/${id}/progress/${progressId}`, data),
   getDriverActivity: (params = {}) => api.get('/admin/driver-activity', { params }),
   getDriverHoursLive: (params = {}) => api.get('/admin/driver-hours/live', { params }),
+  getLiveDriverPositions: () => api.get('/admin/driver-hours/positions'),
   getDriverHoursReport: (params = {}) => api.get('/admin/driver-hours/report', { params }),
   getDriverHoursAttendance: (params = {}) => api.get('/admin/driver-hours/attendance', { params }),
   getDriverHoursAlerts: (params = {}) => api.get('/admin/driver-hours/alerts', { params }),

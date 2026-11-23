@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { ApiError } from '../../../../utils/ApiError.js';
+import { runRedisCommand } from '../../../../infrastructure/redis/redisClient.js';
 import { ServiceLocation } from '../../admin/models/ServiceLocation.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { DriverChallenge } from '../../challenges/models/DriverChallenge.js';
@@ -607,4 +608,53 @@ export const forceOffline = async (driverId) => {
     data: { type: 'forced_offline' },
   }).catch(() => {});
   return { id: String(driverId), isOnline: false };
+};
+
+/* ---------------- 8. Live positions (God's Eye) ---------------- */
+
+/// Where every online or on-trip driver is right now, for the God's Eye map to
+/// move cars smoothly. Read from the live location cache the socket handlers
+/// write on every fix (falls back to the database copy, at most 15 s old).
+export const getLivePositions = async () => {
+  const now = Date.now();
+  const drivers = await Driver.find({ deletedAt: null, $or: [{ isOnline: true }, { isOnRide: true }] })
+    .select('_id location heading locationUpdatedAt isOnline isOnRide')
+    .limit(5000)
+    .lean();
+  const cached = drivers.length
+    ? await runRedisCommand(
+        (client) => client.mGet(drivers.map((d) => `driver:${d._id}:location`)),
+        { label: 'god eye positions' },
+      ).catch(() => null)
+    : null;
+  const values = cached?.ok && Array.isArray(cached.value) ? cached.value : [];
+
+  const items = drivers.map((driver, index) => {
+    let live = null;
+    try {
+      live = JSON.parse(values[index] || 'null');
+    } catch {
+      live = null;
+    }
+    const liveAt = Number(live?.updatedAt) || 0;
+    const dbAt = driver.locationUpdatedAt ? new Date(driver.locationUpdatedAt).getTime() : 0;
+    const useLive = Array.isArray(live?.coordinates) && liveAt >= dbAt;
+    const coordinates = useLive ? live.coordinates : driver.location?.coordinates;
+    if (!Array.isArray(coordinates) || coordinates.length !== 2) return null;
+    const [lng, lat] = coordinates.map(Number);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
+    const seen = Math.max(liveAt, dbAt) || null;
+    const heading = Number(useLive ? live.heading : driver.heading);
+    return {
+      id: String(driver._id),
+      lat,
+      lng,
+      heading: Number.isFinite(heading) ? heading : null,
+      speed: useLive && Number.isFinite(Number(live.speed)) ? Number(live.speed) : null,
+      updatedAt: seen ? new Date(seen) : null,
+      status: statusOf(driver, seen, now),
+    };
+  }).filter(Boolean);
+
+  return { serverTime: new Date(now), items };
 };

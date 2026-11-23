@@ -10,6 +10,7 @@ const ok = (res, data, message) => res.status(200).json({ success: true, data, m
 export const driverHoursRouter = Router();
 
 const admin = [authenticate(['admin']), enforceAdminReadOnly()];
+driverHoursRouter.get('/admin/driver-hours/positions', admin, asyncHandler(async (_req, res) => ok(res, await hours.getLivePositions())));
 driverHoursRouter.get('/admin/driver-hours/live', admin, asyncHandler(async (req, res) => ok(res, await hours.getLiveBoard(req.query))));
 driverHoursRouter.get('/admin/driver-hours/report', admin, asyncHandler(async (req, res) => ok(res, await hours.getHoursReport(req.query))));
 driverHoursRouter.get('/admin/driver-hours/attendance', admin, asyncHandler(async (req, res) => ok(res, await hours.getAttendance(req.query))));

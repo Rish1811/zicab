@@ -57,6 +57,66 @@ const getMapIconForVehicle = (iconType = '') => {
   return CarIcon;
 };
 
+/// The vehicle pictures are top-down and face north, so the picture itself is
+/// turned to the driver's heading - one marker per driver. The direction used
+/// to be a second arrow marker outside the clusterer: when cars were grouped
+/// into a number bubble their arrows stayed behind, scattering stray "navigation"
+/// triangles over the map. The pictures were also squeezed into a 32x32 square,
+/// which is why autos looked like black blobs.
+const VEHICLE_IMAGES = {};
+const VEHICLE_ICON_CACHE = new Map();
+const VEHICLE_ICON_PX = 44;
+
+const loadVehicleImages = () => Promise.all([CarIcon, AutoIcon, BikeIcon].map((src) => new Promise((resolve) => {
+  if (VEHICLE_IMAGES[src]) return resolve();
+  const img = new Image();
+  img.onload = () => { VEHICLE_IMAGES[src] = img; resolve(); };
+  img.onerror = () => resolve();
+  img.src = src;
+})));
+
+const vehicleMarkerIcon = (iconType, heading) => {
+  const src = getMapIconForVehicle(iconType);
+  const degrees = Number.isFinite(Number(heading)) ? Math.round(Number(heading) / 10) * 10 % 360 : 0;
+  const key = `${src}|${degrees}`;
+  if (VEHICLE_ICON_CACHE.has(key)) return VEHICLE_ICON_CACHE.get(key);
+  const img = VEHICLE_IMAGES[src];
+  let icon;
+  if (img && img.naturalWidth) {
+    const canvas = document.createElement('canvas');
+    canvas.width = VEHICLE_ICON_PX * 2;
+    canvas.height = VEHICLE_ICON_PX * 2;
+    const ctx = canvas.getContext('2d');
+    const height = VEHICLE_ICON_PX * 2 * 0.9;
+    const width = height * (img.naturalWidth / img.naturalHeight);
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((degrees * Math.PI) / 180);
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 6;
+    ctx.drawImage(img, -width / 2, -height / 2, width, height);
+    icon = {
+      url: canvas.toDataURL('image/png'),
+      scaledSize: new window.google.maps.Size(VEHICLE_ICON_PX, VEHICLE_ICON_PX),
+      anchor: new window.google.maps.Point(VEHICLE_ICON_PX / 2, VEHICLE_ICON_PX / 2),
+    };
+  } else {
+    // Not loaded yet: the picture upright, at its real proportions.
+    icon = {
+      url: src,
+      scaledSize: new window.google.maps.Size(16, 34),
+      anchor: new window.google.maps.Point(8, 17),
+    };
+  }
+  if (img) VEHICLE_ICON_CACHE.set(key, icon);
+  return icon;
+};
+
+/// How long a car takes to glide to its next reported position - a little
+/// under the 3 s poll, so it arrives before the next fix lands.
+const LIVE_POLL_MS = 3000;
+const GLIDE_MS = 2800;
+const TELEPORT_METERS = 3000;
+
 const hasUsableCoordinates = (latitude, longitude) => {
   const lat = Number(latitude);
   const lng = Number(longitude);
@@ -79,18 +139,6 @@ const compassFromHeading = (heading) => {
   return COMPASS_POINTS[Math.round(((degrees % 360) + 360) % 360 / 45) % 8];
 };
 
-/// Google Maps cannot rotate an image marker, so the heading is drawn as a
-/// separate arrow symbol layered over the vehicle icon.
-const headingArrow = (heading) => ({
-  path: 'M 0,-9 L 3.2,3 L 0,0.9 L -3.2,3 Z',
-  fillColor: '#0F172A',
-  fillOpacity: 0.9,
-  strokeColor: '#FFFFFF',
-  strokeWeight: 1.2,
-  scale: 1,
-  rotation: Number(heading) || 0,
-  anchor: new window.google.maps.Point(0, 0),
-});
 
 /// Straight-line distance in metres, used when no road route can be computed.
 const haversineMeters = (a, b) => {
@@ -160,6 +208,14 @@ const GodsEye = () => {
   const [earningsData, setEarningsData] = useState({});
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(null);
+  // id -> { lat, lng, heading, status, updatedAt } from the 3 s live poll.
+  const [livePositions, setLivePositions] = useState({});
+  const [imagesReady, setImagesReady] = useState(false);
+  const markersRef = useRef(new Map());
+  const initialPositionsRef = useRef(new Map());
+  const latestPositionsRef = useRef(new Map());
+  const glidesRef = useRef(new Map());
+  const glideFrameRef = useRef(0);
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -236,6 +292,38 @@ const GodsEye = () => {
     }
   }, [filters.refreshMode, fetchMapData]);
 
+  useEffect(() => {
+    if (!isLoaded) return;
+    loadVehicleImages().then(() => setImagesReady(true));
+  }, [isLoaded]);
+
+  // Positions every 3 s from the live location cache - cheap, and frequent
+  // enough for the cars to glide rather than jump every 30 s.
+  useEffect(() => {
+    if (filters.refreshMode === 'manual') return undefined;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await adminService.getLiveDriverPositions();
+        const body = res?.data?.data ?? res?.data ?? res ?? {};
+        const next = {};
+        (body.items || []).forEach((item) => { next[item.id] = item; });
+        if (!cancelled) setLivePositions(next);
+      } catch {
+        // Keep the last positions; the next poll tries again.
+      }
+    };
+    poll();
+    const timer = setInterval(poll, LIVE_POLL_MS);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [filters.refreshMode]);
+
+  // The driver list with the freshest position and heading laid over it.
+  const liveDrivers = useMemo(() => drivers.map((d) => {
+    const live = livePositions[String(d._id || d.id)];
+    return live ? { ...d, latitude: live.lat, longitude: live.lng, heading: live.heading ?? d.heading, liveStatus: live.status } : d;
+  }), [drivers, livePositions]);
+
   // Handle Fullscreen
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -255,7 +343,7 @@ const GodsEye = () => {
 
   // Derived Data
   const filteredDrivers = useMemo(() => {
-    return drivers.filter(d => {
+    return liveDrivers.filter(d => {
       if (!hasUsableCoordinates(d.latitude, d.longitude)) return false;
       
       // Search
@@ -290,7 +378,7 @@ const GodsEye = () => {
 
       return true;
     });
-  }, [drivers, filters, searchQuery]);
+  }, [liveDrivers, filters, searchQuery]);
 
   // Timelines
   const timelineEvents = useMemo(() => {
@@ -322,11 +410,14 @@ const GodsEye = () => {
 
   // The drawer shows the driver from the latest refresh, not the stale copy
   // captured on click, so position and telemetry keep moving.
+  // Re-rendered once the vehicle pictures load, so the rotated icons appear.
+  void imagesReady;
+
   const liveSelectedDriver = useMemo(() => {
     if (!selectedDriver) return null;
     const id = selectedDriver._id || selectedDriver.id;
-    return drivers.find(d => (d._id || d.id) === id) || selectedDriver;
-  }, [drivers, selectedDriver]);
+    return liveDrivers.find(d => (d._id || d.id) === id) || selectedDriver;
+  }, [liveDrivers, selectedDriver]);
 
   const selectedKey = pointKey(driverPoint(liveSelectedDriver));
   const selectedPoint = useMemo(() => driverPoint(liveSelectedDriver), [selectedKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -434,6 +525,64 @@ const GodsEye = () => {
     mapInstance.panTo(selectedPoint);
     mapInstance.setZoom(16);
   };
+
+  // Markers are moved by hand rather than through React props, so a car can
+  // glide from where it is to where it was just reported instead of jumping.
+  const markerPositionFor = useCallback((driver) => {
+    const id = String(driver._id || driver.id);
+    if (!initialPositionsRef.current.has(id)) {
+      initialPositionsRef.current.set(id, { lat: Number(driver.latitude), lng: Number(driver.longitude) });
+    }
+    return initialPositionsRef.current.get(id);
+  }, []);
+
+  const runGlides = useCallback(() => {
+    const now = performance.now();
+    glidesRef.current.forEach((glide, id) => {
+      const marker = markersRef.current.get(id);
+      if (!marker) { glidesRef.current.delete(id); return; }
+      const t = Math.min(1, (now - glide.start) / GLIDE_MS);
+      const eased = t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+      marker.setPosition({
+        lat: glide.from.lat + (glide.to.lat - glide.from.lat) * eased,
+        lng: glide.from.lng + (glide.to.lng - glide.from.lng) * eased,
+      });
+      if (t >= 1) glidesRef.current.delete(id);
+    });
+    glideFrameRef.current = glidesRef.current.size ? requestAnimationFrame(runGlides) : 0;
+  }, []);
+
+  useEffect(() => {
+    const now = performance.now();
+    filteredDrivers.forEach((driver) => {
+      const id = String(driver._id || driver.id);
+      const to = { lat: Number(driver.latitude), lng: Number(driver.longitude) };
+      latestPositionsRef.current.set(id, to);
+      const marker = markersRef.current.get(id);
+      if (!marker) return;
+      const current = marker.getPosition();
+      if (!current) { marker.setPosition(to); return; }
+      const from = { lat: current.lat(), lng: current.lng() };
+      const moved = haversineMeters(from, to);
+      if (moved < 0.5) return;
+      if (moved > TELEPORT_METERS) { glidesRef.current.delete(id); marker.setPosition(to); return; }
+      glidesRef.current.set(id, { from, to, start: now });
+    });
+    if (glidesRef.current.size && !glideFrameRef.current) glideFrameRef.current = requestAnimationFrame(runGlides);
+  }, [filteredDrivers, runGlides]);
+
+  useEffect(() => () => { if (glideFrameRef.current) cancelAnimationFrame(glideFrameRef.current); }, []);
+
+  const registerMarker = useCallback((driver) => (marker) => {
+    const id = String(driver._id || driver.id);
+    markersRef.current.set(id, marker);
+    const latest = latestPositionsRef.current.get(id);
+    if (latest) marker.setPosition(latest);
+  }, []);
+
+  const unregisterMarker = useCallback((driver) => () => {
+    markersRef.current.delete(String(driver._id || driver.id));
+  }, []);
 
   const handleMarkerClick = useCallback((driver) => {
     setSelectedDriver(driver);
@@ -698,41 +847,32 @@ const GodsEye = () => {
                            {(clusterer) => (
                               <>
                                  {filteredDrivers.map(driver => (
-                                    <React.Fragment key={driver._id || driver.id}>
-                                       <MarkerF
-                                             position={{ lat: Number(driver.latitude), lng: Number(driver.longitude) }}
-                                             onClick={() => handleMarkerClick(driver)}
-                                             clusterer={clusterer}
-                                             icon={{
-                                                url: getMapIconForVehicle(driver.vehicle_icon_type || driver.vehicle_type),
-                                                scaledSize: new window.google.maps.Size(32, 32),
-                                                anchor: new window.google.maps.Point(16, 16),
-                                             }}
-                                       />
-                                       {Number.isFinite(Number(driver.heading)) && (
-                                          <MarkerF
-                                             position={{ lat: Number(driver.latitude), lng: Number(driver.longitude) }}
-                                             clickable={false}
-                                             icon={headingArrow(driver.heading)}
-                                             zIndex={999}
-                                          />
-                                       )}
-                                    </React.Fragment>
+                                    <MarkerF
+                                       key={driver._id || driver.id}
+                                       position={markerPositionFor(driver)}
+                                       onLoad={registerMarker(driver)}
+                                       onUnmount={unregisterMarker(driver)}
+                                       onClick={() => handleMarkerClick(driver)}
+                                       clusterer={clusterer}
+                                       icon={vehicleMarkerIcon(driver.vehicle_icon_type || driver.vehicle_type, driver.heading)}
+                                       opacity={driver.liveStatus === 'ghost' ? 0.4 : 1}
+                                       title={driver.liveStatus === 'ghost' ? `${driver.name || 'Driver'} - online, but GPS silent` : driver.name || ''}
+                                    />
                                  ))}
                               </>
                            )}
                         </MarkerClustererF>
                      ) : !controls.heatmap && !controls.cluster ? (
                         filteredDrivers.map(driver => (
-                           <MarkerF 
-                              key={driver._id || driver.id} 
-                              position={{ lat: Number(driver.latitude), lng: Number(driver.longitude) }}
+                           <MarkerF
+                              key={driver._id || driver.id}
+                              position={markerPositionFor(driver)}
+                              onLoad={registerMarker(driver)}
+                              onUnmount={unregisterMarker(driver)}
                               onClick={() => handleMarkerClick(driver)}
-                              icon={{
-                                 url: getMapIconForVehicle(driver.vehicle_icon_type || driver.vehicle_type),
-                                 scaledSize: new window.google.maps.Size(32, 32),
-                                 anchor: new window.google.maps.Point(16, 16),
-                              }}
+                              icon={vehicleMarkerIcon(driver.vehicle_icon_type || driver.vehicle_type, driver.heading)}
+                              opacity={driver.liveStatus === 'ghost' ? 0.4 : 1}
+                              title={driver.liveStatus === 'ghost' ? `${driver.name || 'Driver'} - online, but GPS silent` : driver.name || ''}
                            />
                         ))
                      ) : null}
