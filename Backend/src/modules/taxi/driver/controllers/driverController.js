@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { markDriverOnlineState } from "../services/driverActivityService.js";
 import mongoose from "mongoose";
 import QRCode from "qrcode";
 import { Env, StandardCheckoutClient, StandardCheckoutPayRequest, PrefillUserLoginDetails } from "@phonepe-pg/pg-sdk-node";
@@ -2861,6 +2862,7 @@ export const goOnline = async (req, res) => {
   }
 
   const vehicleIconUrl = await resolveVehicleMapIcon(driver.vehicleTypeId);
+  markDriverOnlineState(driver._id, true);
 
   res.json({
     success: true,
@@ -10389,6 +10391,9 @@ export const goOffline = async (req, res) => {
   if (!driver) {
     throw new ApiError(404, "Driver not found");
   }
+
+  // Stops the activity clock now rather than when the online cache expires.
+  markDriverOnlineState(driver._id, false);
 
   res.json({
     success: true,

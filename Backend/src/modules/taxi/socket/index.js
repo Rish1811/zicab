@@ -30,6 +30,7 @@ import {
 import { findZoneByPickup } from '../services/matchingService.js';
 import { acceptRideAssignment, createRideRecord, getRideDetails, getRideRoom, serializeRideRealtime, submitRideBid } from '../services/rideService.js';
 import { SOCKET_EVENTS } from './events.js';
+import { recordDriverLocationPing } from '../driver/services/driverActivityService.js';
 import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
 import { registerBusSocketHandlers } from '../bus/socket/busSocketHandlers.js';
 import { setBusSeatSocketServer } from '../bus/services/busSeatSyncService.js';
@@ -272,7 +273,7 @@ export const configureTaxiSocketServer = async (httpServer) => {
 
     socket.on(
       'locationUpdate',
-      onAsync(socket, async ({ coordinates, heading, speed }) => {
+      onAsync(socket, async ({ coordinates, heading, speed, isMocked }) => {
         if (identity.role !== 'driver') {
           return;
         }
@@ -381,6 +382,15 @@ export const configureTaxiSocketServer = async (httpServer) => {
         })
           .select('_id')
           .lean();
+
+        // The activity clock (driver challenges, incentives). Never blocks the
+        // live-tracking path.
+        recordDriverLocationPing({
+          driverId: identity.sub,
+          at: now,
+          onTrip: Boolean(activeRide),
+          isMocked: isMocked === true,
+        }).catch((error) => console.error('[activity] ping not recorded', error?.message));
 
         if (activeRide) {
           await Ride.updateOne(

@@ -69,6 +69,7 @@ export const ADMIN_SIDEBAR_SECTIONS = [
           { label: 'Airport', path: '/admin/pricing/airport', permission: 'airports.view' },
           { label: 'Set Price', path: '/admin/pricing/set-price', permission: 'set_prices.view' },
           { label: 'Toll Charges', path: '/admin/pricing/tolls', permission: 'set_prices.view' },
+          { label: 'Driver Challenges', path: '/admin/pricing/driver-challenges', permission: 'set_prices.view' },
           //{ label: 'Goods Types', path: '/admin/pricing/goods-types', permission: 'goods_types.view' },
         ],
       },

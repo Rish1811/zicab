@@ -1,4 +1,5 @@
 import { normalizePoint, toPoint } from '../../../../utils/geo.js';
+import { recordDriverLocationPing } from '../../driver/services/driverActivityService.js';
 import { runRedisCommand } from '../../../../infrastructure/redis/redisClient.js';
 import { RIDE_LIVE_STATUS } from '../../constants/index.js';
 import { getDriverRoom } from '../../services/dispatchService.js';
@@ -169,7 +170,7 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
 
   socket.on(
     SOCKET_EVENTS.RIDE_DRIVER_LOCATION_UPDATE,
-    onAsync(socket, async ({ rideId, coordinates, heading, speed, accuracy, timestamp, sequence }) => {
+    onAsync(socket, async ({ rideId, coordinates, heading, speed, accuracy, timestamp, sequence, isMocked }) => {
       if (socket.auth.role !== 'driver') {
         throw new Error('Only drivers can update live ride location');
       }
@@ -259,6 +260,13 @@ export const registerRideSocketHandlers = ({ io, socket, onAsync }) => {
         speed: locationUpdate.speed,
         updatedAt: now,
       });
+      // Trip time on the activity clock (driver challenges). Never blocks.
+      recordDriverLocationPing({
+        driverId: socket.auth.sub,
+        at: now,
+        onTrip: true,
+        isMocked: isMocked === true,
+      }).catch(() => {});
       if (shouldPersistLocation) {
         setImmediate(() => {
           mirrorRideDriverLocation({

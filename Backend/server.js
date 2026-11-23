@@ -8,6 +8,8 @@ import { User } from './src/modules/taxi/user/models/User.js';
 import { restoreScheduledDispatches, startDispatchRecoveryLoop } from './src/modules/taxi/services/dispatchService.js';
 import { startDriverSubscriptionExpiryLoop } from './src/modules/taxi/driver/services/driverSubscriptionExpiryService.js';
 import { startSurgeEngineLoop } from './src/modules/taxi/services/surgeService.js';
+import { startDriverActivityFlushLoop } from './src/modules/taxi/driver/services/driverActivityService.js';
+import { startDriverChallengeLoop } from './src/modules/taxi/challenges/services/challengeService.js';
 import { startBusHoldSweeper } from './src/modules/taxi/bus/services/busSeatSyncService.js';
 import { startBusPaymentReconciler } from './src/modules/taxi/bus/services/busPaymentService.js';
 import { startDhabaAlertLoop } from './src/modules/taxi/bus/services/dhabaService.js';
@@ -33,6 +35,8 @@ const bootstrap = async () => {
   startDispatchRecoveryLoop();
   startDriverSubscriptionExpiryLoop();
   startSurgeEngineLoop();
+  startDriverActivityFlushLoop();
+  startDriverChallengeLoop();
   startBusHoldSweeper();
   startBusPaymentReconciler();
   startDhabaAlertLoop();

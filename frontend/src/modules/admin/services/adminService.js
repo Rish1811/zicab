@@ -112,6 +112,14 @@ export const adminService = {
   deleteRewardLevel: (id) => api.delete(`/admin/rewards/levels/${id}`),
   uploadRewardImage: (image) => api.post('/admin/rewards/upload-image', { image }),
   getRewardClaims: (params = {}) => api.get('/admin/rewards/claims', { params }),
+  getDriverChallenges: () => api.get('/admin/driver-challenges'),
+  createDriverChallenge: (data) => api.post('/admin/driver-challenges', data),
+  updateDriverChallenge: (id, data) => api.patch(`/admin/driver-challenges/${id}`, data),
+  deleteDriverChallenge: (id) => api.delete(`/admin/driver-challenges/${id}`),
+  uploadDriverChallengeBanner: (image) => api.post('/admin/driver-challenges/upload-banner', { image }),
+  getDriverChallengeProgress: (id, params = {}) => api.get(`/admin/driver-challenges/${id}/progress`, { params }),
+  decideDriverChallengeReward: (id, progressId, data) => api.patch(`/admin/driver-challenges/${id}/progress/${progressId}`, data),
+  getDriverActivity: (params = {}) => api.get('/admin/driver-activity', { params }),
   updateRewardClaim: (id, data) => api.patch(`/admin/rewards/claims/${id}`, data),
 
   /**
