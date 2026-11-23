@@ -21,6 +21,7 @@ import {
   MAX_GAP_MS,
 } from '../../driver/services/driverActivityService.js';
 import { sendPushNotificationToEntities } from '../../services/pushNotificationService.js';
+import { activeDestination } from '../../onMyWay/services/onMyWayService.js';
 import { Ride } from '../../user/models/Ride.js';
 
 /// The admin Driver Hours page: who is working now, how long everyone worked,
@@ -82,7 +83,13 @@ const driverFilter = ({ serviceLocationId, vehicleTypeId, search } = {}) => {
 const hasDriverFilter = (query = {}) =>
   validId(query.serviceLocationId) || validId(query.vehicleTypeId) || Boolean(String(query.search || '').trim());
 
-const DRIVER_FIELDS = 'name phone vehicleNumber vehicleType vehicleTypeId service_location_id isOnline isOnRide locationUpdatedAt zoneId profileImage incentiveTracking.currentOnlineStartedAt';
+const DRIVER_FIELDS = 'name phone vehicleNumber vehicleType vehicleTypeId service_location_id isOnline isOnRide locationUpdatedAt zoneId profileImage incentiveTracking.currentOnlineStartedAt destinationMode';
+
+/// Where a driver in Ride On My Way is heading, or null.
+const onMyWayOf = (driver) => {
+  const home = activeDestination(driver);
+  return home ? { label: driver.destinationMode?.label || '', lat: home[1], lng: home[0], expiresAt: driver.destinationMode?.expiresAt || null } : null;
+};
 
 /// Names for the vehicle types, cities and zones a list of drivers refers to.
 const lookupNames = async (drivers) => {
@@ -214,6 +221,7 @@ export const getLiveBoard = async (query = {}) => {
       ghostMinutes: minutesOf(Number(stored.ghostSeconds || 0) + Number(buffered.ghostSeconds || 0)),
       mockedPings: Number(stored.mockedPings || 0) + Number(buffered.mocked || 0),
       firstActiveAt: stored.firstActiveAt || null,
+      onMyWay: onMyWayOf(driver),
       trips: trip.trips || 0,
       earnings: round2(trip.earnings),
     };
@@ -618,7 +626,7 @@ export const forceOffline = async (driverId) => {
 export const getLivePositions = async () => {
   const now = Date.now();
   const drivers = await Driver.find({ deletedAt: null, $or: [{ isOnline: true }, { isOnRide: true }] })
-    .select('_id location heading locationUpdatedAt isOnline isOnRide')
+    .select('_id location heading locationUpdatedAt isOnline isOnRide destinationMode')
     .limit(5000)
     .lean();
   const cached = drivers.length
@@ -653,6 +661,7 @@ export const getLivePositions = async () => {
       speed: useLive && Number.isFinite(Number(live.speed)) ? Number(live.speed) : null,
       updatedAt: seen ? new Date(seen) : null,
       status: statusOf(driver, seen, now),
+      onMyWay: onMyWayOf(driver),
     };
   }).filter(Boolean);
 

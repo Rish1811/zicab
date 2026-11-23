@@ -32,6 +32,7 @@ import { acceptRideAssignment, createRideRecord, getRideDetails, getRideRoom, se
 import { SOCKET_EVENTS } from './events.js';
 import { ANOTHER_DRIVER_ACCEPTED, answerTestOffer } from '../testRides/services/testRideService.js';
 import { recordDriverLocationPing } from '../driver/services/driverActivityService.js';
+import { checkOnMyWayArrival } from '../onMyWay/services/onMyWayService.js';
 import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
 import { registerBusSocketHandlers } from '../bus/socket/busSocketHandlers.js';
 import { setBusSeatSocketServer } from '../bus/services/busSeatSyncService.js';
@@ -392,6 +393,7 @@ export const configureTaxiSocketServer = async (httpServer) => {
           onTrip: Boolean(activeRide),
           isMocked: isMocked === true,
         }).catch((error) => console.error('[activity] ping not recorded', error?.message));
+        checkOnMyWayArrival(identity.sub, normalizedCoords).catch(() => {});
 
         if (activeRide) {
           await Ride.updateOne(

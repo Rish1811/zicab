@@ -29,6 +29,7 @@ import { getBidRideSettings } from './transportSettingsService.js';
 import { resolveBiddingPolicy } from './biddingPolicyService.js';
 import { resolveRideRoute } from './routeService.js';
 import { normalizeStops, resolveBookingFare } from './rideFareService.js';
+import { recordOnMyWayUse } from '../onMyWay/services/onMyWayService.js';
 
 const clearUserActiveRideIfPresent = async (user) => {
   if (!user?.currentRideId) {
@@ -2151,6 +2152,7 @@ export const acceptRideAssignment = async ({ rideId, driverId }) => {
         status: RIDE_STATUS.ACCEPTED,
         liveStatus: RIDE_LIVE_STATUS.ACCEPTED,
         acceptedAt: new Date(),
+        onMyWay: Boolean(claimedDriver.destinationMode?.enabled),
         ...driverLocationSeed(claimedDriver),
       },
     },
@@ -2349,6 +2351,12 @@ export const updateRideLifecycle = async ({ rideId, driverId, nextStatus, paymen
 
     await processCompletedRideReferralReward(ride);
     await processCompletedDriverReferralReward(ride);
+    // One of today's Ride On My Way uses.
+    if (ride.onMyWay && ride.driverId) {
+      await recordOnMyWayUse(ride.driverId).catch((error) => {
+        console.warn('[on-my-way] use not counted for ride', String(ride._id), '-', error?.message);
+      });
+    }
     // Cashback must never block a completion.
     await processRideCashback(ride).catch((error) => {
       console.warn('[cashback] failed for ride', String(ride._id), '-', error?.message);

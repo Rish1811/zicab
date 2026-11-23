@@ -470,6 +470,23 @@ const driverSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // Ride On My Way (onMyWay/services/onMyWayService.js): heading to a
+    // destination, offered only rides that take them closer to it.
+    destinationMode: {
+      enabled: { type: Boolean, default: false },
+      destination: { type: mongoose.Schema.Types.Mixed, default: null },
+      label: { type: String, default: '', trim: true },
+      startedAt: { type: Date, default: null },
+      expiresAt: { type: Date, default: null },
+      startLocation: { type: mongoose.Schema.Types.Mixed, default: null },
+      endedAt: { type: Date, default: null },
+      endReason: { type: String, default: '' },
+    },
+    onMyWayHome: { type: mongoose.Schema.Types.Mixed, default: null },
+    onMyWayUsage: {
+      dateKey: { type: String, default: '' },
+      count: { type: Number, default: 0 },
+    },
     routeBooking: {
       enabled: {
         type: Boolean,

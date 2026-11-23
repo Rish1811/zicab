@@ -10,6 +10,7 @@ import { startDriverSubscriptionExpiryLoop } from './src/modules/taxi/driver/ser
 import { startSurgeEngineLoop } from './src/modules/taxi/services/surgeService.js';
 import { startDriverActivityFlushLoop, startDriverGhostSweepLoop } from './src/modules/taxi/driver/services/driverActivityService.js';
 import { startDriverChallengeLoop } from './src/modules/taxi/challenges/services/challengeService.js';
+import { startOnMyWayLoop } from './src/modules/taxi/onMyWay/services/onMyWayService.js';
 import { startBusHoldSweeper } from './src/modules/taxi/bus/services/busSeatSyncService.js';
 import { startBusPaymentReconciler } from './src/modules/taxi/bus/services/busPaymentService.js';
 import { startDhabaAlertLoop } from './src/modules/taxi/bus/services/dhabaService.js';
@@ -38,6 +39,7 @@ const bootstrap = async () => {
   startDriverActivityFlushLoop();
   startDriverGhostSweepLoop();
   startDriverChallengeLoop();
+  startOnMyWayLoop();
   startBusHoldSweeper();
   startBusPaymentReconciler();
   startDhabaAlertLoop();

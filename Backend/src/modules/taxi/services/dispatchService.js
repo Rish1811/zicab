@@ -267,6 +267,8 @@ const matchDispatchDrivers = async ({
     vehicleTypeId: ride.vehicleTypeId,
     vehicleTypeIds: dispatchVehicleTypeIds,
     excludeDriverIds,
+    dropCoords: ride.dropLocation?.coordinates || null,
+    serviceType: ride.serviceType || 'ride',
   };
 
   let result = await matchDrivers(ride.pickupLocation.coordinates, {
@@ -807,6 +809,8 @@ export const emitRideRequestToDrivers = async ({
       surgeMultiplier: Number(ride.surge?.multiplier || 1),
       tollCharges: serializeTollCharges(ride.tollCharges),
       ...estimateDriverEarning(ride),
+      // "On your way" badge for a driver in Ride On My Way.
+      onMyWay: Boolean(driver?.destinationMode?.enabled),
       bookingMode: ride.bookingMode || 'normal',
       pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
       biddingStatus: ride.biddingStatus || 'none',

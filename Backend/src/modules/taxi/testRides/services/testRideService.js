@@ -253,7 +253,6 @@ export const sendTestRide = async ({ admin, body = {} }) => {
   }
 
   const dispatchConfig = await resolveTransportDispatchConfig();
-  const recent = await recentlyTested(drivers.map((d) => d._id));
   const { emitRideRequestToDrivers } = await import('../../services/dispatchService.js');
 
   const offers = [];
@@ -261,7 +260,6 @@ export const sendTestRide = async ({ admin, body = {} }) => {
   for (let index = 0; index < drivers.length; index += 8) {
     const batch = drivers.slice(index, index + 8);
     const built = await Promise.all(batch.map(async (driver) => {
-      if (recent.has(String(driver._id))) return { driver, skip: 'Already sent a test in the last 10 minutes' };
       try {
         return { driver, ...(await buildOffer({ driver, zone, pickupPoint, dispatchConfig })) };
       } catch (error) {

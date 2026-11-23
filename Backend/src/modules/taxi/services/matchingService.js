@@ -8,6 +8,7 @@ import { Zone } from '../driver/models/Zone.js';
 import { DriverSubscription } from '../driver/models/DriverSubscription.js';
 import { resolveDriverSubscriptionSettings } from '../driver/services/driverSubscriptionService.js';
 import { getDriverIdsBlockedByUpcomingScheduledRides } from './rideService.js';
+import { filterDriversForOnMyWay, getOnMyWaySettings } from '../onMyWay/services/onMyWayService.js';
 
 const EARTH_RADIUS_METERS = 6371000;
 
@@ -429,7 +430,7 @@ const findDriversForZone = async ({
     ...(Object.keys(idFilter).length ? { _id: idFilter } : {}),
   };
   const selectedFields =
-    'name phone socketId vehicleTypeId vehicleTypeIds vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId service_location_id isOnline isOnRide routeBooking';
+    'name phone socketId vehicleTypeId vehicleTypeIds vehicleType vehicleIconType vehicleNumber vehicleColor vehicleMake vehicleModel rating location zoneId service_location_id isOnline isOnRide routeBooking destinationMode';
 
   const [liveLocationDrivers, routeBookingDrivers] = await Promise.all([
     Driver.find({
@@ -476,7 +477,18 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
     allowCrossZoneFallback = true,
     strictZoneOnly = false,
     excludeDriverIds = [],
+    // The ride's drop and type, for Ride On My Way drivers.
+    dropCoords = null,
+    serviceType = 'ride',
   } = options;
+  const onMyWaySettings = await getOnMyWaySettings().catch(() => null);
+  const keepOnMyWay = (list) => filterDriversForOnMyWay({
+    drivers: list,
+    pickupCoords: coordinates,
+    dropCoords,
+    serviceType,
+    settings: onMyWaySettings,
+  });
   const excluded = [...new Set((excludeDriverIds || []).map((id) => String(id || '')).filter((id) => mongoose.Types.ObjectId.isValid(id)))];
   // Ask for more than needed: the zone and scheduled-ride checks below drop
   // some, and only `limit` are returned.
@@ -506,12 +518,12 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
     strictZoneOnly,
     excludeDriverIds: excluded,
   });
-  drivers = filterDriversForMatchedZone({
+  drivers = keepOnMyWay(filterDriversForMatchedZone({
     drivers,
     zone,
     pickupCoords: coordinates,
     maxDistance: effectiveMaxDistance,
-  });
+  }));
 
   const blockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides(
     drivers.map((driver) => String(driver?._id || '')),
@@ -530,12 +542,12 @@ export const matchDrivers = async (pickupCoords, options = {}) => {
       strictZoneOnly,
       excludeDriverIds: excluded,
     });
-    drivers = filterDriversForMatchedZone({
+    drivers = keepOnMyWay(filterDriversForMatchedZone({
       drivers,
       zone: null,
       pickupCoords: coordinates,
       maxDistance: effectiveMaxDistance,
-    });
+    }));
 
     const fallbackBlockedDriverIds = await getDriverIdsBlockedByUpcomingScheduledRides(
       drivers.map((driver) => String(driver?._id || '')),

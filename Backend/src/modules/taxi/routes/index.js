@@ -11,6 +11,7 @@ import { rewardRouter } from '../rewards/routes/rewardRoutes.js';
 import { challengeRouter } from '../challenges/routes/challengeRoutes.js';
 import { driverHoursRouter } from '../driverHours/routes/driverHoursRoutes.js';
 import { testRideRouter } from '../testRides/routes/testRideRoutes.js';
+import { onMyWayRouter } from '../onMyWay/routes/onMyWayRoutes.js';
 
 export const taxiRouter = Router();
 
@@ -26,3 +27,4 @@ taxiRouter.use(rewardRouter);
 taxiRouter.use(challengeRouter);
 taxiRouter.use(driverHoursRouter);
 taxiRouter.use(testRideRouter);
+taxiRouter.use(onMyWayRouter);
