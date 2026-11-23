@@ -5,7 +5,7 @@ import { SetPrice } from '../../admin/models/SetPrice.js';
 import { Driver } from '../../driver/models/Driver.js';
 import { Zone } from '../../driver/models/Zone.js';
 import { lastLocationTimes, MAX_GAP_MS } from '../../driver/services/driverActivityService.js';
-import { quoteRideFares } from '../../services/rideFareService.js';
+import { computeRideFare, quoteRideFares, resolveTripDistance } from '../../services/rideFareService.js';
 import { resolveTransportDispatchConfig } from '../../services/transportSettingsService.js';
 import { TestRide } from '../models/TestRide.js';
 
@@ -162,7 +162,34 @@ const buildOffer = async ({ driver, zone, pickupPoint, dispatchConfig }) => {
     result = await quoteRideFares({ pickupCoords: pickup, dropCoords: drop, vehicleTypeIds: [String(vehicleTypeId)] }).catch(() => null);
     quote = result?.quotes?.find((q) => q.vehicleTypeId === String(vehicleTypeId)) || null;
   }
-  if (!quote) return { skip: 'No price for this vehicle here' };
+  if (!quote) {
+    // No live price for this vehicle here (e.g. its rows in this zone are
+    // switched off). A test ride still has to look real, so it is priced on the
+    // vehicle's own rate card - this zone's row even if switched off, else any
+    // row with rates - over the road distance.
+    const cards = await SetPrice.find({ vehicle_type: vehicleTypeId, pricing_scope: 'ride', price_per_distance: { $gt: 0 } })
+      .select('zone_id base_price base_distance price_per_distance time_price service_tax admin_commision admin_commision_type admin_commission_type_from_driver admin_commission_from_driver')
+      .lean();
+    const card = cards.find((c) => driver.zoneId && String(c.zone_id) === String(driver.zoneId)) || cards[0];
+    if (!card) return { skip: 'This vehicle has no rate card at all' };
+    const trip = await resolveTripDistance({ pickupCoords: pickup, dropCoords: drop });
+    const breakdown = computeRideFare({
+      row: {
+        base_price: card.base_price,
+        base_distance: card.base_distance,
+        price_per_distance: card.price_per_distance,
+        time_price: card.time_price,
+        service_tax: card.service_tax,
+        rider_platform_fee: card.admin_commision,
+        rider_platform_fee_type: Number(card.admin_commision_type ?? 1) === 1 ? 'percentage' : 'fixed',
+      },
+      distanceMeters: trip.distanceMeters,
+      durationMinutes: trip.durationMinutes,
+    });
+    if (!(breakdown.total > 0)) return { skip: 'No price for this vehicle here' };
+    quote = { fare: breakdown.total, breakdown, surgeMultiplier: 1, setPriceId: String(card._id) };
+    result = { distanceMeters: Math.round(trip.distanceMeters), durationMinutes: Math.round(trip.durationMinutes * 10) / 10 };
+  }
 
   const row = quote.setPriceId ? await SetPrice.findById(quote.setPriceId).select('admin_commission_type_from_driver admin_commission_from_driver').lean() : null;
   const [pickupAddress, dropAddress] = await Promise.all([
