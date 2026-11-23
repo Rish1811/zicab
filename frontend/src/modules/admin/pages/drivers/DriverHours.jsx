@@ -681,6 +681,7 @@ const DriverDrawer = ({ driverId, onClose }) => {
             {d && <p className="text-xs text-gray-400">Last location {d.lastLocationAt ? new Date(d.lastLocationAt).toLocaleString('en-IN') : 'never'}{d.zone ? ` · ${d.zone}` : ''}</p>}
           </div>
           <div className="flex items-center gap-2">
+            <a href={`/admin/drivers/test-rides?driverId=${driverId}`} className="inline-flex items-center gap-1 text-xs font-semibold border border-gray-200 rounded-lg px-2.5 py-2 hover:bg-gray-50 whitespace-nowrap" title="Send this driver a test ride">Send test ride</a>
             <input type="date" className={inputClass} value={date} max={istToday()} onChange={(e) => setDate(e.target.value || istToday())} />
             <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100"><X size={18} /></button>
           </div>
