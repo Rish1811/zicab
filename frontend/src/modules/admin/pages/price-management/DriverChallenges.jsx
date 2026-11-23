@@ -464,7 +464,7 @@ const DriverChallenges = () => {
         <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h2 className="font-bold text-gray-900 flex items-center gap-2"><CalendarCheck size={18} className="text-yellow-500" /> Driver active hours</h2>
-            <p className="text-xs text-gray-500">Real active time per driver per day. Counting started when this feature went live.</p>
+            <p className="text-xs text-gray-500">Real active time per driver per day. For live status, timelines and routes open <a href="/admin/drivers/hours" className="text-yellow-600 font-semibold hover:underline">Driver Hours</a>.</p>
           </div>
           <div className="flex items-center gap-2">
             <input type="date" className={`${inputClass} w-40`} value={activityRange.from} max={activityRange.to} onChange={(e) => setActivityRange((r) => ({ ...r, from: e.target.value }))} />

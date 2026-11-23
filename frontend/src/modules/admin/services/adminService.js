@@ -120,6 +120,14 @@ export const adminService = {
   getDriverChallengeProgress: (id, params = {}) => api.get(`/admin/driver-challenges/${id}/progress`, { params }),
   decideDriverChallengeReward: (id, progressId, data) => api.patch(`/admin/driver-challenges/${id}/progress/${progressId}`, data),
   getDriverActivity: (params = {}) => api.get('/admin/driver-activity', { params }),
+  getDriverHoursLive: (params = {}) => api.get('/admin/driver-hours/live', { params }),
+  getDriverHoursReport: (params = {}) => api.get('/admin/driver-hours/report', { params }),
+  getDriverHoursAttendance: (params = {}) => api.get('/admin/driver-hours/attendance', { params }),
+  getDriverHoursAlerts: (params = {}) => api.get('/admin/driver-hours/alerts', { params }),
+  getDriverHoursHeatmap: (params = {}) => api.get('/admin/driver-hours/heatmap', { params }),
+  getDriverHoursDetail: (id, params = {}) => api.get(`/admin/driver-hours/drivers/${id}`, { params }),
+  getDriverHoursRoute: (id, params = {}) => api.get(`/admin/driver-hours/drivers/${id}/route`, { params }),
+  forceDriverOffline: (id) => api.post(`/admin/driver-hours/drivers/${id}/force-offline`),
   updateRewardClaim: (id, data) => api.patch(`/admin/rewards/claims/${id}`, data),
 
   /**

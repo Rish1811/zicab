@@ -177,6 +177,7 @@ export const ADMIN_SIDEBAR_SECTIONS = [
           { label: 'Pending Drivers', path: '/admin/drivers/pending', permission: 'drivers.view' },
           { label: 'Approved Drivers', path: '/admin/drivers', permission: 'drivers.view' },
           { label: 'Active Drivers', path: '/admin/drivers/active', permission: 'drivers.view' },
+          { label: 'Driver Hours', path: '/admin/drivers/hours', permission: 'drivers.view' },
           //cd front{ label: 'Subscription', path: '/admin/drivers/subscription', permission: 'drivers.view' },
           { label: 'Drivers Ratings', path: '/admin/drivers/ratings', permission: 'drivers.view' },
           {
