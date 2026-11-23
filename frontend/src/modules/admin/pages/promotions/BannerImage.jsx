@@ -41,6 +41,12 @@ const BannerImage = () => {
   const [topDraft, setTopDraft] = useState('');
   const [topSaving, setTopSaving] = useState(false);
 
+  // Banners for the Zi Bus search screen, stored beside the top banners in
+  // user_home_settings.busBanners.
+  const [busBanners, setBusBanners] = useState([]);
+  const [busDraft, setBusDraft] = useState('');
+  const [busSaving, setBusSaving] = useState(false);
+
   const token = localStorage.getItem('adminToken') || '';
   const baseUrl = globalThis.__LEGACY_BACKEND_ORIGIN__ + '/api/v1/admin';
   const homeSettingsUrl = `${globalThis.__LEGACY_BACKEND_ORIGIN__}/api/v1/admin/general-settings/user-home-management`;
@@ -197,6 +203,96 @@ const BannerImage = () => {
     await persistTopBanners(topBanners.filter((b) => b.id !== id));
   };
 
+  const normalizeBusBanners = (settings = {}) => {
+    const raw = settings.busBanners ?? settings.bus_banners;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((item, idx) => {
+        const image = typeof item === 'string'
+          ? item
+          : (item?.image || item?.imageUrl || item?.url || '');
+        return image ? { id: item?.id || `bb_${idx}_${Date.now()}`, image: String(image) } : null;
+      })
+      .filter(Boolean);
+  };
+
+  const fetchBusBanners = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(homeSettingsUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setBusBanners(normalizeBusBanners(data.settings || {}));
+    } catch (error) {
+      console.error('Failed to load bus banners:', error);
+    }
+  }, [token, homeSettingsUrl]);
+
+  // Read-modify-write so the top banners and promos in the same settings
+  // document are never clobbered. The server turns pasted/chosen images into
+  // uploaded files and answers with the saved list.
+  const persistBusBanners = useCallback(async (nextList) => {
+    if (!token) return false;
+    setBusSaving(true);
+    try {
+      const res = await fetch(homeSettingsUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = res.ok ? await res.json() : { settings: {} };
+      const currentSettings = data.settings || {};
+
+      const saveRes = await fetch(homeSettingsUrl, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ settings: { ...currentSettings, busBanners: nextList } }),
+      });
+      if (saveRes.ok) {
+        const saved = await saveRes.json().catch(() => ({}));
+        setBusBanners(normalizeBusBanners(saved.settings || { busBanners: nextList }));
+        return true;
+      }
+      alert('Failed to save bus banners');
+      return false;
+    } catch (error) {
+      console.error('Save bus banners error:', error);
+      alert(`Network Error: ${error.message}`);
+      return false;
+    } finally {
+      setBusSaving(false);
+    }
+  }, [token, homeSettingsUrl]);
+
+  const handleBusDraftFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setBusDraft(reader.result.toString());
+    reader.onerror = () => alert('Could not read the image file');
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  const addBusBanner = async () => {
+    const value = busDraft.trim();
+    if (!value) {
+      alert('Choose an image or paste an image URL first');
+      return;
+    }
+    const ok = await persistBusBanners([...busBanners, { id: `bb_${Date.now()}`, image: value }]);
+    if (ok) setBusDraft('');
+  };
+
+  const deleteBusBanner = async (id) => {
+    if (!window.confirm('Remove this bus banner?')) return;
+    await persistBusBanners(busBanners.filter((b) => b.id !== id));
+  };
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -241,7 +337,8 @@ const BannerImage = () => {
   useEffect(() => {
     fetchData();
     fetchTopBanners();
-  }, [fetchData, fetchTopBanners]);
+    fetchBusBanners();
+  }, [fetchData, fetchTopBanners, fetchBusBanners]);
 
   useEffect(() => {
     if (!isCreateRoute) {
@@ -499,6 +596,117 @@ const BannerImage = () => {
                             type="button"
                             onClick={() => deleteTopBanner(b.id)}
                             disabled={topSaving}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-bold text-rose-600 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 disabled:opacity-60"
+                          >
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Zi Bus Banners — full-width photos shown at the top of the Zi Bus search screen. */}
+            <div className="bg-white rounded-[22px] border border-gray-200 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-[15px] font-black text-[#2D3A6E] uppercase tracking-tight italic leading-none">
+                    Zi Bus Banners
+                  </h2>
+                  <p className="text-[11px] font-semibold text-gray-400 mt-1">
+                    Wide photos (about 1080 x 600) shown across the top of the Zi Bus screen in the user app. Add several — the app rotates through them.
+                  </p>
+                </div>
+              </div>
+
+              {/* Add a new top banner */}
+              <div className="flex flex-col gap-4 md:flex-row md:items-start">
+                <div className="w-full md:w-72 shrink-0">
+                  <div className="rounded-xl overflow-hidden border border-gray-200" style={{ background: '#0D1B2A' }}>
+                    {busDraft ? (
+                      <img
+                        src={resolveImageUrl(busDraft)}
+                        alt="New bus banner"
+                        className="w-full object-contain"
+                        style={{ maxHeight: 150 }}
+                      />
+                    ) : (
+                      <div className="h-24 flex items-center justify-center text-gray-500 text-xs gap-2">
+                        <ImageIcon size={16} /> Preview
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                      <input type="file" className="hidden" accept="image/png,image/webp,image/*" onChange={handleBusDraftFile} />
+                      <Upload size={16} /> Choose Image
+                    </label>
+                    {busDraft ? (
+                      <button
+                        type="button"
+                        onClick={() => setBusDraft('')}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                      >
+                        <Trash2 size={15} /> Clear
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <label className="block text-[13px] font-semibold text-gray-900 mb-1">Or paste an image URL</label>
+                    <input
+                      type="url"
+                      value={busDraft.startsWith('data:') ? '' : busDraft}
+                      onChange={(e) => setBusDraft(e.target.value)}
+                      placeholder="https://example.com/bus-banner.jpg"
+                      className="w-full max-w-xl border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={addBusBanner}
+                      disabled={busSaving || !busDraft.trim()}
+                      className="h-10 px-6 bg-[#2D3A6E] text-white rounded-lg text-[13px] font-bold hover:bg-[#1d2756] transition-all inline-flex items-center gap-2 disabled:opacity-60"
+                    >
+                      {busSaving ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
+                      Add Bus Banner
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Existing top banners with per-item delete */}
+              <div className="mt-6 border-t border-gray-100 pt-5">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">
+                  Added bus banners ({busBanners.length})
+                </p>
+                {busBanners.length === 0 ? (
+                  <p className="text-sm text-gray-400">No bus banners yet. Add one above.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {busBanners.map((b, idx) => (
+                      <div key={b.id} className="rounded-xl border border-gray-200 overflow-hidden">
+                        <div style={{ background: '#0D1B2A' }} className="flex items-center justify-center">
+                          <img
+                            src={resolveImageUrl(b.image)}
+                            alt={`Bus banner ${idx + 1}`}
+                            className="w-full object-contain"
+                            style={{ maxHeight: 130 }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between px-3 py-2 bg-white">
+                          <span className="text-[11px] font-bold text-gray-500">#{idx + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => deleteBusBanner(b.id)}
+                            disabled={busSaving}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-bold text-rose-600 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 disabled:opacity-60"
                           >
                             <Trash2 size={14} /> Delete
