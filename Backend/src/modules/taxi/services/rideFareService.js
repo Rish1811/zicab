@@ -38,6 +38,16 @@ const num = (value) => {
 /// that zone, so a Mysuru tariff never prices a Bangalore trip. Shared by the
 /// /users/set-prices catalog and the fare engine, so the row a rider is shown
 /// is always the row they are charged on.
+const hasAnyRate = (row) => [
+  row.base_price,
+  row.price_per_distance,
+  row.time_price,
+  row.outstation_base_price,
+  row.outstation_price_per_distance,
+].some((value) => num(value) > 0)
+  // Rental/package rows carry their prices per vehicle.
+  || (Array.isArray(row.package_vehicle_prices) && row.package_vehicle_prices.length > 0);
+
 export const pickTariffPerVehicle = (rows, zoneId, serviceLocationId, transportType) => {
   const zoneRank = (row) => {
     if (zoneId && row.zone_id === zoneId) return 0;
@@ -55,6 +65,11 @@ export const pickTariffPerVehicle = (rows, zoneId, serviceLocationId, transportT
     // cannot find priced the ride on one row and took commission from none.
     if (String(row.status || 'active') !== 'active') continue;
     if (!Number(row.active)) continue;
+    // A row with no rates at all is not a tariff. A global all-zero row was
+    // switched on in Nov 2026; Indore's own rows were off, so the cascade fell
+    // through to it and rides were quoted, booked and completed at 0. Skipping
+    // it lets the cascade reach a real row, or show no price.
+    if (!hasAnyRate(row)) continue;
 
     let transportRank = 0;
     if (transportType) {
@@ -401,6 +416,7 @@ export const resolveBookingFare = async ({
   vehicleTypeId,
   serviceType,
   roundTrip,
+  clientFare,
 }) => {
   const trip = { pickupCoords, dropCoords, stops, serviceType, roundTrip };
   const locked = readFareQuote({ token: quoteToken, userId, trip, vehicleTypeId });
@@ -420,19 +436,35 @@ export const resolveBookingFare = async ({
       ? 'This vehicle is not available for outstation trips from this pickup.'
       : 'This vehicle is not available in this area yet.');
   }
+  // An app build without /rides/quote (no token) priced the trip itself over a
+  // straight line, which runs 20-40% under the road price. Its figure is what
+  // the rider was shown, so it is kept when it is plausibly the same trip -
+  // within LEGACY_CLIENT_FARE_BAND of the server's, never above it. Anything
+  // else (0, a tampered 1, a stale tariff) books at the server's price.
+  const legacy = Number(clientFare);
+  const useLegacy = !quoteToken
+    && Number.isFinite(legacy)
+    && legacy >= quote.fare * LEGACY_CLIENT_FARE_BAND
+    && legacy <= quote.fare;
+
   return {
     vehicleTypeId: quote.vehicleTypeId,
     setPriceId: quote.setPriceId,
-    fare: quote.fare,
+    fare: useLegacy ? Math.round(legacy * 100) / 100 : quote.fare,
+    serverFare: quote.fare,
     platformFee: quote.breakdown.platformFee,
     tollCharges: quote.tollCharges,
     surgeMultiplier: quote.surgeMultiplier,
     distanceMeters: result.distanceMeters,
     durationMinutes: result.durationMinutes,
     route: result.route,
-    source: 'server',
+    source: useLegacy ? 'legacy_app' : 'server',
   };
 };
+
+/// How far under the server's price an old app's own figure may be and still
+/// be booked as shown. Straight-line vs road is usually 0.65-0.85.
+export const LEGACY_CLIENT_FARE_BAND = 0.6;
 
 /// [lng, lat] pairs from the stops the apps send as {lat, lng} (or [lng, lat]).
 export const normalizeStops = (stops) => (Array.isArray(stops) ? stops : [])

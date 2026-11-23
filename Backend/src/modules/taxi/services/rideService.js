@@ -1194,6 +1194,7 @@ export const createRideRecord = async ({
         vehicleTypeId: primaryVehicleTypeId,
         serviceType: bookingServiceType,
         roundTrip: bookingServiceType === 'intercity' && isRoundTripValue(intercity?.tripType),
+        clientFare: quotedFare,
       })
     : null;
 
