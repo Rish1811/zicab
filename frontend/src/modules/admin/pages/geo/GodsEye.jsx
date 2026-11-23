@@ -321,7 +321,7 @@ const GodsEye = () => {
   // The driver list with the freshest position and heading laid over it.
   const liveDrivers = useMemo(() => drivers.map((d) => {
     const live = livePositions[String(d._id || d.id)];
-    return live ? { ...d, latitude: live.lat, longitude: live.lng, heading: live.heading ?? d.heading, liveStatus: live.status } : d;
+    return live ? { ...d, latitude: live.lat, longitude: live.lng, heading: live.heading ?? d.heading, liveStatus: live.status, onMyWay: live.onMyWay || null } : d;
   }), [drivers, livePositions]);
 
   // Handle Fullscreen
@@ -876,6 +876,19 @@ const GodsEye = () => {
                            />
                         ))
                      ) : null}
+
+                     {/* Ride On My Way: a dashed line from the driver to where they are heading. */}
+                     {!controls.heatmap && filteredDrivers.filter((d) => d.onMyWay).map((d) => (
+                        <PolylineF
+                           key={`omw-${d._id || d.id}`}
+                           path={[{ lat: Number(d.latitude), lng: Number(d.longitude) }, { lat: d.onMyWay.lat, lng: d.onMyWay.lng }]}
+                           options={{
+                              strokeOpacity: 0,
+                              clickable: false,
+                              icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, strokeColor: '#4F46E5', scale: 3 }, offset: '0', repeat: '12px' }],
+                           }}
+                        />
+                     ))}
 
                      {liveTracking && route && (
                         <PolylineF

@@ -166,7 +166,7 @@ const TestRides = () => {
   const recipients = target === 'drivers'
     ? candidates.filter((c) => selected.has(c.id))
     : candidates;
-  const sendable = recipients.filter((c) => !c.testedRecently);
+  const sendable = recipients;
 
   const toggle = (id) => setSelected((prev) => {
     const next = new Set(prev);
@@ -253,7 +253,7 @@ const TestRides = () => {
               <div className="flex justify-between text-xs text-gray-500 mb-1">
                 <span>{candidates.length} online · {selected.size} chosen</span>
                 <span className="space-x-2">
-                  <button type="button" className="font-semibold text-yellow-600" onClick={() => setSelected(new Set(candidates.filter((c) => !c.testedRecently).map((c) => c.id)))}>All</button>
+                  <button type="button" className="font-semibold text-yellow-600" onClick={() => setSelected(new Set(candidates.map((c) => c.id)))}>All</button>
                   <button type="button" className="font-semibold text-gray-500" onClick={() => setSelected(new Set())}>None</button>
                 </span>
               </div>
@@ -261,8 +261,8 @@ const TestRides = () => {
                 {loadingCandidates && <div className="py-6 text-center"><Loader2 className="animate-spin inline text-yellow-500" size={18} /></div>}
                 {!loadingCandidates && !candidates.length && <p className="py-6 text-center text-xs text-gray-400">No online drivers match.</p>}
                 {!loadingCandidates && candidates.map((c) => (
-                  <label key={c.id} className={`flex items-center gap-3 px-3 py-2 text-sm ${c.testedRecently ? 'opacity-50' : 'cursor-pointer hover:bg-yellow-50/40'}`}>
-                    <input type="checkbox" disabled={c.testedRecently} checked={selected.has(c.id)} onChange={() => toggle(c.id)} />
+                  <label key={c.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-yellow-50/40">
+                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} />
                     <span className="flex-1 min-w-0">
                       <span className="font-semibold text-gray-900">{c.name || 'Driver'}</span>
                       <span className="block text-[11px] text-gray-500 truncate">{c.phone}{c.vehicleNumber ? ` · ${c.vehicleNumber}` : ''}{c.testedRecently ? ' · tested in the last 10 min' : ''}</span>
@@ -279,7 +279,7 @@ const TestRides = () => {
           {target !== 'drivers' && (
             <div className="text-sm bg-gray-50 rounded-lg p-3 flex items-center gap-2">
               {loadingCandidates ? <Loader2 size={14} className="animate-spin text-yellow-500" /> : <MapPin size={14} className="text-yellow-600" />}
-              <span><b>{recipients.length}</b> online driver(s){recipients.length !== sendable.length ? `, ${recipients.length - sendable.length} tested in the last 10 min (skipped)` : ''}</span>
+              <span><b>{recipients.length}</b> online driver(s)</span>
             </div>
           )}
 
@@ -292,7 +292,7 @@ const TestRides = () => {
             {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
             Send test ride{sendable.length ? ` to ${sendable.length}` : ''}
           </button>
-          <p className="text-[11px] text-gray-400">Each test rings a real phone. One test per driver every 10 minutes, at most 200 drivers at a time.</p>
+          <p className="text-[11px] text-gray-400">Each test rings a real phone. At most 200 drivers at a time.</p>
         </div>
 
         <div className="space-y-5">

@@ -126,6 +126,8 @@ export const adminService = {
   getTestRides: () => api.get('/admin/test-rides'),
   getTestRide: (id) => api.get(`/admin/test-rides/${id}`),
   sendTestRide: (data) => api.post('/admin/test-rides', data),
+  getOnMyWaySettings: () => api.get('/admin/on-my-way/settings'),
+  updateOnMyWaySettings: (data) => api.patch('/admin/on-my-way/settings', data),
   getDriverHoursReport: (params = {}) => api.get('/admin/driver-hours/report', { params }),
   getDriverHoursAttendance: (params = {}) => api.get('/admin/driver-hours/attendance', { params }),
   getDriverHoursAlerts: (params = {}) => api.get('/admin/driver-hours/alerts', { params }),

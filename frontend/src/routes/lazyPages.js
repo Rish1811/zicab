@@ -197,6 +197,7 @@ export const AdminTollCharges = lazy(() => import('../modules/admin/pages/price-
 export const AdminDriverChallenges = lazy(() => import('../modules/admin/pages/price-management/DriverChallenges'));
 export const AdminDriverHours = lazy(() => import('../modules/admin/pages/drivers/DriverHours'));
 export const AdminTestRides = lazy(() => import('../modules/admin/pages/drivers/TestRides'));
+export const AdminOnMyWaySettings = lazy(() => import('../modules/admin/pages/price-management/OnMyWaySettings'));
 export const AdminVehicleType = lazy(() => import('../modules/admin/pages/price-management/VehicleType'));
 export const AdminRentalVehicleTypes = lazy(() => import('../modules/admin/pages/price-management/RentalVehicleTypes'));
 export const AdminRentalCommissionManager = lazy(() => import('../modules/admin/pages/price-management/RentalCommissionManager'));

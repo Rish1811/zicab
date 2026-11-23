@@ -184,7 +184,10 @@ const LiveTab = ({ filters, onOpen }) => {
               {data.items.map((row) => (
                 <tr key={row.id} className="border-b border-gray-50 hover:bg-yellow-50/30">
                   <td className="py-2.5 pr-3"><DriverCell row={row} onOpen={onOpen} /></td>
-                  <td className="py-2.5 pr-3"><StatusChip status={row.status} /></td>
+                  <td className="py-2.5 pr-3">
+                    <StatusChip status={row.status} />
+                    {row.onMyWay && <div className="text-[11px] text-indigo-600 font-semibold mt-0.5 whitespace-nowrap" title="Ride On My Way: only rides toward this place">On my way → {row.onMyWay.label}</div>}
+                  </td>
                   <td className={`py-2.5 pr-3 text-xs whitespace-nowrap ${row.status === 'ghost' ? 'text-orange-600 font-semibold' : 'text-gray-600'}`}>{ago(row.lastLocationSecondsAgo)}</td>
                   <td className="py-2.5 pr-3 text-xs text-gray-600">{row.zone || '—'}</td>
                   <td className="py-2.5 pr-3 text-xs text-gray-600">{sinceText(row.onlineSince)}</td>
