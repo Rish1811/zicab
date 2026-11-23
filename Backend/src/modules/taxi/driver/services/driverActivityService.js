@@ -5,9 +5,9 @@ import { DriverActivityDay } from '../models/DriverActivityDay.js';
 ///
 /// Time is credited from the phone's location updates, not from the Online /
 /// Offline taps. The app sends one about every 30 s while online (more often on
-/// a trip); each update credits the time since the previous one, capped at
-/// MAX_GAP_MS - the same 3 minutes dispatch uses to call a GPS fix fresh. A
-/// phone that dies or a killed app therefore stops the clock within 3 minutes,
+/// a trip); each update credits the time since the previous one when that gap
+/// is at most MAX_GAP_MS - the same 3 minutes dispatch uses to call a GPS fix
+/// fresh. A longer silence (phone died, app killed, no signal) credits nothing,
 /// where the toggle-based count kept running all night.
 ///
 /// A gap is only credited when both ends of it counted: the driver was online
@@ -115,8 +115,8 @@ export const recordDriverLocationPing = async ({ driverId, at = Date.now(), onTr
   if (!counts || !previous?.lastCounted) return;
 
   const gap = at - previous.lastAt;
-  if (!(gap > 0)) return;
-  creditSpan(id, at - Math.min(gap, MAX_GAP_MS), at);
+  if (!(gap > 0) || gap > MAX_GAP_MS) return;
+  creditSpan(id, previous.lastAt, at);
 };
 
 /// Writes the buffered time to the database. Safe to call any time.
