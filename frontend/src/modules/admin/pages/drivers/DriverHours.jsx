@@ -44,6 +44,16 @@ const ago = (seconds) => {
   return `${Math.round(seconds / 3600)} h ago`;
 };
 const timeText = (value) => (value ? new Date(value).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : '—');
+// 'Online since': the time when it is today, otherwise the date too - a driver
+// stuck online since last month must not read as '4:35 pm'.
+const sinceText = (value) => {
+  if (!value) return '—';
+  const d = new Date(value);
+  const sameDay = new Date(d.getTime() + 330 * 60000).toISOString().slice(0, 10) === istToday();
+  if (sameDay) return timeText(value);
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${timeText(value)}${days >= 1 ? ` (${days}d)` : ''}`;
+};
 const dateText = (key) => {
   const d = new Date(`${key}T00:00:00`);
   return Number.isNaN(d.getTime()) ? key : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
@@ -177,7 +187,7 @@ const LiveTab = ({ filters, onOpen }) => {
                   <td className="py-2.5 pr-3"><StatusChip status={row.status} /></td>
                   <td className={`py-2.5 pr-3 text-xs whitespace-nowrap ${row.status === 'ghost' ? 'text-orange-600 font-semibold' : 'text-gray-600'}`}>{ago(row.lastLocationSecondsAgo)}</td>
                   <td className="py-2.5 pr-3 text-xs text-gray-600">{row.zone || '—'}</td>
-                  <td className="py-2.5 pr-3 text-xs text-gray-600">{timeText(row.onlineSince)}</td>
+                  <td className="py-2.5 pr-3 text-xs text-gray-600">{sinceText(row.onlineSince)}</td>
                   <td className="py-2.5 pr-3 font-bold text-gray-900">{hm(row.activeMinutes)}</td>
                   <td className="py-2.5 pr-3 text-xs text-gray-600">{hm(row.onTripMinutes)} / {hm(Math.max(0, row.activeMinutes - row.onTripMinutes))}</td>
                   <td className={`py-2.5 pr-3 text-xs ${row.ghostMinutes ? 'text-orange-600 font-semibold' : 'text-gray-400'}`}>{row.ghostMinutes ? hm(row.ghostMinutes) : '—'}</td>
@@ -463,7 +473,7 @@ const AlertsTab = ({ filters, onOpen }) => {
               <tr key={r.id} className="border-b border-gray-50">
                 <td className="py-2 pr-3"><DriverCell row={r} onOpen={onOpen} /></td>
                 <td className="py-2 pr-3 text-xs text-orange-600 font-semibold">{r.silentMinutes === null ? 'never sent' : `${hm(r.silentMinutes)} ago`}</td>
-                <td className="py-2 pr-3 text-xs text-gray-600">{timeText(r.onlineSince)}</td>
+                <td className="py-2 pr-3 text-xs text-gray-600">{sinceText(r.onlineSince)}</td>
                 <td className="py-2 text-right">
                   <button type="button" disabled={forcing === r.id} onClick={() => forceOffline(r)} className="inline-flex items-center gap-1 text-xs font-semibold bg-gray-900 text-white rounded-md px-2.5 py-1 hover:bg-gray-700 disabled:opacity-50">
                     <Power size={12} /> Force offline
