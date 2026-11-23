@@ -6,7 +6,7 @@ import {
 } from "../controllers/driverSubscriptionController.js";
 import { asyncHandler } from "../../../../utils/asyncHandler.js";
 import { authenticate } from "../../middlewares/authMiddleware.js";
-import { getPendingRideOffers } from "../controllers/rideOfferController.js";
+import { answerRideOffer, getPendingRideOffers } from "../controllers/rideOfferController.js";
 import {
   loginRateLimit,
   otpSendRateLimit,
@@ -188,6 +188,12 @@ driverRouter.get(
   "/ride-offers",
   authenticate(["driver"]),
   asyncHandler(getPendingRideOffers),
+);
+// The lock-screen card answers here (native code, no socket).
+driverRouter.post(
+  "/ride-offers/:rideId/:action(accept|reject)",
+  authenticate(["driver"]),
+  answerRideOffer,
 );
 driverRouter.get(
   "/me",

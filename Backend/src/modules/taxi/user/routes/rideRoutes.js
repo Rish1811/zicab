@@ -5,6 +5,7 @@ import {
   availableDriversRateLimit,
   paymentOrderRateLimit,
   rideCreationRateLimit,
+  rideQuoteRateLimit,
 } from '../../middlewares/rateLimitMiddleware.js';
 import {
   acceptRideBid,
@@ -19,6 +20,7 @@ import {
   getRideBiddingSettings,
   getMyActiveRide,
   getRideById,
+  getRideQuote,
   listMyRides,
   listAvailableDrivers,
   payRideCompletionWithWallet,
@@ -35,6 +37,8 @@ export const rideRouter = Router();
 
 rideRouter.post('/', authenticate(['user']), rideCreationRateLimit, asyncHandler(createRide));
 rideRouter.get('/', authenticate(['user', 'driver']), asyncHandler(listMyRides));
+// Server-side fare per vehicle. Static path, so it sits before /:rideId.
+rideRouter.post('/quote', authenticate(['user']), rideQuoteRateLimit, asyncHandler(getRideQuote));
 rideRouter.get('/app-settings/tip', asyncHandler(getRideAppTipSettings));
 rideRouter.get('/app-settings/bidding', asyncHandler(getRideBiddingSettings));
 rideRouter.get('/available-drivers', availableDriversRateLimit, asyncHandler(listAvailableDrivers));

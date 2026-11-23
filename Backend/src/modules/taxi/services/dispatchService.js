@@ -15,7 +15,8 @@ import {
   RIDE_STATUS,
 } from '../constants/index.js';
 import { Delivery } from '../user/models/Delivery.js';
-import { getRideRoom, resolveSetPriceForRide, serializeTollCharges } from './rideService.js';
+import { estimateDriverEarning } from './driverEarningEstimate.js';
+import { getRideDetails, getRideRoom, resolveSetPriceForRide, serializeRideRealtime, serializeTollCharges } from './rideService.js';
 import { SOCKET_EVENTS } from '../socket/events.js';
 import { resolveTransportDispatchConfig } from './transportSettingsService.js';
 import { sendPushNotificationToEntities } from './pushNotificationService.js';
@@ -805,6 +806,7 @@ const emitRideRequestToDrivers = async ({
       baseFare: Number(ride.baseFare || ride.fare || 0),
       surgeMultiplier: Number(ride.surge?.multiplier || 1),
       tollCharges: serializeTollCharges(ride.tollCharges),
+      ...estimateDriverEarning(ride),
       bookingMode: ride.bookingMode || 'normal',
       pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
       biddingStatus: ride.biddingStatus || 'none',
@@ -1755,42 +1757,22 @@ export const notifyRideAccepted = async (ride) => {
     parcel: populatedRide.parcel || null,
   });
 
-  emitToRoom(getUserRoom(populatedRide.userId), SOCKET_EVENTS.RIDE_STATE, {
-    rideId: String(populatedRide._id),
-    room: getRideRoom(populatedRide._id),
-    type: populatedRide.serviceType || 'ride',
-    serviceType: populatedRide.serviceType || 'ride',
-    status: populatedRide.status,
-    liveStatus: populatedRide.liveStatus,
-    fare: populatedRide.fare,
-    estimatedDistanceMeters: populatedRide.estimatedDistanceMeters || 0,
-    estimatedDurationMinutes: populatedRide.estimatedDurationMinutes || 0,
-    paymentMethod: populatedRide.paymentMethod,
-    otp: populatedRide.otp || '',
-    vehicleIconType: populatedRide.vehicleIconType || '',
-    vehicleIconUrl: populatedRide.vehicleIconUrl || '',
-    parcel: populatedRide.parcel || null,
-    intercity: populatedRide.intercity || null,
-    commissionAmount: populatedRide.commissionAmount,
-    driverEarnings: populatedRide.driverEarnings,
-    pickupLocation: populatedRide.pickupLocation,
-    pickupAddress: populatedRide.pickupAddress || '',
-    dropLocation: populatedRide.dropLocation,
-    dropAddress: populatedRide.dropAddress || '',
-    acceptedAt: populatedRide.acceptedAt,
-    startedAt: populatedRide.startedAt,
-    completedAt: populatedRide.completedAt,
-    lastDriverLocation: populatedRide.lastDriverLocation?.coordinates?.length
-      ? {
-          type: populatedRide.lastDriverLocation.type,
-          coordinates: populatedRide.lastDriverLocation.coordinates,
-          heading: populatedRide.lastDriverLocation.heading,
-          speed: populatedRide.lastDriverLocation.speed,
-          updatedAt: populatedRide.lastDriverLocation.updatedAt,
-        }
-      : null,
-    driver: populatedRide.driverId,
-  });
+  // The full ride, as every other ride:state carries. The rider app replaces
+  // its ride with this payload, and the hand-picked fields here dropped the
+  // tolls, route, payment state and chat until the next poll.
+  const fullRide = await getRideDetails(populatedRide._id).catch(() => null);
+  emitToRoom(
+    getUserRoom(populatedRide.userId),
+    SOCKET_EVENTS.RIDE_STATE,
+    fullRide ? serializeRideRealtime(fullRide) : {
+      rideId: String(populatedRide._id),
+      room: getRideRoom(populatedRide._id),
+      status: populatedRide.status,
+      liveStatus: populatedRide.liveStatus,
+      fare: populatedRide.fare,
+      driver: populatedRide.driverId,
+    },
+  );
 
   emitToRoom(getRideRoom(populatedRide._id), SOCKET_EVENTS.RIDE_STATUS_UPDATED, {
     rideId: String(populatedRide._id),

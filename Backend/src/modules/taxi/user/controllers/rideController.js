@@ -36,6 +36,8 @@ import {
 import { getTipSettings } from '../../services/appSettingsService.js';
 import { getBidRideSettings, getTransportRideSettings } from '../../services/transportSettingsService.js';
 import { matchDrivers } from '../../services/matchingService.js';
+import { normalizeStops, QUOTE_TTL_MS, quoteRideFares, signFareQuote } from '../../services/rideFareService.js';
+import { isRoundTripValue } from '../../services/tollService.js';
 import { Ride } from '../models/Ride.js';
 import { UserWallet } from '../models/UserWallet.js';
 
@@ -299,11 +301,17 @@ const razorpayRequest = async ({ method, path, body, keyId, keySecret }) => {
 };
 
 export const createRide = async (req, res) => {
-  const { pickup, drop, pickupAddress, dropAddress, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, zone_id, service_location_id, transport_type, scheduledAt, bookingMode, userMaxBidFare, bidStepAmount, platformFee, surgeMultiplier, tollAmount, use_cashback } =
+  const { pickup, drop, pickupAddress, dropAddress, fare, estimatedDistanceMeters, estimatedDurationMinutes, vehicleTypeId, vehicleTypeIds, vehicleIconType, vehicleIconUrl, paymentMethod, serviceType, intercity, promo_code, zone_id, service_location_id, transport_type, scheduledAt, bookingMode, userMaxBidFare, bidStepAmount, platformFee, surgeMultiplier, tollAmount, use_cashback, quoteToken, stops } =
     req.body;
 
   if (!pickup || !drop) {
     throw new ApiError(400, 'pickup and drop are required');
+  }
+
+  // Parcels are priced and booked through /deliveries, which works out the
+  // fare itself. Booking one here took the app's fare as it was.
+  if (String(serviceType || '').trim().toLowerCase() === 'parcel') {
+    throw new ApiError(400, 'Parcels are booked through /deliveries');
   }
 
   const resolvedVehicleTypeId = vehicleTypeId || (Array.isArray(vehicleTypeIds) ? vehicleTypeIds[0] : null);
@@ -339,6 +347,8 @@ export const createRide = async (req, res) => {
     surgeMultiplier,
     tollAmount,
     useCashback: use_cashback,
+    quoteToken,
+    stops,
   });
 
   await startDispatchFlow(ride);
@@ -355,6 +365,65 @@ export const createRide = async (req, res) => {
   });
 };
 
+/// Server-side price for a trip, per vehicle: what the rider app shows on the
+/// ride-type list and books at. Each quote carries a signed token; booking with
+/// it holds that exact fare for QUOTE_TTL_MS (10 minutes).
+///
+/// Body: pickup and drop as [lng, lat], optional stops [{lat, lng}],
+/// vehicleTypeIds, serviceType ('ride' | 'intercity') and intercity.tripType.
+export const getRideQuote = async (req, res) => {
+  const { pickup, drop, stops, vehicleTypeIds, vehicleTypeId, serviceType, intercity } = req.body || {};
+  if (!pickup || !drop) {
+    throw new ApiError(400, 'pickup and drop are required');
+  }
+  const pickupCoords = normalizePoint(pickup, 'pickup');
+  const dropCoords = normalizePoint(drop, 'drop');
+  const stopCoords = normalizeStops(stops);
+  const normalizedServiceType = String(serviceType || 'ride').trim().toLowerCase() === 'intercity' ? 'intercity' : 'ride';
+  const roundTrip = normalizedServiceType === 'intercity' && isRoundTripValue(intercity?.tripType);
+  const ids = Array.isArray(vehicleTypeIds) ? vehicleTypeIds : (vehicleTypeId ? [vehicleTypeId] : []);
+
+  const result = await quoteRideFares({
+    pickupCoords,
+    dropCoords,
+    stops: stopCoords,
+    vehicleTypeIds: ids,
+    serviceType: normalizedServiceType,
+    roundTrip,
+  });
+  const trip = { pickupCoords, dropCoords, stops: stopCoords, serviceType: normalizedServiceType, roundTrip };
+
+  res.json({
+    success: true,
+    data: {
+      zone: result.zone,
+      tripCategory: result.tripCategory,
+      serviceType: result.serviceType,
+      roundTrip: result.roundTrip,
+      distanceMeters: result.distanceMeters,
+      durationMinutes: result.durationMinutes,
+      distanceSource: result.distanceSource,
+      polyline: result.route?.polyline || '',
+      expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
+      quotes: result.quotes.map((quote) => ({
+        vehicleTypeId: quote.vehicleTypeId,
+        vehicleName: quote.vehicleName,
+        fare: quote.fare,
+        breakdown: quote.breakdown,
+        tollCharges: quote.tollCharges,
+        surgeMultiplier: quote.surgeMultiplier,
+        quoteToken: signFareQuote({
+          userId: req.auth.sub,
+          trip,
+          quote,
+          distanceMeters: result.distanceMeters,
+          durationMinutes: result.durationMinutes,
+        }),
+      })),
+    },
+  });
+};
+
 export const getRideById = async (req, res) => {
   await ensureRideParticipantAccess({
     rideId: req.params.rideId,
@@ -364,9 +433,25 @@ export const getRideById = async (req, res) => {
 
   const ride = await getRideDetails(req.params.rideId);
 
+  // The stored ride as it always was, plus the two things only the realtime
+  // serializer builds. The rider app polls this every few seconds and replaces
+  // its ride with it, so without `driverPayment` the driver's UPI QR vanished
+  // from the pay sheet on the next poll. The driver's raw bank details are
+  // taken out: they reached the rider even before admin verified the UPI.
+  const realtime = serializeRideRealtime(ride);
+  const raw = typeof ride.toObject === 'function' ? ride.toObject() : { ...ride };
+  if (raw.driverId && typeof raw.driverId === 'object') {
+    const { bankDetails, ...driverWithoutBank } = raw.driverId;
+    raw.driverId = driverWithoutBank;
+  }
+
   res.json({
     success: true,
-    data: ride,
+    data: {
+      ...raw,
+      driverPayment: realtime.driverPayment,
+      tollCharges: realtime.tollCharges,
+    },
   });
 };
 
@@ -1422,14 +1507,20 @@ export const acceptRideBid = async (req, res) => {
 
   await notifyRideAccepted(ride);
 
+  // The whole ride: the app reads this reply as a ride, and four fields left
+  // its fare and bid figures at 0 until the next update.
+  const fullRide = await getRideDetails(ride._id).catch(() => null);
+
   res.json({
     success: true,
-    data: {
-      rideId: String(ride._id),
-      status: ride.status,
-      liveStatus: ride.liveStatus,
-      acceptedAt: ride.acceptedAt,
-    },
+    data: fullRide
+      ? serializeRideRealtime(fullRide)
+      : {
+          rideId: String(ride._id),
+          status: ride.status,
+          liveStatus: ride.liveStatus,
+          acceptedAt: ride.acceptedAt,
+        },
   });
 };
 

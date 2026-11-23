@@ -3,7 +3,11 @@ import { Ride } from '../../user/models/Ride.js';
 import { Vehicle } from '../../admin/models/Vehicle.js';
 import { RIDE_STATUS } from '../../constants/index.js';
 import { resolveTransportDispatchConfig } from '../../services/transportSettingsService.js';
-import { serializeTollCharges } from '../../services/rideService.js';
+import { ApiError } from '../../../../utils/ApiError.js';
+import { acceptRideAssignment, getRideDetails, getRideRoom, serializeRideRealtime, serializeTollCharges } from '../../services/rideService.js';
+import { emitToDriver, markDriverRejectedFromDispatch, notifyRideAccepted } from '../../services/dispatchService.js';
+import { estimateDriverEarning } from '../../services/driverEarningEstimate.js';
+import { RideBid } from '../../user/models/RideBid.js';
 
 /**
  * Offers this driver was dispatched but has not answered yet.
@@ -61,8 +65,15 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
     : [];
   const vehicleNameById = new Map(vehicles.map((v) => [String(v._id), v.name || '']));
 
+  // A ride this driver already bid on is waiting on the rider, not on them.
+  // Replaying it put the same offer back on screen 5 s after 'Keep driving'.
+  const biddedRideIds = rides.length
+    ? new Set((await RideBid.find({ rideId: { $in: rides.map((r) => r._id) }, driverId }).distinct('rideId')).map(String))
+    : new Set();
+
   const offers = rides
     .filter((ride) => !asIdSet(ride?.dispatchTracking?.rejectedDriverIds).has(driverId))
+    .filter((ride) => !biddedRideIds.has(String(ride._id)))
     .map((ride) => {
       const rider = ride.userId && typeof ride.userId === 'object' ? ride.userId : {};
       const lastDispatchAt = ride?.dispatchTracking?.lastDispatchAttemptAt
@@ -113,10 +124,26 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
         baseFare: Number(ride.baseFare || ride.fare || 0),
         surgeMultiplier: Number(ride.surge?.multiplier || 1),
         tollCharges: serializeTollCharges(ride.tollCharges),
+        ...estimateDriverEarning(ride),
         bookingMode: ride.bookingMode || 'normal',
         pricingNegotiationMode: ride.pricingNegotiationMode || 'none',
         biddingStatus: ride.biddingStatus || 'none',
-        bidding: { enabled: ride.pricingNegotiationMode === 'driver_bid' },
+        // The full range, as the live offer sends it. A recovered bidding offer
+        // had only the flag, so its ceiling came out as 0.
+        bidding: ride.pricingNegotiationMode === 'driver_bid'
+          ? {
+              enabled: true,
+              baseFare: Number(ride.baseFare || ride.fare || 0),
+              bidFloorFare: Number(ride.bidFloorFare ?? ride.baseFare ?? ride.fare ?? 0),
+              userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+              bidCeilingMaxFare: Number(ride.bidCeilingMaxFare || ride.userMaxBidFare || ride.fare || 0),
+              bidStepAmount: Number(ride.bidStepAmount || 10),
+            }
+          : { enabled: false },
+        bidFloorFare: Number(ride.bidFloorFare ?? ride.baseFare ?? ride.fare ?? 0),
+        userMaxBidFare: Number(ride.userMaxBidFare || ride.fare || 0),
+        bidCeilingMaxFare: Number(ride.bidCeilingMaxFare || ride.userMaxBidFare || ride.fare || 0),
+        bidStepAmount: Number(ride.bidStepAmount || 10),
         paymentMethod: ride.paymentMethod,
         parcel: ride.parcel || null,
         intercity: ride.intercity || null,
@@ -129,4 +156,46 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
 
   // Keyed `offers` to match what the driver app reads.
   ok(res, { offers });
+});
+
+/// Accept or turn down an offer over plain HTTP - the lock-screen card's
+/// buttons, which run in native code with no socket. The app has always POSTed
+/// here and the route did not exist, so Accept on the lock screen did nothing.
+///
+/// POST /drivers/ride-offers/:rideId/accept | /reject
+export const answerRideOffer = asyncHandler(async (req, res) => {
+  const driverId = String(req.auth.sub);
+  const { rideId, action } = req.params;
+
+  if (action === 'reject') {
+    await markDriverRejectedFromDispatch(rideId, driverId);
+    res.json({ success: true, data: { rideId: String(rideId), action: 'reject' } });
+    return;
+  }
+
+  if (action !== 'accept') {
+    throw new ApiError(400, 'action must be accept or reject');
+  }
+
+  // Same path as the socket accept: first successful transaction wins.
+  const ride = await acceptRideAssignment({ rideId, driverId });
+  await notifyRideAccepted(ride);
+  const fullRide = await getRideDetails(ride._id).catch(() => null);
+  const payload = fullRide ? serializeRideRealtime(fullRide) : {
+    rideId: String(ride._id),
+    status: ride.status,
+    liveStatus: ride.liveStatus,
+    acceptedAt: ride.acceptedAt,
+  };
+  // If the app is open (or opens next), it adopts the ride from these.
+  emitToDriver(driverId, 'rideAccepted', {
+    rideId: String(ride._id),
+    room: getRideRoom(ride._id),
+    status: ride.status,
+    liveStatus: ride.liveStatus,
+    acceptedAt: ride.acceptedAt,
+  });
+  emitToDriver(driverId, 'ride:state', payload);
+
+  res.json({ success: true, data: payload });
 });

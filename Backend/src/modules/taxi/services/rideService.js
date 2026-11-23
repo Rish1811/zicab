@@ -27,6 +27,7 @@ import { getTipSettings } from './appSettingsService.js';
 import { getBidRideSettings } from './transportSettingsService.js';
 import { resolveBiddingPolicy } from './biddingPolicyService.js';
 import { resolveRideRoute } from './routeService.js';
+import { normalizeStops, resolveBookingFare } from './rideFareService.js';
 
 const clearUserActiveRideIfPresent = async (user) => {
   if (!user?.currentRideId) {
@@ -955,8 +956,19 @@ const buildDriverVehicleAcceptFilter = async (ride) => {
 /// them for the rest of the day.
 const PARCEL_WAITING_CHARGE_CAP_MINUTES = 60;
 
+/// Taxi and outstation rides are charged the same way, on the waiting terms of
+/// the tariff row their fare was priced on (Set Prices: waiting charge per
+/// minute, free waiting before the trip starts). They were stored on every
+/// ride and never charged.
 const applyParcelWaitingCharge = async (ride) => {
-  if (!ride || (ride.serviceType || 'ride') !== 'parcel') return;
+  if (!ride) return;
+  const isParcel = (ride.serviceType || 'ride') === 'parcel';
+  if (!isParcel && !ride.pricingSnapshot?.setPriceId) return;
+  // A pass-covered ride was paid in full at booking; nothing more to collect.
+  if (ride.subscriptionUsage?.covered) return;
+  // Already paid online mid-trip: adding to the fare now would leave a
+  // balance nobody collects.
+  if (!isParcel && ride.driverPaymentCollection?.status === 'paid') return;
   if (!ride.arrivedAt || !ride.startedAt) return;
   if (Number(ride.waitingCharge) > 0) return; // already applied
 
@@ -966,7 +978,7 @@ const applyParcelWaitingCharge = async (ride) => {
   let perMinute;
   let freeMinutes;
 
-  if (ride.pricingSnapshot?.delivery_tariff_source) {
+  if (!isParcel || ride.pricingSnapshot?.delivery_tariff_source) {
     perMinute = Math.max(0, Number(ride.pricingSnapshot.waiting_charge) || 0);
     freeMinutes = Math.max(0, Number(ride.pricingSnapshot.free_waiting_before) || 0);
   } else {
@@ -1138,6 +1150,8 @@ export const createRideRecord = async ({
   surgeMultiplier,
   tollAmount,
   useCashback = true,
+  quoteToken,
+  stops,
 }) => {
   const user = await User.findById(userId);
 
@@ -1153,10 +1167,6 @@ export const createRideRecord = async ({
   const safeEstimatedDistanceMeters = Math.max(0, Number(estimatedDistanceMeters || 0));
   const safeEstimatedDurationMinutes = Math.max(0, Number(estimatedDurationMinutes || 0));
 
-  if (!Number.isFinite(quotedFare) || quotedFare < 0) {
-    throw new ApiError(400, 'fare must be a positive number or zero');
-  }
-
   const dispatchVehicleTypeIds = normalizeVehicleTypeIds(vehicleTypeIds, vehicleTypeId);
 
   if (dispatchVehicleTypeIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
@@ -1164,22 +1174,35 @@ export const createRideRecord = async ({
   }
 
   const primaryVehicleTypeId = dispatchVehicleTypeIds[0] || null;
+  const bookingServiceType = normalizeServiceType(serviceType);
+  const stopCoords = normalizeStops(stops);
 
-  // Outstation tolls are worked out here from the route, whatever the app
-  // sent: the app's own toll (`tollAmount`) is taken out of its fare and the
-  // server's put in. An app that knows nothing of tolls therefore still books
-  // them, so the driver is never short, and a stale quote is corrected.
-  const rideTollCharges = await resolveRideTolls({
-    serviceType,
-    pickupCoords,
-    dropCoords,
-    vehicleTypeId: primaryVehicleTypeId,
-    intercity,
-  });
-  const appToll = Math.max(0, Number(tollAmount) || 0);
-  const safeFare = rideTollCharges
-    ? Math.round((Math.max(0, quotedFare - appToll) + rideTollCharges.total) * 100) / 100
-    : quotedFare;
+  // The fare is the server's, never the phone's. Taxi and outstation trips are
+  // priced here (or at the locked quote the app got from /rides/quote) from the
+  // pickup zone's tariff over the road route, with surge, tolls and airport
+  // fee. Parcels arrive already priced by createDeliveryRecord, the only
+  // caller that may pass a parcel. The app's `fare` used to be stored as it
+  // was, so a missing tariff or a stale app booked rides at 0.
+  const serverPriced = bookingServiceType !== 'parcel';
+  const bookingFare = serverPriced
+    ? await resolveBookingFare({
+        userId,
+        quoteToken,
+        pickupCoords,
+        dropCoords,
+        stops: stopCoords,
+        vehicleTypeId: primaryVehicleTypeId,
+        serviceType: bookingServiceType,
+        roundTrip: bookingServiceType === 'intercity' && isRoundTripValue(intercity?.tripType),
+      })
+    : null;
+
+  if (!serverPriced && (!Number.isFinite(quotedFare) || quotedFare <= 0)) {
+    throw new ApiError(400, 'This trip has no price yet.');
+  }
+
+  const rideTollCharges = serverPriced ? (bookingFare.tollCharges || null) : null;
+  const safeFare = serverPriced ? bookingFare.fare : Math.round(quotedFare * 100) / 100;
   const primaryVehicle = primaryVehicleTypeId
     ? await Vehicle.findById(primaryVehicleTypeId).select('name icon_types category vehicle_type icon map_icon image dispatch_type admin_commission_type_from_driver admin_commission_from_driver admin_commission_type_for_owner admin_commission_for_owner').lean()
     : null;
@@ -1215,12 +1238,22 @@ export const createRideRecord = async ({
   const resolvedServiceLocationId = serviceLocationIdInput
     ? new mongoose.Types.ObjectId(serviceLocationIdInput)
     : null;
-  const { pricingRule, allowedPaymentMethods } = await getAllowedRidePaymentMethodsForPricing({
+  let { pricingRule, allowedPaymentMethods } = await getAllowedRidePaymentMethodsForPricing({
     zoneId: resolvedZoneId,
     serviceLocationId: resolvedServiceLocationId,
     transportType: normalizedTransportType,
     vehicleTypeId: primaryVehicleTypeId,
   });
+  // Commission, payment methods and waiting terms come from the very row the
+  // fare was priced on. The lookup above can land on a different row (another
+  // zone's, or none), which settled rides at 0% commission.
+  if (bookingFare?.setPriceId && String(pricingRule?._id || '') !== String(bookingFare.setPriceId)) {
+    const pricedRow = await SetPrice.findById(bookingFare.setPriceId).lean().catch(() => null);
+    if (pricedRow) {
+      pricingRule = pricedRow;
+      allowedPaymentMethods = normalizeAllowedRidePaymentMethods(pricedRow.payment_type);
+    }
+  }
   const normalizedPaymentMethod = normalizeRidePaymentMethod(paymentMethod);
   const resolvedRequestedPaymentMethod = allowedPaymentMethods.includes(normalizedPaymentMethod)
     ? normalizedPaymentMethod
@@ -1243,7 +1276,7 @@ export const createRideRecord = async ({
   const biddingPolicy = await resolveBiddingPolicy({
     vehicle: primaryVehicle,
     serviceType: normalizedServiceType,
-    distanceMeters: safeEstimatedDistanceMeters,
+    distanceMeters: bookingFare?.distanceMeters > 0 ? bookingFare.distanceMeters : safeEstimatedDistanceMeters,
     bidSettings: bidRideSettings,
   });
   // Rapido's behaviour, and what the client asked for: a rider who is waiting
@@ -1332,9 +1365,11 @@ export const createRideRecord = async ({
   const configuredPlatformFee = Number(pricingRule?.admin_commision_type ?? 1) === 1
     ? (safeFare * Math.max(0, Number(pricingRule?.admin_commision) || 0)) / 100
     : Math.max(0, Number(pricingRule?.admin_commision) || 0);
-  const riderPlatformFee = Math.round(
-    Math.min(Math.max(0, Number(platformFee) || 0), configuredPlatformFee) * 100,
-  ) / 100;
+  // Server-priced rides carry the fee the fare engine put in; parcels keep the
+  // old rule (what the app says, capped at the tariff).
+  const riderPlatformFee = serverPriced
+    ? Math.round(Math.max(0, Number(bookingFare.platformFee) || 0) * 100) / 100
+    : Math.round(Math.min(Math.max(0, Number(platformFee) || 0), configuredPlatformFee) * 100) / 100;
 
   const pricingSnapshot = {
     setPriceId: pricingRule?._id || null,
@@ -1362,8 +1397,13 @@ export const createRideRecord = async ({
   const vehicleSurge = surgeProfiles
     ? surgeForVehicle(pickupSurge, surgeProfiles, primaryVehicleTypeId).multiplier
     : 1;
-  const quotedSurge = Number(surgeMultiplier);
-  const rideSurgeMultiplier = vehicleSurge > 1
+  const quotedSurge = Number(serverPriced ? bookingFare.surgeMultiplier : surgeMultiplier);
+  // Parcel fares are never surged, so a parcel must not be labelled as one.
+  const rideSurgeMultiplier = !serverPriced
+    ? 1
+    : bookingFare.source === 'quote'
+      ? Math.max(1, Math.min(ABSOLUTE_MAX_MULTIPLIER, quotedSurge || 1))
+      : vehicleSurge > 1
     ? Math.min(
       ABSOLUTE_MAX_MULTIPLIER,
       Number.isFinite(quotedSurge) && quotedSurge > 1 ? Math.min(quotedSurge, vehicleSurge) : vehicleSurge,
@@ -1443,16 +1483,19 @@ export const createRideRecord = async ({
 
   // Never fatal: `resolveRideRoute` swallows its own failures and returns null,
   // so a routing outage costs a polyline rather than the booking.
-  const resolvedRoute = await resolveRideRoute({ pickupCoords, dropCoords });
+  // The fare engine already routed this trip (through its stops); reuse it.
+  const resolvedRoute = bookingFare?.route?.polyline
+    ? { ...bookingFare.route, fetchedAt: bookingFare.route.fetchedAt || new Date() }
+    : await resolveRideRoute({ pickupCoords, dropCoords, stops: stopCoords });
 
   // Deliveries send neither figure, and a rider's estimate is only ever a
   // guess, so the routed values win where we have them.
   const routedDistanceMeters = resolvedRoute?.distanceMeters > 0
     ? resolvedRoute.distanceMeters
-    : safeEstimatedDistanceMeters;
+    : (bookingFare?.distanceMeters > 0 ? bookingFare.distanceMeters : safeEstimatedDistanceMeters);
   const routedDurationMinutes = resolvedRoute?.durationMinutes > 0
     ? resolvedRoute.durationMinutes
-    : safeEstimatedDurationMinutes;
+    : (bookingFare?.durationMinutes > 0 ? bookingFare.durationMinutes : safeEstimatedDurationMinutes);
   const routeDocument = resolvedRoute
     ? {
         polyline: resolvedRoute.polyline,
@@ -1599,7 +1642,9 @@ export const createRideRecord = async ({
         ride: rideDoc,
         userId,
         code: promoCode,
-        fare: safeFare,
+        // The fare the ride actually starts at (a raise-your-fare ride rounds
+        // the quote to whole rupees), so the coupon does not undo that.
+        fare: effectiveStartingFare,
         service_location_id: promoServiceLocationId,
         transport_type: transport_type || 'taxi',
       });

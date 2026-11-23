@@ -45,6 +45,7 @@ import { buildRentalTrackingSnapshot, updateUserRentalTracking } from '../../ser
 import { listDriverServiceLocations } from '../../driver/services/serviceLocationService.js';
 import { listServiceStores, listSetPrices, listZones } from '../../admin/services/adminService.js';
 import { findZoneByPickup } from '../../services/matchingService.js';
+import { pickTariffPerVehicle } from '../../services/rideFareService.js';
 import { classifyTrip } from '../../services/tripCategoryService.js';
 import { getSurgeAt, getSurgeProfiles, recordSurgeDemand, surgeForVehicle } from '../../services/surgeService.js';
 import { verifyAccessToken } from '../../services/tokenService.js';
@@ -125,8 +126,11 @@ const ensureUserWallet = async (userId) => {
 const serializeUserWalletTransaction = (entry = {}) => ({
   id: entry._id,
   kind: entry.kind,
+  // The rider app reads these two names; they mirror kind and title.
+  type: entry.kind,
   amount: Number(entry.amount || 0),
   title: entry.title || '',
+  description: entry.title || '',
   counterpartyPhone: entry.counterpartyPhone || '',
   createdAt: entry.createdAt || null,
 });
@@ -134,14 +138,22 @@ const serializeUserWalletTransaction = (entry = {}) => ({
 const buildUserWalletPayload = (wallet) => {
   const transactions = Array.isArray(wallet?.transactions) ? wallet.transactions : [];
 
+  const recentTransactions = transactions
+    .slice()
+    .reverse()
+    .map(serializeUserWalletTransaction);
+  const balance = Number(wallet?.balance || 0);
+
   return {
-    balance: Number(wallet?.balance || 0),
+    balance,
     refundWallet: Number(wallet?.refundWallet || 0),
+    // The part of the balance that is ride cashback (spendable on rides only),
+    // never more than the balance itself. The app showed 0 without it.
+    cashbackBalance: Math.round(Math.max(0, Math.min(Number(wallet?.cashbackBalance || 0), balance)) * 100) / 100,
     currency: 'INR',
-    recentTransactions: transactions
-      .slice()
-      .reverse()
-      .map(serializeUserWalletTransaction),
+    recentTransactions,
+    // Same list under the name the rider app reads; it showed an empty history.
+    transactions: recentTransactions,
   };
 };
 
@@ -2110,7 +2122,7 @@ export const getUserWallet = async (req, res) => {
   }
 
   await ensureUserWallet(userId);
-  const wallet = await UserWallet.findOne({ userId }).select('balance refundWallet transactions').slice('transactions', -10).lean();
+  const wallet = await UserWallet.findOne({ userId }).select('balance refundWallet cashbackBalance transactions').slice('transactions', -10).lean();
   const transactions = Array.isArray(wallet?.transactions) ? wallet.transactions : [];
 
   res.json({
@@ -2145,7 +2157,7 @@ export const topupUserWallet = async (req, res) => {
     },
   );
 
-  const updatedWallet = await UserWallet.findOne({ userId }).select('balance transactions').slice('transactions', -10).lean();
+  const updatedWallet = await UserWallet.findOne({ userId }).select('balance refundWallet cashbackBalance transactions').slice('transactions', -10).lean();
   const updatedWalletWithRefund = updatedWallet
     ? { ...updatedWallet, refundWallet: Number(updatedWallet.refundWallet || 0) }
     : updatedWallet;
@@ -2223,7 +2235,7 @@ export const transferUserWallet = async (req, res) => {
     throw new ApiError(500, 'Transfer failed');
   }
 
-  const wallet = await UserWallet.findOne({ userId: senderId }).select('balance refundWallet transactions').slice('transactions', -10).lean();
+  const wallet = await UserWallet.findOne({ userId: senderId }).select('balance refundWallet cashbackBalance transactions').slice('transactions', -10).lean();
 
   const transactions = Array.isArray(wallet?.transactions) ? wallet.transactions : [];
 
@@ -2330,7 +2342,7 @@ export const transferUserWalletToDriver = async (req, res) => {
     }).catch(() => {});
 
     const refreshedWallet = await UserWallet.findOne({ userId: senderId })
-      .select('balance refundWallet transactions')
+      .select('balance refundWallet cashbackBalance transactions')
       .slice('transactions', -10)
       .lean();
 
@@ -2471,7 +2483,7 @@ const verifyAndApplyUserRazorpayWalletTopup = async ({
   }
 
   const wallet = await UserWallet.findOne({ userId: effectiveUserId })
-    .select('balance refundWallet transactions')
+    .select('balance refundWallet cashbackBalance transactions')
     .slice('transactions', -10)
     .lean();
 
@@ -2907,7 +2919,7 @@ export const verifyPhonePeWalletTopup = async (req, res) => {
     }
 
     const wallet = await UserWallet.findOne({ userId })
-      .select('balance refundWallet transactions')
+      .select('balance refundWallet cashbackBalance transactions')
       .slice('transactions', -10)
       .lean();
 
@@ -4604,58 +4616,8 @@ export const listMyBusBookings = async (req, res) => {
   });
 };
 
-/// The rider's catalog is one row per vehicle, chosen the way the fare is.
-///
-/// Mirrors the cascade in `resolveSetPriceForRide`: a tariff for this exact
-/// zone wins, then one for the zone's service location, then a global one.
-/// Ranking here rather than querying per vehicle keeps this a single read.
-///
-/// A row carrying its own zone can only match that zone. Otherwise a tariff
-/// written for Mysuru would price a Bangalore trip merely because both sit in
-/// the same service location.
-const pickTariffPerVehicle = (rows, zoneId, serviceLocationId, transportType) => {
-  // Zone precedence, mirroring the cascade in `resolveSetPriceForRide`. A row
-  // carrying its own zone can only apply to that zone: otherwise a tariff
-  // written for Mysuru would price a Bangalore trip merely because the two
-  // share a service location.
-  const zoneRank = (row) => {
-    if (zoneId && row.zone_id === zoneId) return 0;
-    if (serviceLocationId && !row.zone_id && row.service_location_id === serviceLocationId) return 1;
-    if (!row.zone_id) return 2;
-    return null;
-  };
-
-  const best = new Map();
-
-  for (const row of rows) {
-    if (!row.type_id) continue;
-    if (row.status && row.status !== 'active') continue;
-    if (row.active === 0) continue;
-
-    // Transport type narrows the catalog only when the caller names one. Rides
-    // and parcels read the same endpoint, so filtering to taxi by default would
-    // strip every parcel vehicle out of the delivery screen.
-    let transportRank = 0;
-    if (transportType) {
-      if (row.transport_type === transportType) transportRank = 0;
-      else if (row.transport_type === 'both') transportRank = 1;
-      else continue;
-    }
-
-    const zoneScore = zoneRank(row);
-    if (zoneScore === null) continue;
-
-    // One tariff per vehicle. With no transport type named, a vehicle offered
-    // for both rides and parcels keeps a row for each, because the two are
-    // priced separately.
-    const key = transportType ? row.type_id : `${row.type_id}:${row.transport_type}`;
-    const score = zoneScore * 2 + transportRank;
-    const incumbent = best.get(key);
-    if (!incumbent || score < incumbent.score) best.set(key, { score, row });
-  }
-
-  return [...best.values()].map((entry) => entry.row);
-};
+// pickTariffPerVehicle lives in services/rideFareService.js, shared with the
+// server fare engine so the row a rider is shown is the row they are charged on.
 
 /// Who is asking for a price, for counting distinct riders in surge demand.
 /// The route is public, so the token is read if present but never required.

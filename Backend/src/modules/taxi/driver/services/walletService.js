@@ -46,7 +46,10 @@ const computeCommissionAmount = ({ fare, type, value }) => {
 };
 
 const resolveCommissionConfigForRide = async (ride, session) => {
-  if (ride?.pricingSnapshot?.admin_commission_from_driver !== undefined) {
+  // Only a snapshot taken from a real tariff row (or a parcel's vehicle terms)
+  // counts. The schema defaults the commission to 0, so a ride booked with no
+  // row used to settle at 0% instead of falling through to the lookups below.
+  if (ride?.pricingSnapshot?.setPriceId || ride?.pricingSnapshot?.delivery_tariff_source) {
     return {
       source: ride.pricingSnapshot?.setPriceId ? 'ride_snapshot' : 'ride_snapshot_fallback',
       type: Number(ride.pricingSnapshot?.admin_commission_type_from_driver ?? 1),
@@ -462,21 +465,30 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
     // worked out on the fare before cashback (`grossFare`).
     const fare = normalizeAmount(ride.fare || 0, 'fare');
     const cashbackPaid = Math.max(0, Math.round((Number(ride.cashbackRedemption?.amount) || 0) * 100) / 100);
-    const grossFare = Math.round((fare + cashbackPaid) * 100) / 100;
+    // A coupon is ZI CAB's discount, like cashback: the driver is paid on the
+    // fare before it. It used to come out of the driver's earnings.
+    const promoPaid = ride.promo?.code
+      ? Math.max(0, Math.round((Number(ride.promo?.discount_amount) || 0) * 100) / 100)
+      : 0;
+    const platformPaid = Math.round((cashbackPaid + promoPaid) * 100) / 100;
+    const grossFare = Math.round((fare + platformPaid) * 100) / 100;
     // Tolls in the fare are the driver's: they paid them at the plaza, so no
     // commission is taken on them.
     const tolls = Math.min(Math.max(0, Number(ride.tollCharges?.total) || 0), grossFare);
-    const commissionConfig = await resolveCommissionConfigForRide(ride, session);
-    const tripCommission = computeCommissionAmount({
-      fare: Math.round((grossFare - tolls) * 100) / 100,
-      type: commissionConfig.type,
-      value: commissionConfig.value,
-    });
     // The rider's per-ride platform fee was collected inside the fare but was
     // never the driver's money: it goes to admin with the commission. Zero on
     // every ride booked by an app that doesn't charge one, so those settle
     // exactly as before. Read here, before the snapshot is replaced below.
-    const platformFee = Math.min(Math.max(0, Number(ride.pricingSnapshot?.rider_platform_fee) || 0), grossFare);
+    const platformFee = Math.min(Math.max(0, Number(ride.pricingSnapshot?.rider_platform_fee) || 0), Math.max(0, grossFare - tolls));
+    const commissionConfig = await resolveCommissionConfigForRide(ride, session);
+    // Commission is on the trip only - not on tolls (the driver's) and not on
+    // the platform fee, which admin takes whole below. Charging it on the fee
+    // as well took the fee twice.
+    const tripCommission = computeCommissionAmount({
+      fare: Math.max(0, Math.round((grossFare - tolls - platformFee) * 100) / 100),
+      type: commissionConfig.type,
+      value: commissionConfig.value,
+    });
 
     // A driver on a daily pass keeps the fare: the pass is what ZI CAB earned
     // from them today. The rider's platform fee is still not theirs, so it is
@@ -505,14 +517,21 @@ export const settleCompletedRideWallet = async ({ rideId }) => {
     // and is owed the cashback ZI CAB covered. Online: ZI CAB holds the money
     // and pays the driver their full earnings.
     const amount = paymentMethod === 'cash'
-      ? Math.round((cashbackPaid - commissionAmount) * 100) / 100
+      ? Math.round((platformPaid - commissionAmount) * 100) / 100
       : driverEarnings;
     const type = paymentMethod === 'cash' && amount < 0 ? 'commission_deduction' : 'ride_earning';
 
     ride.paymentMethod = paymentMethod;
     ride.commissionAmount = commissionAmount;
     ride.driverEarnings = driverEarnings;
+    // Keeps the rest of the snapshot (waiting terms, owner commission, payment
+    // methods, delivery tariff): replacing it wholesale wiped them for every
+    // report and invoice read after settlement.
+    const previousSnapshot = typeof ride.pricingSnapshot?.toObject === 'function'
+      ? ride.pricingSnapshot.toObject()
+      : { ...(ride.pricingSnapshot || {}) };
     ride.pricingSnapshot = {
+      ...previousSnapshot,
       setPriceId: ride.pricingSnapshot?.setPriceId || commissionConfig.setPriceId || null,
       admin_commission_type_from_driver: Number(commissionConfig.type ?? ride.pricingSnapshot?.admin_commission_type_from_driver ?? 1),
       admin_commission_from_driver: Number(commissionConfig.value ?? ride.pricingSnapshot?.admin_commission_from_driver ?? 0),

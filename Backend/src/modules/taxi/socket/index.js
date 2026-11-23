@@ -28,7 +28,7 @@ import {
   startDispatchFlow,
 } from '../services/dispatchService.js';
 import { findZoneByPickup } from '../services/matchingService.js';
-import { acceptRideAssignment, createRideRecord, getRideRoom, submitRideBid } from '../services/rideService.js';
+import { acceptRideAssignment, createRideRecord, getRideDetails, getRideRoom, serializeRideRealtime, submitRideBid } from '../services/rideService.js';
 import { SOCKET_EVENTS } from './events.js';
 import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
 import { registerBusSocketHandlers } from '../bus/socket/busSocketHandlers.js';
@@ -488,7 +488,11 @@ export const configureTaxiSocketServer = async (httpServer) => {
         };
 
         socket.emit('rideAccepted', acceptedPayload);
-        socket.emit(SOCKET_EVENTS.RIDE_STATE, acceptedPayload);
+        // The full ride, not the five fields above. The driver app replaces its
+        // ride with whatever ride:state carries, so the short payload left the
+        // trip screen with no pickup, no rider and a fare of 0 until 'arrived'.
+        const fullRide = await getRideDetails(ride._id).catch(() => null);
+        socket.emit(SOCKET_EVENTS.RIDE_STATE, fullRide ? serializeRideRealtime(fullRide) : acceptedPayload);
         socket.emit(SOCKET_EVENTS.RIDE_JOINED, {
           rideId: String(ride._id),
           room: getRideRoom(ride._id),

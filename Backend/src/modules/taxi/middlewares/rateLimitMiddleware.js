@@ -293,3 +293,13 @@ export const availableDriversRateLimit = createRateLimitMiddleware({
   mode: 'ip',
   message: 'Too many driver availability requests. Please try again later.',
 });
+
+/// Fare quotes: asked again whenever the rider edits the trip, so generous,
+/// but each one can cost a Directions lookup.
+export const rideQuoteRateLimit = createRateLimitMiddleware({
+  scope: 'ride_quote',
+  max: 60,
+  windowMs: 60 * 1000,
+  mode: 'auth_or_ip',
+  message: 'Too many fare requests. Please try again in a moment.',
+});
