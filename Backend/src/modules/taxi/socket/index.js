@@ -30,6 +30,7 @@ import {
 import { findZoneByPickup } from '../services/matchingService.js';
 import { acceptRideAssignment, createRideRecord, getRideDetails, getRideRoom, serializeRideRealtime, submitRideBid } from '../services/rideService.js';
 import { SOCKET_EVENTS } from './events.js';
+import { ANOTHER_DRIVER_ACCEPTED, answerTestOffer } from '../testRides/services/testRideService.js';
 import { recordDriverLocationPing } from '../driver/services/driverActivityService.js';
 import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
 import { registerBusSocketHandlers } from '../bus/socket/busSocketHandlers.js';
@@ -484,6 +485,14 @@ export const configureTaxiSocketServer = async (httpServer) => {
           return;
         }
 
+        // A test ride from the admin panel: recorded, then refused exactly as
+        // a race lost to another driver is.
+        const testAnswer = await answerTestOffer({ offerId: rideId, driverId: identity.sub, action: 'accept', via: 'app' });
+        if (testAnswer) {
+          socket.emit('errorMessage', { message: ANOTHER_DRIVER_ACCEPTED });
+          return;
+        }
+
         // First successful transaction wins; later accepts are rejected by the service layer.
         const ride = await acceptRideAssignment({ rideId, driverId: identity.sub });
         joinRideRoom(socket, ride._id);
@@ -532,10 +541,14 @@ export const configureTaxiSocketServer = async (httpServer) => {
       }),
     );
 
-    socket.on('rejectRide', ({ rideId }) => {
+    socket.on('rejectRide', async ({ rideId }) => {
       if (identity.role !== 'driver' || !rideId) {
         return;
       }
+
+      // A test ride only records the answer.
+      const testAnswer = await answerTestOffer({ offerId: rideId, driverId: identity.sub, action: 'reject', via: 'app' }).catch(() => null);
+      if (testAnswer) return;
 
       markDriverRejectedFromDispatch(rideId, identity.sub).catch((error) => {
         console.error('Failed to mark driver rejection from dispatch', error);

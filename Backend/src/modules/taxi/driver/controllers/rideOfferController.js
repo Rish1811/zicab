@@ -8,6 +8,7 @@ import { acceptRideAssignment, getRideDetails, getRideRoom, serializeRideRealtim
 import { emitToDriver, markDriverRejectedFromDispatch, notifyRideAccepted } from '../../services/dispatchService.js';
 import { estimateDriverEarning } from '../../services/driverEarningEstimate.js';
 import { RideBid } from '../../user/models/RideBid.js';
+import { ANOTHER_DRIVER_ACCEPTED, answerTestOffer, pendingTestOffersFor } from '../../testRides/services/testRideService.js';
 
 /**
  * Offers this driver was dispatched but has not answered yet.
@@ -55,6 +56,9 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
     .limit(5)
     .populate('userId', 'name phone countryCode')
     .lean();
+  // Test rides from the admin panel this driver has not answered yet, in the
+  // same shape, so a driver who missed the socket sees them like real ones.
+  rides.push(...await pendingTestOffersFor(driverId).catch(() => []));
 
   // Batched once for the whole page rather than per ride — mirrors the
   // socket dispatch path's own single lookup per wave, and these rides can
@@ -166,6 +170,15 @@ export const getPendingRideOffers = asyncHandler(async (req, res) => {
 export const answerRideOffer = asyncHandler(async (req, res) => {
   const driverId = String(req.auth.sub);
   const { rideId, action } = req.params;
+
+  // A test ride from the admin panel: record the answer; an accept is refused
+  // exactly as a race lost to another driver is.
+  const testAnswer = await answerTestOffer({ offerId: rideId, driverId, action, via: 'lock_screen' });
+  if (testAnswer) {
+    if (action === 'accept') throw new ApiError(409, ANOTHER_DRIVER_ACCEPTED);
+    res.json({ success: true, data: { rideId: String(rideId), action: 'reject' } });
+    return;
+  }
 
   if (action === 'reject') {
     await markDriverRejectedFromDispatch(rideId, driverId);

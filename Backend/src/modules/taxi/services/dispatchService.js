@@ -759,7 +759,7 @@ const resolveVehicleLabel = async (vehicleTypeId) => {
   }
 };
 
-const emitRideRequestToDrivers = async ({
+export const emitRideRequestToDrivers = async ({
   ride,
   targetDrivers = [],
   zone = null,

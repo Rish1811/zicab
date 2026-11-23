@@ -2076,7 +2076,10 @@ export const acceptRideAssignment = async ({ rideId, driverId }) => {
   });
 
   if (!ride) {
-    throw new ApiError(409, 'Ride is no longer available for acceptance');
+    // The usual reason: another driver was faster. Said plainly, the same
+    // words a test ride from the admin panel uses.
+    const takenByAnother = await Ride.exists({ _id: rideId, driverId: { $ne: null } }).catch(() => null);
+    throw new ApiError(409, takenByAnother ? 'Another driver accepted this ride' : 'Ride is no longer available for acceptance');
   }
 
   if (ride.bookingMode === 'bidding') {
