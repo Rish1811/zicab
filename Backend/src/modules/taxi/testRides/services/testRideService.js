@@ -23,11 +23,56 @@ import { TestRide } from '../models/TestRide.js';
 export const ANOTHER_DRIVER_ACCEPTED = 'Another driver accepted this ride';
 const MAX_DRIVERS_PER_SEND = 200;
 const PER_DRIVER_COOLDOWN_MS = 10 * 60 * 1000;
-const RIDER_NAMES = ['Rahul', 'Priya', 'Amit', 'Sneha', 'Vikram', 'Anjali', 'Arjun', 'Kavya', 'Rohit', 'Neha', 'Karthik', 'Divya', 'Suresh', 'Pooja', 'Manoj', 'Ananya'];
+// A big, mixed pool so a driver who gets several test rides never sees the
+// same few names come round again (16 names repeated within a handful of
+// tests and gave the game away).
+const RIDER_FIRST_NAMES = `Aarav Aditya Akash Akhil Amit Anand Aniket Anil Ankit Anoop Arjun Arun Ashok Ashwin Bharath
+Chetan Chirag Darshan Deepak Dev Dhruv Dinesh Ganesh Gautam Girish Gopal Harish Harsha Hemanth Imran Irfan Jagadish
+Jayanth Kiran Karthik Kishore Kunal Lokesh Madhu Mahesh Manjunath Manoj Mohan Mohit Mukesh Naveen Nikhil Nitin Omkar
+Pavan Prakash Pranav Prasad Praveen Prashanth Rahul Raj Rajesh Rakesh Ramesh Ravi Rohan Rohit Sachin Sagar Sameer
+Sandeep Sanjay Santosh Satish Shashank Shivu Shreyas Siddharth Srinivas Sudeep Sunil Suraj Suresh Tarun Tejas Uday
+Varun Venkatesh Vijay Vikas Vikram Vinay Vinod Vishal Vivek Yash Yogesh Zaid Faisal Salman Joseph Abhishek Ajay
+Aishwarya Akshata Ananya Anjali Anusha Aparna Archana Arpita Asha Bhavana Bhavya Chaitra Deepa Deepika Divya Gayathri
+Harini Hema Isha Jyothi Kavya Keerthi Lakshmi Lavanya Madhuri Megha Meghana Nandini Neha Nisha Pallavi Pooja Prathiksha
+Preethi Priya Rachana Radha Ramya Rashmi Rekha Riya Roopa Sahana Sangeetha Shalini Shilpa Shruthi Shweta Sindhu Sneha
+Soumya Spandana Sowmya Supriya Swathi Tanvi Usha Vaishnavi Varsha Vidya Yamini Zoya Ayesha Fathima Sana Mary Reshma`.split(/\s+/);
+const RIDER_LAST_NAMES = `Gowda Reddy Rao Shetty Naik Hegde Kulkarni Patil Sharma Verma Gupta Singh Kumar Nair Menon Iyer Joshi
+Desai Pai Bhat Kamath Murthy Prasad Khan Shaikh Pinto Fernandes Jain Agarwal Mehta Shah Das Pillai`.split(/\s+/);
 
 const validId = (value) => mongoose.isValidObjectId(String(value || ''));
 const oid = (value) => new mongoose.Types.ObjectId(String(value));
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
+
+/// A name this driver has not been shown in their recent test rides: usually
+/// a first name alone, as most riders sign up, sometimes with a surname.
+const riderNameFor = (seen = new Set()) => {
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const first = pick(RIDER_FIRST_NAMES);
+    if (seen.has(first.toLowerCase())) continue;
+    seen.add(first.toLowerCase());
+    return Math.random() < 0.35 ? `${first} ${pick(RIDER_LAST_NAMES)}` : first;
+  }
+  return pick(RIDER_FIRST_NAMES);
+};
+
+/// The first names each driver saw in their recent test rides.
+const recentRiderNamesByDriver = async (driverIds) => {
+  const byDriver = new Map(driverIds.map((id) => [String(id), new Set()]));
+  const tests = await TestRide.find({ 'offers.driverId': { $in: driverIds } })
+    .sort({ createdAt: -1 })
+    .limit(60)
+    .select('offers.driverId offers.ride.userId.name')
+    .lean()
+    .catch(() => []);
+  for (const test of tests) {
+    for (const offer of test.offers || []) {
+      const seen = byDriver.get(String(offer.driverId));
+      const first = String(offer.ride?.userId?.name || '').split(' ')[0].toLowerCase();
+      if (seen && first) seen.add(first);
+    }
+  }
+  return byDriver;
+};
 
 /// A point [distanceMeters] from [lng, lat] in a random direction.
 const offsetPoint = ([lng, lat], distanceMeters) => {
@@ -139,7 +184,7 @@ const recentlyTested = async (driverIds) => {
 
 /// Builds one driver's offer: pickup near them (inside the zone when a zone was
 /// chosen), a drop 3-8 km on, priced by the real fare engine.
-const buildOffer = async ({ driver, zone, pickupPoint, dispatchConfig }) => {
+const buildOffer = async ({ driver, zone, pickupPoint, dispatchConfig, seenNames }) => {
   const driverCoords = driver.location?.coordinates;
   if (!Array.isArray(driverCoords) || driverCoords.length !== 2) return { skip: 'No location on record' };
 
@@ -202,7 +247,7 @@ const buildOffer = async ({ driver, zone, pickupPoint, dispatchConfig }) => {
   const ride = {
     _id: offerId,
     serviceType: 'ride',
-    userId: { _id: String(new mongoose.Types.ObjectId()), name: pick(RIDER_NAMES), phone: '', countryCode: '' },
+    userId: { _id: String(new mongoose.Types.ObjectId()), name: riderNameFor(seenNames), phone: '', countryCode: '' },
     pickupLocation: { type: 'Point', coordinates: pickup },
     pickupAddress,
     dropLocation: { type: 'Point', coordinates: drop },
@@ -255,13 +300,14 @@ export const sendTestRide = async ({ admin, body = {} }) => {
   const dispatchConfig = await resolveTransportDispatchConfig();
   const { emitRideRequestToDrivers } = await import('../../services/dispatchService.js');
 
+  const seenByDriver = await recentRiderNamesByDriver(drivers.map((driver) => driver._id));
   const offers = [];
   // Built a few at a time: each needs a route, a price and two addresses.
   for (let index = 0; index < drivers.length; index += 8) {
     const batch = drivers.slice(index, index + 8);
     const built = await Promise.all(batch.map(async (driver) => {
       try {
-        return { driver, ...(await buildOffer({ driver, zone, pickupPoint, dispatchConfig })) };
+        return { driver, ...(await buildOffer({ driver, zone, pickupPoint, dispatchConfig, seenNames: seenByDriver.get(String(driver._id)) })) };
       } catch (error) {
         return { driver, skip: error?.message || 'Could not build the offer' };
       }
