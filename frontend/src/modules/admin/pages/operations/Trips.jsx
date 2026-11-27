@@ -52,6 +52,15 @@ const normalizeRow = (row = {}) => ({
   // How it was actually paid, e.g. "Paid online via Razorpay (booked as cash)".
   paymentDetail: row.paymentDetail || '',
   paymentReference: row.paymentReference || '',
+  // The server sends these; the popup used to drop them, so admins saw a
+  // trip with no idea where it was from or to.
+  pickupAddress: row.pickupAddress || row.pickupLabel || row.pickup_address || '',
+  dropAddress: row.dropAddress || row.dropLabel || row.drop_address || '',
+  userPhone: row.user?.phone || row.userPhone || '',
+  driverPhone: row.driver?.phone || row.driverPhone || '',
+  vehicleNumber: row.driver?.vehicleNumber || '',
+  fare: row.fare,
+  scheduledAt: row.scheduledAt || null,
 });
 
 const TripDetailsModal = ({ trip, onClose }) => {
@@ -78,11 +87,42 @@ const TripDetailsModal = ({ trip, onClose }) => {
             <div>
               <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400 mb-1">User Name</p>
               <p className="text-[13px] font-bold text-gray-900">{trip.userName}</p>
+              {trip.userPhone ? <p className="text-[11px] text-gray-500 mt-0.5">{trip.userPhone}</p> : null}
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400 mb-1">Driver Name</p>
               <p className="text-[13px] font-bold text-gray-900">{trip.driverName}</p>
+              {trip.driverPhone ? <p className="text-[11px] text-gray-500 mt-0.5">{trip.driverPhone}</p> : null}
+              {trip.vehicleNumber ? <p className="text-[11px] text-gray-500 font-mono">{trip.vehicleNumber}</p> : null}
             </div>
+            <div className="col-span-2 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+              <div className="flex gap-2.5">
+                <MapPin size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+                <div className="min-w-0">
+                  <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400 mb-0.5">Pickup Address</p>
+                  <p className="text-[13px] font-semibold text-gray-900 break-words">{trip.pickupAddress || '--'}</p>
+                </div>
+              </div>
+              <div className="flex gap-2.5">
+                <MapPin size={16} className="mt-0.5 shrink-0 text-red-500" />
+                <div className="min-w-0">
+                  <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400 mb-0.5">Drop Address</p>
+                  <p className="text-[13px] font-semibold text-gray-900 break-words">{trip.dropAddress || '--'}</p>
+                </div>
+              </div>
+            </div>
+            {trip.scheduledAt ? (
+              <div>
+                <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400 mb-1">Scheduled For</p>
+                <p className="text-[13px] font-bold text-gray-900">{formatDate(trip.scheduledAt)}</p>
+              </div>
+            ) : null}
+            {Number(trip.fare) > 0 ? (
+              <div>
+                <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400 mb-1">Fare</p>
+                <p className="text-[13px] font-bold text-gray-900">₹{Number(trip.fare).toFixed(2)}</p>
+              </div>
+            ) : null}
             <div>
               <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400 mb-1">Transport Type</p>
               <p className="text-[13px] font-bold text-gray-900 capitalize">{String(trip.transportType).toLowerCase()}</p>
@@ -110,6 +150,10 @@ const TripDetailsModal = ({ trip, onClose }) => {
     </div>
   );
 };
+
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+));
 
 const handlePrintInvoice = (trip) => {
   const printWindow = window.open('', '_blank');
@@ -148,6 +192,8 @@ const handlePrintInvoice = (trip) => {
           <tr><th>Date</th><td>${formattedDate}</td></tr>
           <tr><th>Customer</th><td>${trip.userName}</td></tr>
           <tr><th>Driver</th><td>${trip.driverName}</td></tr>
+          <tr><th>Pickup</th><td>${escapeHtml(trip.pickupAddress || '--')}</td></tr>
+          <tr><th>Drop</th><td>${escapeHtml(trip.dropAddress || '--')}</td></tr>
           <tr><th>Transport Type</th><td style="text-transform: capitalize;">${String(trip.transportType).toLowerCase()}</td></tr>
           <tr><th>Payment Method</th><td style="text-transform: capitalize;">${String(trip.paymentOption).toLowerCase()}${trip.paymentDetail ? ` - ${trip.paymentDetail}` : ''}${trip.paymentReference ? ` (Ref. ${trip.paymentReference})` : ''}</td></tr>
           <tr><th>Trip Status</th><td style="text-transform: capitalize;">${String(trip.tripStatus).toLowerCase()}</td></tr>
