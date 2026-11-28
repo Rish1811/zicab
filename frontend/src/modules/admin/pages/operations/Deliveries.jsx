@@ -592,11 +592,11 @@ const Deliveries = () => {
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(e.target.value)}
-                className="h-8 w-14 border border-gray-200 rounded-md bg-gray-50 px-1.5 outline-none focus:ring-1 focus:ring-yellow-400 focus:border-yellow-400 text-gray-700 font-bold text-[11px]"
+                className="h-8 w-16 border border-gray-200 rounded-md bg-gray-50 px-1.5 outline-none focus:ring-1 focus:ring-yellow-400 focus:border-yellow-400 text-gray-700 font-bold text-[11px]"
               >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
+                {[10, 25, 50, 100, 250, 500, 1000].map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
               </select>
               <span>Entries</span>
             </div>
