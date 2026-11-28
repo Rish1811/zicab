@@ -6,6 +6,7 @@ import { env } from '../../../../config/env.js';
 import { createDefaultAdminState } from '../data/defaultAdminState.js';
 import { Admin } from '../models/Admin.js';
 import { User } from '../../user/models/User.js';
+import { countUsersSeenSince } from '../../user/services/userPresenceService.js';
 import { UserWallet } from '../../user/models/UserWallet.js';
 import { WalletTransaction } from '../../driver/models/WalletTransaction.js';
 import { AdminBusinessSetting } from '../models/AdminBusinessSetting.js';
@@ -9464,6 +9465,7 @@ const getLiveDashboardStats = async () => {
 
   const [
     onlineCustomers,
+    customersActive24h,
     onlineDrivers,
     driversOnTrip,
     ongoingTrips,
@@ -9474,6 +9476,7 @@ const getLiveDashboardStats = async () => {
     driverPositions,
   ] = await Promise.all([
     countConnectedRiders().catch(() => 0),
+    countUsersSeenSince(new Date(Date.now() - 24 * 60 * 60 * 1000)).catch(() => 0),
     Driver.countDocuments({ isOnline: true }),
     Driver.countDocuments({ isOnRide: true }),
     // A trip someone is sitting in right now: a driver is assigned and it has
@@ -9498,6 +9501,8 @@ const getLiveDashboardStats = async () => {
 
   return {
     onlineCustomers,
+    // Riders who used the app in the last 24 hours (tracked from 28 Nov 2026).
+    customersActive24h,
     onlineDrivers,
     driversOnTrip,
     ongoingTrips,

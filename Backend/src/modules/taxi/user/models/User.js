@@ -245,6 +245,12 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Last time the rider used the app (user/services/userPresenceService.js).
+    lastSeenAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
     deletedAt: {
       type: Date,
       default: null,

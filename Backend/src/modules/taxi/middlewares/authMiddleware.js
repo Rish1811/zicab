@@ -2,6 +2,7 @@ import { Admin } from '../admin/models/Admin.js';
 import { Owner } from '../admin/models/Owner.js';
 import { ServiceStore } from '../admin/models/ServiceStore.js';
 import { ServiceCenterStaff } from '../admin/models/ServiceCenterStaff.js';
+import { markUserSeen } from '../user/services/userPresenceService.js';
 import { ApiError } from '../../../utils/ApiError.js';
 import { Driver } from '../driver/models/Driver.js';
 import { BusDriver } from '../driver/models/BusDriver.js';
@@ -80,6 +81,8 @@ export const authenticate = (allowedRoles = [], options = {}) => async (req, _re
     ) {
       throw new ApiError(401, 'User account is not active');
     }
+
+    if (normalizedRole === 'user') markUserSeen(entity._id);
 
     if (
       normalizedRole === 'driver' &&

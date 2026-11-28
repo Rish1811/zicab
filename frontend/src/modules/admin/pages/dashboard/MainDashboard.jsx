@@ -250,7 +250,7 @@ const MainDashboard = () => {
             { label: "Total Drivers", value: totalDrivers, icon: Car, cardBg: "!bg-sky-500" },
             { label: "Approved Drivers", value: approvedDrivers, icon: UserCheck, cardBg: "!bg-emerald-500" },
             { label: "Vendors", value: totalOwners, icon: Building2, cardBg: "!bg-rose-500" },
-            { label: "Online Customers", value: live.onlineCustomers ?? 0, icon: Sparkles, cardBg: "!bg-orange-500" },
+            { label: "Online Customers", value: live.onlineCustomers ?? 0, sub: live.customersActive24h !== undefined ? `${live.customersActive24h} active in last 24 h` : "", icon: Sparkles, cardBg: "!bg-orange-500" },
             { label: "Ongoing Trips", value: live.ongoingTrips ?? 0, icon: Activity, cardBg: "!bg-blue-500" },
             { label: "Today's Revenue", value: `₹${currency(todayEarnings.total)}`, icon: IndianRupee, cardBg: "!bg-emerald-500" },
             { label: "Online Drivers", value: live.onlineDrivers ?? 0, icon: Server, cardBg: "!bg-violet-500" },
@@ -265,6 +265,7 @@ const MainDashboard = () => {
                 </div>
               </div>
               <h4 className="text-xl font-black tracking-tight mt-1">{isLoading ? '...' : kpi.value}</h4>
+              {kpi.sub ? <p className="text-[10px] font-semibold opacity-80 mt-0.5">{kpi.sub}</p> : null}
             </div>
           ))}
         </div>

@@ -33,6 +33,7 @@ import { SOCKET_EVENTS } from './events.js';
 import { ANOTHER_DRIVER_ACCEPTED, answerTestOffer } from '../testRides/services/testRideService.js';
 import { recordDriverLocationPing } from '../driver/services/driverActivityService.js';
 import { checkOnMyWayArrival } from '../onMyWay/services/onMyWayService.js';
+import { markUserSeen } from '../user/services/userPresenceService.js';
 import { registerRideSocketHandlers } from './handlers/rideSocketHandler.js';
 import { registerBusSocketHandlers } from '../bus/socket/busSocketHandlers.js';
 import { setBusSeatSocketServer } from '../bus/services/busSeatSyncService.js';
@@ -182,6 +183,7 @@ export const configureTaxiSocketServer = async (httpServer) => {
 
     socket.join(getSupportParticipantRoom(identity.role, identity.sub));
     socket.join(getSupportRoleRoom(identity.role));
+    if (identity.role === 'user') markUserSeen(identity.sub);
 
     if (identity.role === 'driver') {
       await Driver.findByIdAndUpdate(identity.sub, { socketId: socket.id });
