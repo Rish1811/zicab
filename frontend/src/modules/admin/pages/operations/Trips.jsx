@@ -482,11 +482,11 @@ const Trips = () => {
               <select
                 value={limit}
                 onChange={(e) => setLimit(Number(e.target.value))}
-                className="h-9 w-16 border border-gray-200 rounded-lg bg-gray-50 px-2 outline-none focus:ring-1 focus:ring-yellow-400 focus:border-yellow-400 text-gray-700"
+                className="h-9 w-20 border border-gray-200 rounded-lg bg-gray-50 px-2 outline-none focus:ring-1 focus:ring-yellow-400 focus:border-yellow-400 text-gray-700"
               >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
+                {[10, 25, 50, 100, 250, 500, 1000].map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
               </select>
             </div>
 

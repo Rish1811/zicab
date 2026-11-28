@@ -7117,12 +7117,15 @@ export const getEmployeeById = async (id, currentAdmin = null) => {
   };
 };
 
+/// Rows per page on the admin ride lists (Trip Requests, Deliveries...). Up to
+/// 1000, so a whole day can be on one page.
+const ADMIN_RIDE_LIST_MAX_PAGE_SIZE = 1000;
 const clampAdminRideListPageSize = (value, fallback = 10) => {
-  const parsed = Number(value);
+  const parsed = Math.floor(Number(value));
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return fallback;
   }
-  return Math.min(parsed, 100);
+  return Math.min(parsed, ADMIN_RIDE_LIST_MAX_PAGE_SIZE);
 };
 
 const buildRideStatusFilter = (tab = 'all', variant = 'ride_requests') => {
