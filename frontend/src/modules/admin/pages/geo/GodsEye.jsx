@@ -83,16 +83,22 @@ const vehicleMarkerIcon = (iconType, heading) => {
   const img = VEHICLE_IMAGES[src];
   let icon;
   if (img && img.naturalWidth) {
+    // Drawn at the screen's real pixel density (phones are 3x): a 2x canvas
+    // was stretched up by the browser, which made autos look blurry.
+    const scale = Math.min(4, Math.max(2, Math.ceil(window.devicePixelRatio || 1)));
     const canvas = document.createElement('canvas');
-    canvas.width = VEHICLE_ICON_PX * 2;
-    canvas.height = VEHICLE_ICON_PX * 2;
+    canvas.width = VEHICLE_ICON_PX * scale;
+    canvas.height = VEHICLE_ICON_PX * scale;
     const ctx = canvas.getContext('2d');
-    const height = VEHICLE_ICON_PX * 2 * 0.9;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const height = canvas.height * 0.9;
     const width = height * (img.naturalWidth / img.naturalHeight);
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((degrees * Math.PI) / 180);
-    ctx.shadowColor = 'rgba(0,0,0,0.35)';
-    ctx.shadowBlur = 6;
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = scale;
+    ctx.shadowOffsetY = scale / 2;
     ctx.drawImage(img, -width / 2, -height / 2, width, height);
     icon = {
       url: canvas.toDataURL('image/png'),
